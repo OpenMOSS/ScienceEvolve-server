@@ -1,7 +1,7 @@
-<h1 align="center">ScienceEvolve</h1>
+<h1 align="center">ScienceEvolve Server</h1>
 
 <p align="center">
-  <strong>在一个工作流里，组织、运行和持续改进多 Agent 科研任务。</strong>
+  <strong>构建、运行并持续改进自己的多 Agent 科研工作流，让工作流本身也能演化。</strong>
 </p>
 
 <p align="center">
@@ -29,7 +29,7 @@
 
 ---
 
-ScienceEvolve 将研究、实验、编码和评审连接成可视化工作流。你可以组建自己的 Agent 团队，查看真实执行轨迹，让团队根据评估反馈改进任务，也可以授权 Main 调整工作流本身。
+ScienceEvolve 是论文 [Rethinking Scientific Discovery in the Agentic Era](https://arxiv.org/abs/2607.03863) 中的自主科研框架，将研究、实验、编码和评审连接成可视化工作流。你可以组建自己的 Agent 团队，查看真实执行轨迹，让团队根据评估反馈改进任务，也可以授权 Main 调整工作流本身。
 
 <a id="sdk"></a>
 
@@ -371,6 +371,8 @@ Main：协调异常恢复与用户补充输入
 </tbody></table>
 
 内置版本包含 ScienceEvolve 的集成调整。项目角色技能 `research-director`、`idea-agent`、`experiment-runner`、`latex-writer` 和 `iclr-reviewer` 随本仓库维护。感谢上游作者与贡献者。
+
+CCFA 与 Nature 的内置副本未记录导入时的提交版本；上游仓库归属通过比对 Skill 名称与内容确认。
 
 <a id="configuration"></a>
 

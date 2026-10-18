@@ -29,7 +29,7 @@
 
 ---
 
-ScienceEvolve is the fully autoresearch framework in paper [Rethinking Scientific Discovery in the Agentic Era](https://arxiv.org/abs/2607.03863). Build an Agent team, follow its execution, improve the task using real feedback, and authorize Main to evolve the workflow itself.
+ScienceEvolve is the autonomous research framework presented in [Rethinking Scientific Discovery in the Agentic Era](https://arxiv.org/abs/2607.03863). It connects research, experiments, coding, and review in a visual workflow. Build an Agent team, follow its execution, improve the task using real feedback, and authorize Main to evolve the workflow itself.
 
 <a id="sdk"></a>
 
@@ -79,7 +79,7 @@ The **task loop** runs a method, collects real feedback, improves the method, an
 
 ### Set Loop rounds and the exit Agent
 
-Main starts a finite-element mesh convergence experiment. Coder → Executor → Review runs for three complete rounds, then exits to the selected Writer Agent, which delivers the error analysis report (errors.md). Both the batch size and exit Agent are configurable.
+Main starts a finite-element mesh convergence experiment. Coder → Executor → Review runs for three complete rounds, then exits to the selected Writer Agent, which delivers the error analysis report (errors.md). Both the number of rounds and exit Agent are configurable.
 
 <div align="center">
 
@@ -136,6 +136,8 @@ Use **Project Explainer** to understand the current workflow, edit Agent setting
 <img src="docs/readme/06-switch-tools-change-the-flow.svg" alt="In a turbulence closure-model comparison, the user switches Harnesses, adds Verifier, and adds parallel theory and data checks" width="96%">
 
 </div>
+
+<a id="quick-start"></a>
 
 ## Quick start
 
