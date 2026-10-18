@@ -1,0 +1,324 @@
+{
+  "schemaVersion": 2,
+  "name": "DrugEvolve：完整公开单机算法进化流程",
+  "agents": {
+    "main": {
+      "model": "REPLACE_WITH_AVAILABLE_MODEL",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-drugevolve"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "协调并核对整个DrugEvolve流程。首次根据requirement和真实Task生成config.json、run_spec.yaml；只在用户已授权的任务/预算内确认preflight。初始化后运行steps.py status，以phase作为唯一下一步依据：sample或archive由main调用一次advance；train交trainer；七个模型phase交同名角色；finished检查停止理由、全部实验记录与best后结束。training/sampling/archiving表示步骤尚未返回或已中断：核对真实进程、日志、sampler及数据库写入，不重复启动；training确认失败可记录fail，sampling/archiving无法确认提交状态则请求用户处理。基础设施阻断请求用户处理，不当成完成。保留max_rounds、patience、连续失败上限；不修改workflow。\n\n读取所配scienceevolve-drugevolve Skill。Task是code_dir中的药物研发算法、数据和固定评测器；只有research workflow使用这些角色，没有Evolver。使用本轮Skill实际路径中的scripts/steps.py与需求指定的Python和run-dir。调用status检查phase与request_id；LLM角色先prompt、执行所列原工具的等价能力，再用匹配request_id提交响应；失败用fail保留错误，不伪造产物。每次提交后向Main交接真实phase/路径，不自行跨角色执行。模型可等价替换，必需阶段、工具、候选数、重试和停止规则不可删。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "generator": {
+      "model": "REPLACE_WITH_AVAILABLE_MODEL",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-drugevolve"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "在generator阶段运行prompt，完整读取原Generator系统指令、任务上下文及JSON schema，提出name/motivation/explain/math。必须包含可实施的算法机制。上下文保留父候选、两条参考、消融结果、外部cognition；重复提案必须读取原重复反馈。只写响应JSON，再submit并交Main，禁止自行采样、跳过Inspector或执行训练。\n\n读取所配scienceevolve-drugevolve Skill。Task是code_dir中的药物研发算法、数据和固定评测器；只有research workflow使用这些角色，没有Evolver。使用本轮Skill实际路径中的scripts/steps.py与需求指定的Python和run-dir。调用status检查phase与request_id；LLM角色先prompt、执行所列原工具的等价能力，再用匹配request_id提交响应；失败用fail保留错误，不伪造产物。每次提交后向Main交接真实phase/路径，不自行跨角色执行。模型可等价替换，必需阶段、工具、候选数、重试和停止规则不可删。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "inspector": {
+      "model": "REPLACE_WITH_AVAILABLE_MODEL",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-drugevolve"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "在inspector阶段读取prompt中的原Inspector指令及相似实验检索结果，独立判断is_repeated、repeated_index、reasoning；重复时保持上游数据库索引语义并给出依据。submit后由脚本更新内外层重试计数，不自行放行重复提案。\n\n读取所配scienceevolve-drugevolve Skill。Task是code_dir中的药物研发算法、数据和固定评测器；只有research workflow使用这些角色，没有Evolver。使用本轮Skill实际路径中的scripts/steps.py与需求指定的Python和run-dir。调用status检查phase与request_id；LLM角色先prompt、执行所列原工具的等价能力，再用匹配request_id提交响应；失败用fail保留错误，不伪造产物。每次提交后向Main交接真实phase/路径，不自行跨角色执行。模型可等价替换，必需阶段、工具、候选数、重试和停止规则不可删。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "implementer": {
+      "model": "REPLACE_WITH_AVAILABLE_MODEL",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-drugevolve"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "在implementer阶段读取prompt及Task实际接口，使用Harness读写工具实现candidate_directory/model.py，能力等价替换原read_code_file/write_code_file。只修改当前候选目录；不改数据/评价器/运行规范。starter必须被真实实现替换，通过compile验证；按原schema提交success/summary，失败提交false或fail。保留算法数学和机制，不用占位输出骗过训练。\n\n读取所配scienceevolve-drugevolve Skill。Task是code_dir中的药物研发算法、数据和固定评测器；只有research workflow使用这些角色，没有Evolver。使用本轮Skill实际路径中的scripts/steps.py与需求指定的Python和run-dir。调用status检查phase与request_id；LLM角色先prompt、执行所列原工具的等价能力，再用匹配request_id提交响应；失败用fail保留错误，不伪造产物。每次提交后向Main交接真实phase/路径，不自行跨角色执行。模型可等价替换，必需阶段、工具、候选数、重试和停止规则不可删。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "trainer": {
+      "model": "REPLACE_WITH_AVAILABLE_MODEL",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-drugevolve"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "仅在train阶段执行一次steps.py advance。脚本运行真实上游trainer、timeout/process-group终止和熵监控；失败进入debugger或达到五次训练上限结束该轮，entropy abort保留崩溃结果且客观分归零后仍进入judger。不得用手写指标、mock、改Task评价器替代真实训练。每次运行保留stdout/stderr及任务CSV/case/score_detail，并核对日志。阶段变更后交Main。\n\n读取所配scienceevolve-drugevolve Skill。Task是code_dir中的药物研发算法、数据和固定评测器；只有research workflow使用这些角色，没有Evolver。使用本轮Skill实际路径中的scripts/steps.py与需求指定的Python和run-dir。调用status检查phase与request_id；LLM角色先prompt、执行所列原工具的等价能力，再用匹配request_id提交响应；失败用fail保留错误，不伪造产物。每次提交后向Main交接真实phase/路径，不自行跨角色执行。模型可等价替换，必需阶段、工具、候选数、重试和停止规则不可删。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "debugger": {
+      "model": "REPLACE_WITH_AVAILABLE_MODEL",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-drugevolve"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "在debugger阶段读取prompt中的原Debugger提示、失败训练日志末100行及metric错误末50行，另读该候选training.stdout.log/training.stderr.log定位超时或启动问题。通过Harness读写工具把修复实际应用到当前候选目录，再提交changes_made/diagnosis/patch_or_file；不得只返回未应用的补丁、改评价器或降低数据/训练预算。由脚本控制剩余训练次数。\n\n读取所配scienceevolve-drugevolve Skill。Task是code_dir中的药物研发算法、数据和固定评测器；只有research workflow使用这些角色，没有Evolver。使用本轮Skill实际路径中的scripts/steps.py与需求指定的Python和run-dir。调用status检查phase与request_id；LLM角色先prompt、执行所列原工具的等价能力，再用匹配request_id提交响应；失败用fail保留错误，不伪造产物。每次提交后向Main交接真实phase/路径，不自行跨角色执行。模型可等价替换，必需阶段、工具、候选数、重试和停止规则不可删。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "judger": {
+      "model": "REPLACE_WITH_AVAILABLE_MODEL",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-drugevolve"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "在judger阶段读取prompt、真实原始结果和基线，遵循上游Judger完整量表输出algorithm_score/final_score/complexity/reasoning。即使LLM评分权重为0，也执行判断并保存complexity；熵中止分支不能虚构test成功。客观分和权重合成由脚本计算，不手改总分。\n\n读取所配scienceevolve-drugevolve Skill。Task是code_dir中的药物研发算法、数据和固定评测器；只有research workflow使用这些角色，没有Evolver。使用本轮Skill实际路径中的scripts/steps.py与需求指定的Python和run-dir。调用status检查phase与request_id；LLM角色先prompt、执行所列原工具的等价能力，再用匹配request_id提交响应；失败用fail保留错误，不伪造产物。每次提交后向Main交接真实phase/路径，不自行跨角色执行。模型可等价替换，必需阶段、工具、候选数、重试和停止规则不可删。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "analyzer": {
+      "model": "REPLACE_WITH_AVAILABLE_MODEL",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-drugevolve"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "在analyzer阶段读取原Analyzer提示，比较候选与baseline、父候选和祖父候选，核对目标达成、组件、相关实验、问题及case六项；区分客观证据与推测。能力等价替换原read_code_file，可读真实候选源码核对机制，不能修改。结构化提交六字段并交Main；保留最多3次分析失败重试。\n\n读取所配scienceevolve-drugevolve Skill。Task是code_dir中的药物研发算法、数据和固定评测器；只有research workflow使用这些角色，没有Evolver。使用本轮Skill实际路径中的scripts/steps.py与需求指定的Python和run-dir。调用status检查phase与request_id；LLM角色先prompt、执行所列原工具的等价能力，再用匹配request_id提交响应；失败用fail保留错误，不伪造产物。每次提交后向Main交接真实phase/路径，不自行跨角色执行。模型可等价替换，必需阶段、工具、候选数、重试和停止规则不可删。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "summarizer": {
+      "model": "REPLACE_WITH_AVAILABLE_MODEL",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-drugevolve"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "在summarizer阶段读取原Summarizer完整提示、六项分析和检索到的外部cognition；按原四部分归纳性能、算法机制、组件贡献和可复用实验经验，输出summary。禁止把经验伪装成外部文献。submit后交Main归档，保留最多3次总结失败重试。\n\n读取所配scienceevolve-drugevolve Skill。Task是code_dir中的药物研发算法、数据和固定评测器；只有research workflow使用这些角色，没有Evolver。使用本轮Skill实际路径中的scripts/steps.py与需求指定的Python和run-dir。调用status检查phase与request_id；LLM角色先prompt、执行所列原工具的等价能力，再用匹配request_id提交响应；失败用fail保留错误，不伪造产物。每次提交后向Main交接真实phase/路径，不自行跨角色执行。模型可等价替换，必需阶段、工具、候选数、重试和停止规则不可删。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    }
+  },
+  "orchestration": {
+    "agents": [
+      {
+        "name": "main",
+        "template": "main"
+      },
+      {
+        "name": "generator",
+        "template": "general"
+      },
+      {
+        "name": "inspector",
+        "template": "general"
+      },
+      {
+        "name": "implementer",
+        "template": "general"
+      },
+      {
+        "name": "trainer",
+        "template": "general"
+      },
+      {
+        "name": "debugger",
+        "template": "general"
+      },
+      {
+        "name": "judger",
+        "template": "general"
+      },
+      {
+        "name": "analyzer",
+        "template": "general"
+      },
+      {
+        "name": "summarizer",
+        "template": "general"
+      }
+    ],
+    "input": {
+      "source": "input",
+      "target": "main"
+    },
+    "routes": {
+      "main": [
+        {
+          "target": "generator",
+          "kind": "weak"
+        },
+        {
+          "target": "inspector",
+          "kind": "weak"
+        },
+        {
+          "target": "implementer",
+          "kind": "weak"
+        },
+        {
+          "target": "trainer",
+          "kind": "weak"
+        },
+        {
+          "target": "debugger",
+          "kind": "weak"
+        },
+        {
+          "target": "judger",
+          "kind": "weak"
+        },
+        {
+          "target": "analyzer",
+          "kind": "weak"
+        },
+        {
+          "target": "summarizer",
+          "kind": "weak"
+        }
+      ],
+      "generator": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "inspector": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "implementer": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "trainer": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "debugger": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "judger": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "analyzer": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "summarizer": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ]
+    },
+    "decisionPlans": {
+      "main": "按照Skill和steps.py的phase/request_id执行当前职责；每次实际阶段完成后交Main，不跳阶段。",
+      "generator": "按照Skill和steps.py的phase/request_id执行当前职责；每次实际阶段完成后交Main，不跳阶段。",
+      "inspector": "按照Skill和steps.py的phase/request_id执行当前职责；每次实际阶段完成后交Main，不跳阶段。",
+      "implementer": "按照Skill和steps.py的phase/request_id执行当前职责；每次实际阶段完成后交Main，不跳阶段。",
+      "trainer": "按照Skill和steps.py的phase/request_id执行当前职责；每次实际阶段完成后交Main，不跳阶段。",
+      "debugger": "按照Skill和steps.py的phase/request_id执行当前职责；每次实际阶段完成后交Main，不跳阶段。",
+      "judger": "按照Skill和steps.py的phase/request_id执行当前职责；每次实际阶段完成后交Main，不跳阶段。",
+      "analyzer": "按照Skill和steps.py的phase/request_id执行当前职责；每次实际阶段完成后交Main，不跳阶段。",
+      "summarizer": "按照Skill和steps.py的phase/request_id执行当前职责；每次实际阶段完成后交Main，不跳阶段。"
+    },
+    "allowUserIntervention": true,
+    "allowMainReconfiguration": false,
+    "termination": {
+      "agent": "main",
+      "condition": "steps.py状态为finished，max_rounds/patience/连续失败停止理由已记录，原始训练证据、全部尝试、实验库、cognition和best均已核对。连续失败结束须明确失败，不能声称科研成功；环境阻断须请求处理。",
+      "decisionBy": "main",
+      "automatic": false
+    },
+    "resultFormat": {
+      "presets": [
+        "可复现证据"
+      ],
+      "custom": "实验谱系、每轮提案/实现/失败与重试、原始结果、双记忆、best快照、停止原因和验证报告。"
+    }
+  },
+  "git": {
+    "enabled": false
+  }
+}

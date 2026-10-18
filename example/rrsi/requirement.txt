@@ -1,0 +1,11 @@
+使用完整 Google RRSI 算法优化本 Task 的科研 harness。研究流程本身保持固定，不启用 Evolver。
+
+以用户提供的真实工程设计/科研代码任务、现有 harness、数据与评测工具为 Task。task_setup 必须先建立并验证 Skill references/environment.md 的真实原子评测合同，冻结 evolve/heldout/smoke 清单、Task policy、grader、token计量、组件分类和非补偿性约束。原始数据/工具确实缺失时报告 blocked，不能伪造 Task、随机评分或压缩研究流程。
+
+默认 eng profile：T=40、k=4、m=2，退火编辑预算1..4，w=3、探索槽1、repair_rounds=5；新Task统计量使用delta=null按固定H0校准，所有参数修改与等能力替换必须在configure前公开记录。研究角色使用workflow中的gpt-6-sol；Task policy由实际模型能力决定并始终冻结。
+
+保留原始三镜头诊断、全部JSON工具协议与轮数上限、独立候选、泄漏审查修复、真实smoke、完整evolve测量、成本/噪声/novelty/domain guards、剪枝与归因、无赢家保留、全部T轮，以及冠军冻结后每个heldout集的H0/champion成对测量。
+
+不要求恢复论文未公开的原始数据切分或复现其数值结果；任何Task/评测能力替换都必须保留上述方法语义并明确声明。交付真实证据、最终harness Git版本、完整history/attribution/decisions与report.json。算法测试或mock不能当科研结果。
+
+输入准备（main Git-off）：workspace/W 指运行时提供的共享 cwd。首次运行前，根据本需求填写的真实输入绝对路径与文件清单，在此目录准备 Task 并记录来源/摘要；来源只读，外部大型数据可只读引用。恢复或后续角色先检查既有输入、基线与方法状态，禁止重新导入覆盖；Task Git 在自己的子目录维护。不要用旧 --workspace 路径或仓库模板目录作为可写 Task。尚未提供必需代码/数据/配置时报告具体缺项，不能伪造输入。

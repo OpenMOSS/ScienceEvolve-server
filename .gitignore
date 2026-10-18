@@ -1,0 +1,27 @@
+node_modules/
+dist/
+web/dist/
+server/dist/
+data/
+.env
+.env.local
+.env.bak*
+core.*
+*.log
+.DS_Store
+coverage/
+/third_party/CCFA-Skills/
+# Embedded harness runtime state and dependency trees stay local to the
+# installation; manifests and launchers are tracked, credentials are not.
+harness/**/node_modules/
+harness/**/.codex-home/
+harness/**/.dsh-home/
+harness/**/.pi-agent/
+harness/**/.claude/
+harness/gateway.env
+protocol-route/node_modules/
+protocol-route/.home/
+
+# Local validation and diagnostic artifacts may contain runtime state or sessions.
+/temp/
+/tmp-diag-*/

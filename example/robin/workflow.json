@@ -1,0 +1,522 @@
+{
+  "schemaVersion": 2,
+  "name": "Robin complete research workflow",
+  "agents": {
+    "main": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-robin"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "执行完整Robin公开软件流程及外部实验交接。按Skill和固定版本原代码逐项调度：assay_queries→assay_literature→assay_proposals→assay_reports→assay_rank→candidate_queries→candidate_literature→candidate_proposals→candidate_reports→candidate_rank。排名后向真实实验执行方交付assay、候选和协议，通过request_user等待实际实验数据/执行结果；不能把计划当实验完成。收到flow_cytometry或RNA_seq数据后analysis→consensus→interpret→followup，再把完整experimental_insights交candidate_queries，重复候选5阶段→真实实验→分析。上游notebook以人工启动这些阶段，无固定自主停止轮数；启动前记录用户的实际研究轮数/结束条件。所有阶段持久保存输入、完整输出、哈希、job IDs、状态和下一步，已完成远程任务恢复时先查询而非重提；每次只调一个workflow角色，Task远程5条分析仍须真正并发。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "assay_queries": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-robin"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "执行 assays.py Step 1 的全部原始 prompt，生成并保存默认3个文献查询。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "assay_literature": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-robin"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "assays.py Step 2：真实 call_platform(CROW)，保留每个query原文、job IDs、answer、references和save_crow_files产物。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "assay_proposals": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-robin"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "assays.py Step 3：用全部检索证据和原prompt生成默认3个assay，JSON解析与format_assay_ideas，保存summary。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "assay_reports": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-robin"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "assays.py Step 4：逐assay构造完整hypothesis prompt，通过真实CROW生成每项带引用的详细报告并保存。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "assay_rank": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-robin"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "assays.py Step 5：原uniformly_random_pairs及run_comparisons，processing_ranking_output后执行choix.ilsr_pairwise(alpha=0.1)，选择最高分assay。用synthesize_candidate_goal原prompt合成candidate_generation_goal。保存全部比较、参数和排名。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "candidate_queries": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-robin"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "candidates.py Step 1：初轮使用原查询prompt；后续轮必须注入analysis_summary、mechanistic_insights和questions_raised。保留num_queries与double_queries的原语义。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "candidate_literature": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-robin"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "candidates.py Step 2：真实CROW检索所有查询，区分初轮和experimental产物路径，保留完整证据。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "candidate_proposals": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-robin"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "candidates.py Step 3：按原prompt及块格式产生num_candidates（默认5），保存candidate/hypothesis/reasoning；有experimental_insights时完整注入。格式错误按原解析记录/处理，不以缩水候选集当完整成功。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "candidate_reports": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-robin"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "candidates.py Step 4：为全部候选构造原方向与report-format prompt，真实FALCON调查，再执行format_final_report，保存独立完整报告和引用。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "candidate_rank": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-robin"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "candidates.py Step 5：读取本轮报告，执行uniformly_random_pairs、run_comparisons、原Game Score解析及合法ID筛选、choix.ilsr_pairwise(alpha=0.1)，按原schema输出排名。实验反馈轮读_experimental目录，修正上游误读首轮目录的问题。无合法比较或拟合失败必须blocked，不伪造排名。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "analysis": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-robin"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "使用scripts/analysis_step.py的analysis子命令：对真实实验数据派发原5条并行独立R分析轨迹，每条30steps/900s，下载5份实际CSV和日志，完整后才交Main。失败不能缩成1份结果。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "consensus": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-robin"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "使用scripts/analysis_step.py的consensus子命令：消费5份结果，运行独立共识分析，下载真实consensus_results.csv和轨迹图表；不得只平均LLM结论。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "interpret": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-robin"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "analyses.py：真实read_and_process_csv，空数据/错误不得成功。用原data_interpretation prompts得到恰好四项drugs_in_data/analysis_summary/questions_raised/mechanistic_insights，保留原文；将已测试药物列表加入不要重复推荐约束。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "followup": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-robin"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "用analyses.py原followup prompts基于goal和本轮分析生成followup_suggestions。输出完整四键experimental_insights，返回Main进入后续候选闭环或按用户已完成轮数结束。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    }
+  },
+  "orchestration": {
+    "agents": [
+      {
+        "name": "main",
+        "template": "main"
+      },
+      {
+        "name": "assay_queries",
+        "template": "general"
+      },
+      {
+        "name": "assay_literature",
+        "template": "general"
+      },
+      {
+        "name": "assay_proposals",
+        "template": "general"
+      },
+      {
+        "name": "assay_reports",
+        "template": "general"
+      },
+      {
+        "name": "assay_rank",
+        "template": "general"
+      },
+      {
+        "name": "candidate_queries",
+        "template": "general"
+      },
+      {
+        "name": "candidate_literature",
+        "template": "general"
+      },
+      {
+        "name": "candidate_proposals",
+        "template": "general"
+      },
+      {
+        "name": "candidate_reports",
+        "template": "general"
+      },
+      {
+        "name": "candidate_rank",
+        "template": "general"
+      },
+      {
+        "name": "analysis",
+        "template": "general"
+      },
+      {
+        "name": "consensus",
+        "template": "general"
+      },
+      {
+        "name": "interpret",
+        "template": "general"
+      },
+      {
+        "name": "followup",
+        "template": "general"
+      }
+    ],
+    "input": {
+      "source": "input",
+      "target": "main"
+    },
+    "routes": {
+      "main": [
+        {
+          "target": "assay_queries",
+          "kind": "weak"
+        },
+        {
+          "target": "assay_literature",
+          "kind": "weak"
+        },
+        {
+          "target": "assay_proposals",
+          "kind": "weak"
+        },
+        {
+          "target": "assay_reports",
+          "kind": "weak"
+        },
+        {
+          "target": "assay_rank",
+          "kind": "weak"
+        },
+        {
+          "target": "candidate_queries",
+          "kind": "weak"
+        },
+        {
+          "target": "candidate_literature",
+          "kind": "weak"
+        },
+        {
+          "target": "candidate_proposals",
+          "kind": "weak"
+        },
+        {
+          "target": "candidate_reports",
+          "kind": "weak"
+        },
+        {
+          "target": "candidate_rank",
+          "kind": "weak"
+        },
+        {
+          "target": "analysis",
+          "kind": "weak"
+        },
+        {
+          "target": "consensus",
+          "kind": "weak"
+        },
+        {
+          "target": "interpret",
+          "kind": "weak"
+        },
+        {
+          "target": "followup",
+          "kind": "weak"
+        }
+      ],
+      "assay_queries": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "assay_literature": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "assay_proposals": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "assay_reports": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "assay_rank": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "candidate_queries": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "candidate_literature": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "candidate_proposals": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "candidate_reports": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "candidate_rank": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "analysis": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "consensus": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "interpret": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "followup": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ]
+    },
+    "decisionPlans": {
+      "main": "遵循完整协议、真实状态和阶段门槛调度。",
+      "assay_queries": "按完整协议执行当前职责并交 main。",
+      "assay_literature": "按完整协议执行当前职责并交 main。",
+      "assay_proposals": "按完整协议执行当前职责并交 main。",
+      "assay_reports": "按完整协议执行当前职责并交 main。",
+      "assay_rank": "按完整协议执行当前职责并交 main。",
+      "candidate_queries": "按完整协议执行当前职责并交 main。",
+      "candidate_literature": "按完整协议执行当前职责并交 main。",
+      "candidate_proposals": "按完整协议执行当前职责并交 main。",
+      "candidate_reports": "按完整协议执行当前职责并交 main。",
+      "candidate_rank": "按完整协议执行当前职责并交 main。",
+      "analysis": "按完整协议执行当前职责并交 main。",
+      "consensus": "按完整协议执行当前职责并交 main。",
+      "interpret": "按完整协议执行当前职责并交 main。",
+      "followup": "按完整协议执行当前职责并交 main。"
+    },
+    "allowUserIntervention": true,
+    "allowMainReconfiguration": false,
+    "termination": {
+      "agent": "main",
+      "condition": "原流程规定的终点已达到且交付完整；持续运行方法仅在用户明确要求结束时完成。环境阻断不能当成功。",
+      "decisionBy": "main",
+      "automatic": false
+    },
+    "resultFormat": {
+      "presets": [
+        "可复现证据"
+      ],
+      "custom": "完整状态、候选/版本、原始结果、分析及终止状态，路径见Skill。"
+    }
+  },
+  "git": {
+    "enabled": false
+  }
+}

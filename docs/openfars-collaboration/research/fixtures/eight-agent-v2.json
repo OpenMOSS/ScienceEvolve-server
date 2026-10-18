@@ -1,0 +1,327 @@
+{
+  "fixtureVersion": "openfars-r7-eight-agent-v1",
+  "contractVersion": "openfars-collaboration-v2.0",
+  "description": "Eight ordinary Agents a-h; a and b exist only inside research_group.",
+  "git": {
+    "enabled": true,
+    "status": "ready",
+    "provider": "github",
+    "repository": {
+      "owner": "example-user",
+      "name": "eight-agent-fixture",
+      "htmlUrl": "https://github.com/example-user/eight-agent-fixture",
+      "private": true,
+      "defaultBranch": "main",
+      "localPath": "repository"
+    }
+  },
+  "orchestration": {
+    "schemaVersion": 2,
+    "agents": [
+      { "name": "main", "template": "main" },
+      { "name": "a", "template": "idea" },
+      { "name": "b", "template": "execution" },
+      { "name": "c", "template": "general" },
+      { "name": "d", "template": "review" },
+      { "name": "e", "template": "general" },
+      { "name": "f", "template": "writing" },
+      { "name": "g", "template": "general" },
+      { "name": "h", "template": "review" }
+    ],
+    "collaborations": [
+      {
+        "id": "research_group",
+        "displayName": "Research group",
+        "memberAgentIds": ["a", "b"],
+        "renamePolicy": "editable"
+      }
+    ],
+    "input": { "source": "input", "target": "c" },
+    "routes": {
+      "main": [
+        { "target": "research_group", "kind": "weak" },
+        { "target": "c", "kind": "weak" },
+        { "target": "d", "kind": "weak" },
+        { "target": "e", "kind": "weak" },
+        { "target": "f", "kind": "weak" },
+        { "target": "g", "kind": "weak" },
+        { "target": "h", "kind": "weak" }
+      ],
+      "c": [{ "target": "research_group", "kind": "strong" }],
+      "research_group": [{ "target": "d", "kind": "strong" }],
+      "d": [{ "target": "e", "kind": "strong" }],
+      "e": [{ "target": "f", "kind": "strong" }],
+      "f": [{ "target": "g", "kind": "strong" }],
+      "g": [{ "target": "h", "kind": "strong" }],
+      "h": [{ "target": "finish", "kind": "weak" }]
+    },
+    "decisionPlans": {},
+    "allowUserIntervention": true,
+    "termination": {
+      "agent": "h",
+      "condition": "The reviewed integrated result exists.",
+      "decisionBy": "main",
+      "automatic": true
+    }
+  },
+  "expected": {
+    "outerNodeIds": ["main", "research_group", "c", "d", "e", "f", "g", "h"],
+    "canvasNodeIds": ["input", "main", "research_group", "c", "d", "e", "f", "g", "h", "finish"],
+    "memberAgentIds": ["a", "b"],
+    "mainDispatchCandidates": ["research_group", "c", "d", "e", "f", "g", "h"],
+    "forbiddenOuterReferences": ["a", "b"]
+  },
+  "layouts": {
+    "compact": {
+      "nodeIds": ["input", "main", "research_group", "c", "d", "e", "f", "g", "h", "finish"],
+      "semanticEdgeIds": ["input:c", "c:research_group", "research_group:d", "d:e", "e:f", "f:g", "g:h", "h:finish"],
+      "mainSystemEdgeIds": ["main:research_group", "main:c", "main:d", "main:e", "main:f", "main:g", "main:h"]
+    },
+    "full": {
+      "nodeIds": ["input", "main", "research_group", "c", "d", "e", "f", "g", "h", "finish"],
+      "semanticEdgeIds": ["input:c", "c:research_group", "research_group:d", "d:e", "e:f", "f:g", "g:h", "h:finish"],
+      "mainSystemEdgeIds": ["main:research_group", "main:c", "main:d", "main:e", "main:f", "main:g", "main:h"]
+    }
+  },
+  "readOnlyGitProjection": {
+    "visibleActions": ["open_repository", "open_commit", "open_pull_request", "view_diff"],
+    "forbiddenActions": ["merge", "revert", "delete", "cleanup"],
+    "renderedMutatingActions": [],
+    "historyRetained": true,
+    "automaticCleanup": false,
+    "capacity": {
+      "usagePercent": 98,
+      "state": "warning",
+      "message": "存储空间接近容量上限；历史分支、worktree 与 PR 不会自动清理。"
+    }
+  },
+  "activeRun": {
+    "nodeRun": {
+      "id": "nr-research-1",
+      "node": { "kind": "collaboration", "nodeId": "research_group", "groupId": "research_group" },
+      "workflowRevision": 7,
+      "activationRequestId": "activate-research-1",
+      "inputSnapshotRef": "messages/research-1.json",
+      "sourceAgentId": "c",
+      "activatedByAgentId": "c",
+      "status": "running"
+    },
+    "groupRun": {
+      "id": "gr-research-1",
+      "nodeRunId": "nr-research-1",
+      "memberSnapshot": ["a", "b"],
+      "leaderAgentId": "c",
+      "coordinatorEpoch": 1,
+      "baseCommit": "1111111111111111111111111111111111111111",
+      "groupBranch": "groups/gr-research-1",
+      "integrationTarget": "main",
+      "taskIds": ["task-a", "task-b"],
+      "status": "running"
+    },
+    "tasks": [
+      {
+        "id": "task-a",
+        "nodeRunId": "nr-research-1",
+        "groupRunId": "gr-research-1",
+        "assignment": "Collect evidence.",
+        "assigneeAgentId": "a",
+        "dependencyTaskIds": [],
+        "queueOrdinal": 1,
+        "currentExecutionId": "exec-a-1",
+        "status": "working"
+      },
+      {
+        "id": "task-b",
+        "nodeRunId": "nr-research-1",
+        "groupRunId": "gr-research-1",
+        "assignment": "Implement the accepted finding.",
+        "assigneeAgentId": "b",
+        "dependencyTaskIds": [],
+        "queueOrdinal": 2,
+        "currentExecutionId": "exec-b-1",
+        "status": "waiting"
+      }
+    ],
+    "executions": [
+      {
+        "id": "exec-a-1",
+        "nodeRunId": "nr-research-1",
+        "groupRunId": "gr-research-1",
+        "taskId": "task-a",
+        "agentId": "a",
+        "purpose": "delivery",
+        "ownershipEpoch": 1,
+        "status": "working",
+        "executionBranch": "executions/exec-a-1",
+        "worktreePath": "git-worktrees/exec-a-1"
+      },
+      {
+        "id": "exec-b-1",
+        "nodeRunId": "nr-research-1",
+        "groupRunId": "gr-research-1",
+        "taskId": "task-b",
+        "agentId": "b",
+        "purpose": "delivery",
+        "ownershipEpoch": 1,
+        "status": "waiting_review",
+        "executionBranch": "executions/exec-b-1",
+        "worktreePath": "git-worktrees/exec-b-1",
+        "pullRequestId": "pr-b-1"
+      }
+    ],
+    "pullRequests": [
+      {
+        "id": "pr-b-1",
+        "providerNumber": 12,
+        "htmlUrl": "https://github.com/example-user/eight-agent-fixture/pull/12",
+        "head": "executions/exec-b-1",
+        "base": "groups/gr-research-1",
+        "ownerExecutionId": "exec-b-1",
+        "status": "open",
+        "observedAt": "2026-09-22T00:00:00.000Z"
+      }
+    ],
+    "editability": {
+      "groupId": "research_group",
+      "editable": false,
+      "reason": "active_group_run"
+    }
+  },
+  "sseReconnect": {
+    "snapshotSeq": 100,
+    "events": [
+      {
+        "eventId": "evt-101",
+        "seq": 101,
+        "kind": "execution.status",
+        "nodeRunId": "nr-research-1",
+        "groupRunId": "gr-research-1",
+        "agentId": "a",
+        "taskId": "task-a",
+        "executionId": "exec-a-1",
+        "status": "working"
+      },
+      {
+        "eventId": "evt-102",
+        "seq": 102,
+        "kind": "execution.status",
+        "nodeRunId": "nr-research-1",
+        "groupRunId": "gr-research-1",
+        "agentId": "b",
+        "taskId": "task-b",
+        "executionId": "exec-b-1",
+        "status": "waiting_review"
+      },
+      {
+        "eventId": "evt-102",
+        "seq": 102,
+        "kind": "execution.status",
+        "nodeRunId": "nr-research-1",
+        "groupRunId": "gr-research-1",
+        "agentId": "b",
+        "taskId": "task-b",
+        "executionId": "exec-b-1",
+        "status": "waiting_review"
+      },
+      {
+        "eventId": "evt-104",
+        "seq": 104,
+        "kind": "execution.status",
+        "nodeRunId": "nr-research-1",
+        "groupRunId": "gr-research-1",
+        "agentId": "a",
+        "taskId": "task-a",
+        "executionId": "exec-a-supplemental",
+        "status": "succeeded"
+      },
+      {
+        "eventId": "evt-103",
+        "seq": 103,
+        "kind": "execution.status",
+        "nodeRunId": "nr-research-1",
+        "groupRunId": "gr-research-1",
+        "agentId": "a",
+        "taskId": "task-a",
+        "executionId": "exec-a-1",
+        "status": "succeeded"
+      }
+    ],
+    "expected": {
+      "uniqueAppliedEvents": 4,
+      "lastSeq": 104,
+      "executionStatuses": {
+        "exec-a-1": "succeeded",
+        "exec-a-supplemental": "succeeded",
+        "exec-b-1": "waiting_review"
+      },
+      "aggregateStatus": "integrating"
+    }
+  },
+  "runtimeLabels": [
+    "waiting_authorization",
+    "waiting_review",
+    "conflict_repair",
+    "stop_requested",
+    "waiting_for_stop",
+    "continuation_pending",
+    "reassigned",
+    "frozen_by_main_failure"
+  ],
+  "invalidVariants": [
+    {
+      "id": "duplicate_group_id",
+      "mutation": { "type": "add_group", "groupId": "research_group", "memberAgentIds": ["c", "d"] },
+      "expectedCode": "duplicate_node_id"
+    },
+    {
+      "id": "duplicate_membership",
+      "mutation": { "type": "add_group", "groupId": "second_group", "memberAgentIds": ["a", "c"] },
+      "expectedCode": "agent_in_multiple_groups"
+    },
+    {
+      "id": "missing_second_member",
+      "mutation": { "type": "replace_members", "groupId": "research_group", "memberAgentIds": ["a"] },
+      "expectedCode": "collaboration_needs_two_members"
+    },
+    {
+      "id": "unknown_member",
+      "mutation": { "type": "append_member", "groupId": "research_group", "memberId": "unknown-agent" },
+      "expectedCode": "unknown_member"
+    },
+    {
+      "id": "member_route",
+      "mutation": { "type": "add_route", "source": "a", "target": "d" },
+      "expectedCode": "member_is_not_outer_node"
+    },
+    {
+      "id": "member_input",
+      "mutation": { "type": "set_input", "target": "a" },
+      "expectedCode": "member_is_not_outer_node"
+    },
+    {
+      "id": "member_termination",
+      "mutation": { "type": "set_termination", "agent": "b" },
+      "expectedCode": "member_is_not_outer_node"
+    },
+    {
+      "id": "nested_group",
+      "mutation": { "type": "append_member", "groupId": "research_group", "memberId": "research_group" },
+      "expectedCode": "nested_group"
+    },
+    {
+      "id": "git_disabled",
+      "mutation": { "type": "disable_git" },
+      "expectedCode": "collaboration_requires_git"
+    },
+    {
+      "id": "main_membership",
+      "mutation": { "type": "append_member", "groupId": "research_group", "memberId": "main" },
+      "expectedCode": "main_cannot_be_member"
+    },
+    {
+      "id": "active_group_edit",
+      "mutation": { "type": "edit_active_group", "groupId": "research_group", "memberAgentIds": ["a", "b", "c"] },
+      "expectedCode": "active_group_locked"
+    }
+  ]
+}

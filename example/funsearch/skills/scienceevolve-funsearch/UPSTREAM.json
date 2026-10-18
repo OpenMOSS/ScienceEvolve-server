@@ -1,0 +1,41 @@
+{
+  "repository": "https://github.com/google-deepmind/funsearch",
+  "commit": "cc53f274237d7ab05c19df939edbc1f9616a7c19",
+  "files": [
+    {
+      "path": "LICENSE",
+      "upstream_path": "LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "upstream/funsearch/implementation/code_manipulation.py",
+      "upstream_path": "implementation/code_manipulation.py",
+      "sha256": "8538521e64b0f92a95ee88d0617dd499129a1de19d9502aacba3f109b77f7b3b"
+    },
+    {
+      "path": "upstream/funsearch/implementation/config.py",
+      "upstream_path": "implementation/config.py",
+      "sha256": "bd118e9579e7230d8b1c969a0fc4e10fadcbfa116993c7aadfb988ac4fb500a6"
+    },
+    {
+      "path": "upstream/funsearch/implementation/evaluator.py",
+      "upstream_path": "implementation/evaluator.py",
+      "sha256": "81647818f5f12d9af535959d9042c62ffcb687385ac7d5b2ffbf01a6401542c1"
+    },
+    {
+      "path": "upstream/funsearch/implementation/funsearch.py",
+      "upstream_path": "implementation/funsearch.py",
+      "sha256": "a5b9aa2e562e98d1843dd51de28758df3b51432e3244aadf99686db995d4c922"
+    },
+    {
+      "path": "upstream/funsearch/implementation/programs_database.py",
+      "upstream_path": "implementation/programs_database.py",
+      "sha256": "b2bef312d04861f467f304f65788efe959f0493818976b052c46b4703151affc"
+    },
+    {
+      "path": "upstream/funsearch/implementation/sampler.py",
+      "upstream_path": "implementation/sampler.py",
+      "sha256": "7139b27a312065d53e7f17e5feada17b98107fdb39d71b0b47acd42f9f8a38ac"
+    }
+  ]
+}

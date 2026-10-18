@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="181" height="26" viewBox="0 0 181 26" role="img" aria-label="✨ 功能场景 · 协作 · 迭代">
+  <title>✨ 功能场景 · 协作 · 迭代</title>
+  <linearGradient id="shine" x2="0" y2="100%"><stop offset="0" stop-color="#fff" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient>
+  <clipPath id="round"><rect width="181" height="26" rx="4"/></clipPath>
+  <g clip-path="url(#round)">
+    <path fill="#555" d="M0 0h94v26H0z"/>
+    <path fill="#527a56" d="M94 0h87v26H94z"/>
+    <rect width="181" height="26" fill="url(#shine)"/>
+  </g>
+  <text x="11" y="18" font-family="Apple Color Emoji,Segoe UI Emoji,Noto Color Emoji,sans-serif" font-size="14">✨</text>
+  <g fill="#fff" font-family="Verdana,Geneva,DejaVu Sans,Arial,PingFang SC,Microsoft YaHei,sans-serif" font-size="12">
+    <text x="34" y="17.5">功能场景</text>
+    <text x="137.5" y="17.5" text-anchor="middle">协作 · 迭代</text>
+  </g>
+</svg>

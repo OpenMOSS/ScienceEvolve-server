@@ -1,0 +1,70 @@
+{
+  "reference": "ARIS mainline research-pipeline (W1/W1.5/W2/W3)",
+  "upstream_commit": "341f914024d270dc5c8fa51337d1ad38829273aa",
+  "stages": {
+    "literature": {
+      "skill": "research-lit",
+      "description": "完整执行主线文献检索：研究 brief/参考论文、可用本地库和远程来源、逐篇验证、分析综合、文献表与可选 wiki；明确未验证证据，不能跳过核验。"
+    },
+    "ideas": {
+      "skill": "idea-creator",
+      "description": "完成视角扩展、跨模型头脑风暴、机械归并、客观可行性检查、跨模型深度验证，以及最多3个pilot。保留正/负/跳过的真实状态。无原生spawn时使用上游Tier3顺序lens分支；pilot作业仍可由已有Task执行器并发。预算、超时和源文件规则按上游，不自定义缩小。"
+    },
+    "novelty": {
+      "skill": "novelty-check",
+      "description": "完成主张提取、多源检索、文献核验、跨模型新颖性验证和报告。提出审稿请求时交Main调度reviewer；自己不能写外部裁决。"
+    },
+    "refine": {
+      "skill": "research-refine",
+      "description": "承接上游idea-discovery的外部critical review和Phase4.5 refine，执行完整研究细化、experiment-plan，形成单份IDEA_REPORT、research_contract及输出manifest；保留淘汰证据，落实阶段acceptance。"
+    },
+    "bridge": {
+      "skill": "experiment-bridge",
+      "description": "完整实施W1.5：解析里程碑、base repo、实现、跨模型代码审查及最多2次修复、sanity和最多3次debug/救援、作业数/依赖自动选run-experiment或experiment-queue、部署监测、收集、training-check、自动消融规划和handoff。不得仅保存计划后标记实际运行完成。"
+    },
+    "research_loop": {
+      "skill": "auto-review-loop",
+      "description": "完整执行W2。每轮review→可选hard/nightmare辩论与裁决→人工checkpoint→修复/实验→监测→记全原文。最多4轮；只有跨模型有效裁决score>=6且verdict为ready/almost才positive STOP。高分not ready不能停止；第4轮未通过明确失败，不虚构accepted。"
+    },
+    "summary": {
+      "skill": "research-pipeline",
+      "description": "只执行主线Stage4叙事交接：从实际idea、代码、实验、评审生成NARRATIVE_REPORT和pipeline report；按参数render-html，不丢失失败和未解决问题。AUTO_WRITE=false按原协议跳过写作；true时检查venue和手工图条件，按上游延后语义记录pending而非假完成。"
+    },
+    "paper_plan": {
+      "skill": "paper-plan",
+      "description": "完整规划主张证据矩阵、结构、图表、引用并跨模型审查；随后执行paper-writing Phase1.5最多3轮接受合同谈判。合同争议按上游显式标记contested并触发用户处理，不能改成accepted；记录冻结合同，不能通过静默缩小验收条件过关。"
+    },
+    "figures": {
+      "skill": "paper-figure",
+      "description": "按paper-writing Phase2/2b完成真实数据图表和所选illustration后端；支持figurespec本地矢量、mermaid或用户配置的图像后端。执行质量审查，保存生成脚本/数据出处/LaTeX includes。能力替换仍须生成和检查实际图，不用文字描述代替。"
+    },
+    "paper_write": {
+      "skill": "paper-write",
+      "description": "按主线方法完成全部章节、公式、引用和主张一致性，遵守冻结合同；按参数执行writing-systems-papers等分支，不能只写摘要或研究报告代替稿件。"
+    },
+    "paper_compile": {
+      "skill": "paper-compile",
+      "description": "实际执行LaTeX编译、处理错误、检查引用/图表/页数，保存PDF与日志；随后按paper-writing对应阶段执行visual检查、claim-audit。需要外部review时交Main，不能由作者自审冒充独立审计。",
+      "proof_provider": "original proof-checker; readonly_review.py preserves ultra/fallback and thread continuation"
+    },
+    "paper_improve": {
+      "skill": "auto-paper-improvement-loop",
+      "description": "完整2轮review→修稿→重新编译，默认每轮新reviewer上下文。保留所有PDF与原文review；偏置保护下不向reviewer传历史分数/修复叙述/style-ref。遵循edit-whitelist并记录被拒绝修改。"
+    },
+    "paper_assurance": {
+      "skill": "paper-writing",
+      "description": "执行W3收尾全部适用审计和Phase6合同/assurance验收，包含claim、logic、integrity、citation及visual等由上游effort/assurance控制的项目。实际运行verify_paper_audits.sh，非零必须阻止submission-ready。每个子审计输出规定JSON，不把缺helper/缺工具写成PASS；交最终报告、PDF、improvement log与未决事项。",
+      "integrity_provider": "integrity-upstream at b47af6f983b38347b6d2110379e266400597cf66; original deterministic tools and every fresh read-only reviewer via scripts/readonly_review.py"
+    }
+  },
+  "substitutions": {
+    "Skill/slash dispatch": "read and execute the bundled original skill in the current stage",
+    "Codex MCP external reviewer": "SCIENCEEVOLVE cross-family reviewer plus raw transcript continuation",
+    "no native lens spawning": "upstream Tier 3 sequential lens enumeration",
+    "experiment launch": "bundled run-experiment/experiment-queue tools using supplied Task compute"
+  },
+  "required_model_families": [
+    "anthropic",
+    "openai"
+  ]
+}

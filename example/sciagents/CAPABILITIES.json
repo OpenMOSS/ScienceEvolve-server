@@ -1,0 +1,26 @@
+{
+  "reference": "both official SciAgents notebooks and ScienceDiscovery implementation",
+  "capabilities": {
+    "graph_embeddings_all_path_modes": "assistant",
+    "all_concepts_relationships": "ontologist",
+    "seven_field_initial_proposal": "scientist",
+    "seven_individual_expansions": [
+      "hypothesis_agent",
+      "outcome_agent",
+      "mechanism_agent",
+      "design_principles_agent",
+      "unexpected_properties_agent",
+      "comparison_agent",
+      "novelty_agent"
+    ],
+    "scientific_critique_and_two_experiment_priorities": "critic_agent",
+    "literature_novelty_feasibility_rating": "novelty_assistant",
+    "automatic_speaker_selection_50_rounds": "main",
+    "fixed_sequence_mode": "main",
+    "complete_markdown_pdf_transcript": "report"
+  },
+  "substitutions": {
+    "AG2 GroupChatManager": "Main with same shared transcript/round rules",
+    "OpenAI model calls": "configured SCIENCEEVOLVE roles"
+  }
+}

@@ -1,0 +1,331 @@
+{
+  "repository": "https://github.com/wanshuiyin/Anti-Autoresearch",
+  "commit": "b47af6f983b38347b6d2110379e266400597cf66",
+  "files": [
+    {
+      "path": "integrity-upstream/.github/ISSUE_TEMPLATE/config.yml",
+      "upstream_path": ".github/ISSUE_TEMPLATE/config.yml",
+      "sha256": "a9c2efa14c546c3d3f51ceebedfc013bf6e39946f7471760e54f9f02d0a7c8cc"
+    },
+    {
+      "path": "integrity-upstream/.github/ISSUE_TEMPLATE/false_positive.yml",
+      "upstream_path": ".github/ISSUE_TEMPLATE/false_positive.yml",
+      "sha256": "32d4722b9822e0eef26b3a53de2bb4234c337bbabd6ce4fee208693d99873182"
+    },
+    {
+      "path": "integrity-upstream/.github/ISSUE_TEMPLATE/pattern.yml",
+      "upstream_path": ".github/ISSUE_TEMPLATE/pattern.yml",
+      "sha256": "a5a7050d3d316d2b3eb371b11f0689199f97817ddeff8aa54a33946e6274fac3"
+    },
+    {
+      "path": "integrity-upstream/.github/PULL_REQUEST_TEMPLATE.md",
+      "upstream_path": ".github/PULL_REQUEST_TEMPLATE.md",
+      "sha256": "3bebaf9645da3d0b30568a0653609e3d3b4d7f5db4f9f29f8d8a08349b75ca21"
+    },
+    {
+      "path": "integrity-upstream/.github/workflows/ci.yml",
+      "upstream_path": ".github/workflows/ci.yml",
+      "sha256": "77591851e81c4f157637af00a54a731ad29b7e81678416d6d948c0b3691c97f1"
+    },
+    {
+      "path": "integrity-upstream/.gitignore",
+      "upstream_path": ".gitignore",
+      "sha256": "349f8ddef270970c7a6ec8f8e4d355e81f7a5d0d83caa6538fb987291f603a7d"
+    },
+    {
+      "path": "integrity-upstream/CITATION.cff",
+      "upstream_path": "CITATION.cff",
+      "sha256": "e23fe6fa77d8a28d78ff4805ad32ea9136ad922cec08c439aa24d385b0f612ab"
+    },
+    {
+      "path": "integrity-upstream/CODE_OF_CONDUCT.md",
+      "upstream_path": "CODE_OF_CONDUCT.md",
+      "sha256": "fad8bbe06a3aa3201ad71120fa9fff6716bc05a893705eaabefcf2178f9bfcc0"
+    },
+    {
+      "path": "integrity-upstream/CONTRIBUTING.md",
+      "upstream_path": "CONTRIBUTING.md",
+      "sha256": "ce16c6f3a732c775fb564e9462b699ceab305b608c9a0939b02d548cd1b118ac"
+    },
+    {
+      "path": "integrity-upstream/DESIGN.md",
+      "upstream_path": "DESIGN.md",
+      "sha256": "7c307d1dbdb19af35cfde1d30385c5de02028b7db247e2bb8d85c8b83e91b114"
+    },
+    {
+      "path": "integrity-upstream/LICENSE",
+      "upstream_path": "LICENSE",
+      "sha256": "d7696d9a04b101369904390c57f6d48f2729b7f0da8e4e6397bb3ccf73f50011"
+    },
+    {
+      "path": "integrity-upstream/README.md",
+      "upstream_path": "README.md",
+      "sha256": "79332dd8274a6398f653322391cae8eb90336ee202f661c6439193e5e4626176"
+    },
+    {
+      "path": "integrity-upstream/README_CN.md",
+      "upstream_path": "README_CN.md",
+      "sha256": "015bf968a914d7e6dea789b2524343737fa63585f451663893b45b55c7dcbd21"
+    },
+    {
+      "path": "integrity-upstream/SECURITY.md",
+      "upstream_path": "SECURITY.md",
+      "sha256": "9885d1356e993c1fe4f193b3406c9b489838fea9b0bccb7f474c040644cfe16b"
+    },
+    {
+      "path": "integrity-upstream/docs/limitations.md",
+      "upstream_path": "docs/limitations.md",
+      "sha256": "4c5d8e016f5ed8cb5bce5d581d8d2dcf775d2a1f2e1a09d5409a2466b2cf3d2e"
+    },
+    {
+      "path": "integrity-upstream/docs/positioning.md",
+      "upstream_path": "docs/positioning.md",
+      "sha256": "acf50349f7f3ee199c3af253a08533dc48411293eb1d3266564bcbc4c6dda11b"
+    },
+    {
+      "path": "integrity-upstream/docs/wechat_group.jpg",
+      "upstream_path": "docs/wechat_group.jpg",
+      "sha256": "13efad920c42e0690bd8fccd9ece9a49b94f4c81336dbf4b954cb23b4ba6647a"
+    },
+    {
+      "path": "integrity-upstream/eval/corrupt.py",
+      "upstream_path": "eval/corrupt.py",
+      "sha256": "987234b2e0cf8514885723b17d3f83657efa5a8481191c6dfa19263ee06be282"
+    },
+    {
+      "path": "integrity-upstream/eval/expected_findings/clean.json",
+      "upstream_path": "eval/expected_findings/clean.json",
+      "sha256": "c13e457a4ff8ce6b01384492f0c4be8943cf3b16a30f3cd8ea8ec5190f769ceb"
+    },
+    {
+      "path": "integrity-upstream/eval/expected_findings/defensive_hedge.json",
+      "upstream_path": "eval/expected_findings/defensive_hedge.json",
+      "sha256": "2c5614f86a1f4c327d8c2675c64a6338720b5dc9bfaa321e31a9e22764cd177a"
+    },
+    {
+      "path": "integrity-upstream/eval/expected_findings/delta_inflate.json",
+      "upstream_path": "eval/expected_findings/delta_inflate.json",
+      "sha256": "dac54c16ab36213f966e2444987df596ef958c8395bb59bd5f939f45e254b023"
+    },
+    {
+      "path": "integrity-upstream/eval/expected_findings/dup_table.json",
+      "upstream_path": "eval/expected_findings/dup_table.json",
+      "sha256": "acbac75fc9ae92524b7e55ab554d0002dba50b8c3adee005af253dd73ee8c903"
+    },
+    {
+      "path": "integrity-upstream/eval/expected_findings/grim_impossible.json",
+      "upstream_path": "eval/expected_findings/grim_impossible.json",
+      "sha256": "5d70ce4ca2c0f4bf459f0c392018f053a8f3d8018ab4491d485ff24c78ae8f65"
+    },
+    {
+      "path": "integrity-upstream/eval/expected_findings/headline_inflate.json",
+      "upstream_path": "eval/expected_findings/headline_inflate.json",
+      "sha256": "56d8c00f76b2fcbf7cf86db51e0102ef94ba136daf66658cd75637fa1779a7f9"
+    },
+    {
+      "path": "integrity-upstream/eval/expected_findings/pipeline_artifact.json",
+      "upstream_path": "eval/expected_findings/pipeline_artifact.json",
+      "sha256": "ed39c177d7ad167ec7bd8900288a654e9a7eb1f83c5352b52059b910ce05f315"
+    },
+    {
+      "path": "integrity-upstream/eval/expected_findings/stat_inconsistency.json",
+      "upstream_path": "eval/expected_findings/stat_inconsistency.json",
+      "sha256": "18519f4a84ec1210f55a790cabe67c391d1a9b5ddc25097701561654d386342c"
+    },
+    {
+      "path": "integrity-upstream/eval/expected_findings/variance_impossible.json",
+      "upstream_path": "eval/expected_findings/variance_impossible.json",
+      "sha256": "e2bed7ba154c1f201dd89a7c733bd31ea5e771e1d85ed75131964552d7301763"
+    },
+    {
+      "path": "integrity-upstream/eval/fixtures/clean/sample_paper.tex",
+      "upstream_path": "eval/fixtures/clean/sample_paper.tex",
+      "sha256": "ca054de4274d6ea6679169ec554b46ec1d6128a44ec02c12ba01c53ffbc0fbb9"
+    },
+    {
+      "path": "integrity-upstream/eval/run_eval.py",
+      "upstream_path": "eval/run_eval.py",
+      "sha256": "f43971cb2c849868af3bb0f0e505391fba4732f62a7abedbf13619388562ecda"
+    },
+    {
+      "path": "integrity-upstream/references/hack-pattern-taxonomy.md",
+      "upstream_path": "references/hack-pattern-taxonomy.md",
+      "sha256": "974d2e9cf8fbb62996bc8e495ffe5e2dbd9101b5e8b7678e6f44f4b89e49cd35"
+    },
+    {
+      "path": "integrity-upstream/references/integrity-forensics-contract.md",
+      "upstream_path": "references/integrity-forensics-contract.md",
+      "sha256": "f0de10b5e8de383ca6f0b9264b7aa177b91cfd39650484e9981ddde28c08edaf"
+    },
+    {
+      "path": "integrity-upstream/references/observability-levels.md",
+      "upstream_path": "references/observability-levels.md",
+      "sha256": "b3af3572e322c42673c954195abf90c6178ac0fbc43fbdc7dca601f43b7ff623"
+    },
+    {
+      "path": "integrity-upstream/references/reviewer-independence.md",
+      "upstream_path": "references/reviewer-independence.md",
+      "sha256": "0abbb2aeca2eacdb162551353a126626164b84f3565dab81cbc0873acff0a4b9"
+    },
+    {
+      "path": "integrity-upstream/schemas/artifact_manifest.schema.json",
+      "upstream_path": "schemas/artifact_manifest.schema.json",
+      "sha256": "ffaf5c30615d038a429f3b5e05a3cf144d73d301918dc922ce067ca51b9e74f9"
+    },
+    {
+      "path": "integrity-upstream/schemas/claims.schema.json",
+      "upstream_path": "schemas/claims.schema.json",
+      "sha256": "e7068b14e2d7cd84be462459f05f79b2e530eb2cbd0840a983efaed147e1c09f"
+    },
+    {
+      "path": "integrity-upstream/schemas/finding.schema.json",
+      "upstream_path": "schemas/finding.schema.json",
+      "sha256": "fccf064154d895314ed224af52b7c575beaba57aa17aa19b519bfe24898373f2"
+    },
+    {
+      "path": "integrity-upstream/schemas/report.schema.json",
+      "upstream_path": "schemas/report.schema.json",
+      "sha256": "09e5acb2897958a3befe314d7c6a1d4c2658c782548e47e297d8cfa672d65dfd"
+    },
+    {
+      "path": "integrity-upstream/skills/adversarial-case-builder/SKILL.md",
+      "upstream_path": "skills/adversarial-case-builder/SKILL.md",
+      "sha256": "d47af199de44d1c319cf4f216bdee201d9ddd10b97c9ff304eaecca75ecb2e84"
+    },
+    {
+      "path": "integrity-upstream/skills/ai-style-impressions/SKILL.md",
+      "upstream_path": "skills/ai-style-impressions/SKILL.md",
+      "sha256": "0a4bca45895b988ec01333bf1451fd1da23c3344479c9479d60a91df0611b431"
+    },
+    {
+      "path": "integrity-upstream/skills/baseline-comparison-audit/SKILL.md",
+      "upstream_path": "skills/baseline-comparison-audit/SKILL.md",
+      "sha256": "d706bd83830c91a7e02cf343708bf48d06c86c8f45a056b5c0b61ddede331e70"
+    },
+    {
+      "path": "integrity-upstream/skills/citation-forensics/SKILL.md",
+      "upstream_path": "skills/citation-forensics/SKILL.md",
+      "sha256": "8b14ef660cda468187b0039ba54f0e574a5a870ee277babb4eef28e66c41d131"
+    },
+    {
+      "path": "integrity-upstream/skills/consistency-audit/SKILL.md",
+      "upstream_path": "skills/consistency-audit/SKILL.md",
+      "sha256": "fb16bc9ad2384cfef315b7ff0b494e1004695b4c1dcffe243c47f0fa662de29c"
+    },
+    {
+      "path": "integrity-upstream/skills/eval-design-forensics/SKILL.md",
+      "upstream_path": "skills/eval-design-forensics/SKILL.md",
+      "sha256": "8c20d1e39a5e5417d771604ecd8b0f081458feae840168ebc701be66afc04dd4"
+    },
+    {
+      "path": "integrity-upstream/skills/evidence-ledger/SKILL.md",
+      "upstream_path": "skills/evidence-ledger/SKILL.md",
+      "sha256": "1d1b58bf2ca148a01118ae93c29537426061c0c00346c4aa513f16f505982a60"
+    },
+    {
+      "path": "integrity-upstream/skills/experiment-forensics/SKILL.md",
+      "upstream_path": "skills/experiment-forensics/SKILL.md",
+      "sha256": "fdeb56ec8ffc445eb7f68ca87fc79c1a5477ac0d000a8a22f85f50672bede3d7"
+    },
+    {
+      "path": "integrity-upstream/skills/novelty-duplication-advisory/SKILL.md",
+      "upstream_path": "skills/novelty-duplication-advisory/SKILL.md",
+      "sha256": "fe335ab9fec290ecb84ee4b02cca63a362d5906f59549f080affb42ee112f518"
+    },
+    {
+      "path": "integrity-upstream/skills/presentation-signals/SKILL.md",
+      "upstream_path": "skills/presentation-signals/SKILL.md",
+      "sha256": "aac2d7e2ba7199831fa2c825af720490124c3b9002929afcad0c28c098f47270"
+    },
+    {
+      "path": "integrity-upstream/skills/proof-derivation-forensics/SKILL.md",
+      "upstream_path": "skills/proof-derivation-forensics/SKILL.md",
+      "sha256": "ab47d5d0483c7c84d72de1fdf3c53ffb07346693fd42b4bc1b1d9d655a626c73"
+    },
+    {
+      "path": "integrity-upstream/tests/test_adjudicator.py",
+      "upstream_path": "tests/test_adjudicator.py",
+      "sha256": "36452691f10e36da9404a80efc3ab74e5ab9f58cab4ead313711cea41eee8e39"
+    },
+    {
+      "path": "integrity-upstream/tests/test_ai_style.py",
+      "upstream_path": "tests/test_ai_style.py",
+      "sha256": "6ef2d05008f170b996745daa04cacb0a3480c02fd0b9e8d8be1da740814fba30"
+    },
+    {
+      "path": "integrity-upstream/tests/test_countercheck.py",
+      "upstream_path": "tests/test_countercheck.py",
+      "sha256": "763d7ee919a9fef933813889c1588cf9feb167dae038fb5ec0ec1a92db1589d1"
+    },
+    {
+      "path": "integrity-upstream/tests/test_embedded_python.py",
+      "upstream_path": "tests/test_embedded_python.py",
+      "sha256": "ffeeec65f203a623156c2189da7909ca07d0bdec2f2d821f972051cbf299d685"
+    },
+    {
+      "path": "integrity-upstream/tests/test_select_primary_pdf.py",
+      "upstream_path": "tests/test_select_primary_pdf.py",
+      "sha256": "f1550f7b8c7075d0f0df9265c30fd02cdb010537aeec4cf6ea73d2b2f72475c6"
+    },
+    {
+      "path": "integrity-upstream/tools/adjudicate_findings.py",
+      "upstream_path": "tools/adjudicate_findings.py",
+      "sha256": "1b4efd009b7bd099e01324518dbb7c17d060fbad451e4d222068ab75977f6461"
+    },
+    {
+      "path": "integrity-upstream/tools/attach_refutation.py",
+      "upstream_path": "tools/attach_refutation.py",
+      "sha256": "2ee9da9fe3693ef63b48006ae1856902826a748d79f620d34cbc712ac2d38061"
+    },
+    {
+      "path": "integrity-upstream/tools/build_claim_ledger.py",
+      "upstream_path": "tools/build_claim_ledger.py",
+      "sha256": "425efafcc9fc6179d4c796c40325710513db3fdbe428aa008e00e4358e013f25"
+    },
+    {
+      "path": "integrity-upstream/tools/build_manifest.py",
+      "upstream_path": "tools/build_manifest.py",
+      "sha256": "e3b8484ff9cdf9564ddd8d8a7f49b771f2fcd12a6e8e0bd9c2df188db7c9248e"
+    },
+    {
+      "path": "integrity-upstream/tools/check_ai_style.py",
+      "upstream_path": "tools/check_ai_style.py",
+      "sha256": "bfe8065230ef81c216c068df53f18eef1d4bab7f71d0840360652ccf462fa7c1"
+    },
+    {
+      "path": "integrity-upstream/tools/check_numeric_consistency.py",
+      "upstream_path": "tools/check_numeric_consistency.py",
+      "sha256": "b8da29e691360b1ba1670962c9a6aebef0230b2f197e29c419c5ee954efc18a4"
+    },
+    {
+      "path": "integrity-upstream/tools/check_presentation.py",
+      "upstream_path": "tools/check_presentation.py",
+      "sha256": "6ec269f72e90944d6547e4eae26b6a7b7e645d0287b238407734143fb9a90e01"
+    },
+    {
+      "path": "integrity-upstream/tools/check_stat_consistency.py",
+      "upstream_path": "tools/check_stat_consistency.py",
+      "sha256": "b387f9723648f9193d3534697b4e7a2d05b7e7f1980d64806e7c8348bab63e06"
+    },
+    {
+      "path": "integrity-upstream/tools/countercheck.py",
+      "upstream_path": "tools/countercheck.py",
+      "sha256": "dfb1112d9f1a59bc347fc6a75ccba48e6d0bc8ffe8023667cbb4d0d37cac1d6d"
+    },
+    {
+      "path": "integrity-upstream/tools/install_anti_autoresearch.sh",
+      "upstream_path": "tools/install_anti_autoresearch.sh",
+      "sha256": "dbcecbb560ac0b5fb9d89d610af194a0707b5d648b76a394261c6956ec7accc6"
+    },
+    {
+      "path": "integrity-upstream/tools/select_primary_pdf.py",
+      "upstream_path": "tools/select_primary_pdf.py",
+      "sha256": "664229e7744c047f53aa0f69c2c6519959c000812ba57cb0cadb2e89f74837ea"
+    },
+    {
+      "path": "integrity-upstream/workflows/anti-autoresearch/SKILL.md",
+      "upstream_path": "workflows/anti-autoresearch/SKILL.md",
+      "sha256": "efa7c2038ccc73e542378faee19d2ed8faa7dd574426dc21eea07e355b1f09bc"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+# Runtime helpers are verified byte-for-byte; preserve their stored bytes.
+server/src/harness-runtime/descriptor-broker-helper.py -text
+server/src/harness-runtime/descriptor-broker-windows.py -text
+server/src/harness-runtime/windows-resident-helper.py -text
+server/src/harness-runtime/descriptor-broker-mcp.ts -text
+server/src/harness-runtime/windows-apply-patch.cs -text

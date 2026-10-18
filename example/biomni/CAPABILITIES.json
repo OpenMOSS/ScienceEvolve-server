@@ -1,0 +1,17 @@
+{
+  "reference": "Biomni A1 at 400c1f366b96a35ca253e13c9b06c5076af41d65, complete public inference workflow",
+  "capabilities": {
+    "resource_retrieval": "retrieval / original ToolRetriever",
+    "react_and_full_history": "researcher / original A1.generate",
+    "persistent_python_r_bash_cli_tools": "execute / original A1.execute and E1",
+    "self_critique_test_time_scaling": "critic / original execute_self_critic",
+    "custom_resources_mcp_and_know_how": "original A1 methods and Task extension",
+    "wetlab": "wetlab + actual external tools, original observations",
+    "reporting": "main / original save_conversation_history"
+  },
+  "substitutions": {
+    "LLM invoke": "one SCIENCEEVOLVE response per original prompt",
+    "LangGraph orchestration": "SCIENCEEVOLVE role routing; no autonomous upstream graph execution",
+    "shared/domain/lab services": "external providers"
+  }
+}

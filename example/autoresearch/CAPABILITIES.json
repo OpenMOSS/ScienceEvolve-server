@@ -1,0 +1,15 @@
+{
+  "reference": "official program.md",
+  "capabilities": {
+    "setup_and_confirmation": "main",
+    "baseline": "train",
+    "edit_commit": "propose",
+    "fixed_time_training_timeout_repair": "train",
+    "metric_complexity_keep_discard_git": "select",
+    "original_tsv_and_failure_sentinel": "select",
+    "unbounded_until_user_stop": "main"
+  },
+  "substitutions": {
+    "model/harness": "SCIENCEEVOLVE coding agent; same task/edit/evaluate/selection protocol"
+  }
+}

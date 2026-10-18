@@ -1,0 +1,35 @@
+{
+  "autonomous": {
+    "wakeReason": "exception",
+    "configuredAgents": ["main", "research", "writing"],
+    "candidateAgents": ["research"],
+    "allowAnyAgent": true,
+    "allowMainReconfiguration": true,
+    "allowUserIntervention": true,
+    "completionEligible": true,
+    "expected": {
+      "schemaVersion": 1,
+      "controlMode": "autonomous",
+      "routeCandidates": ["research", "writing"],
+      "canReconfigure": true,
+      "canComplete": true,
+      "canRequestUser": true
+    }
+  },
+  "weakBranch": {
+    "wakeReason": "weak-branch",
+    "configuredAgents": ["main", "research", "writing", "review"],
+    "candidateAgents": ["main", "writing", "finish", "unknown"],
+    "allowMainReconfiguration": true,
+    "allowUserIntervention": true,
+    "completionEligible": true,
+    "expected": {
+      "schemaVersion": 1,
+      "controlMode": "weak-branch",
+      "routeCandidates": ["main", "writing", "finish"],
+      "canReconfigure": false,
+      "canComplete": false,
+      "canRequestUser": false
+    }
+  }
+}

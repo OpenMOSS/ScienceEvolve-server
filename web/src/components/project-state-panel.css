@@ -1,0 +1,11 @@
+.project-state-panel { margin: 0 24px 16px; padding: 12px 16px; border: 1px solid var(--border, #ddd); border-radius: 10px; }
+.project-state-panel summary { cursor: pointer; overflow-wrap: anywhere; }
+.project-state-panel p { font-size: 13px; color: var(--text-muted, #666); }
+.project-state-panel details { margin-top: 10px; }
+.project-state-panel time { margin-left: 12px; font-size: 12px; color: var(--text-muted, #666); }
+.project-state-panel pre { max-height: 260px; overflow: auto; font-size: 12px; }
+.project-state-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 12px; font-size: 12px; }
+.project-state-facts dt { color: var(--text-muted, #666); }
+.project-state-facts dd { margin: 0; overflow-wrap: anywhere; }
+.project-state-facts time { margin-left: 0; }
+@media (max-width: 640px) { .project-state-panel { margin-inline: 12px; } .project-state-panel time { display: block; margin-left: 0; } }

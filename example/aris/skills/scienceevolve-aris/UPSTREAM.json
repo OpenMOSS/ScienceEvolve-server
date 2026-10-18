@@ -1,0 +1,1316 @@
+{
+  "repository": "https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep",
+  "commit": "341f914024d270dc5c8fa51337d1ad38829273aa",
+  "files": [
+    {
+      "path": "upstream/LICENSE",
+      "upstream_path": "LICENSE",
+      "sha256": "e30cf5dd5f49b4f9b656590e23d782b4756c924a9f0ff0162b3e7b5d87006bf5"
+    },
+    {
+      "path": "upstream/skills/ablation-planner/SKILL.md",
+      "upstream_path": "skills/ablation-planner/SKILL.md",
+      "sha256": "ce51bfff265e5f0a6e8fd03333bfa8dee679e728e0d325830988ca5bd31307da"
+    },
+    {
+      "path": "upstream/skills/alphaxiv/SKILL.md",
+      "upstream_path": "skills/alphaxiv/SKILL.md",
+      "sha256": "2123b9fa5b70e5ed479389a50f6ab8acb0c956495d82dc03a89899b7b730b8f3"
+    },
+    {
+      "path": "upstream/skills/analyze-results/SKILL.md",
+      "upstream_path": "skills/analyze-results/SKILL.md",
+      "sha256": "2b97b8ae1a279ac8a7db14e7d7bea67934c88352d55c95e20fcfb681a8640930"
+    },
+    {
+      "path": "upstream/skills/arxiv/SKILL.md",
+      "upstream_path": "skills/arxiv/SKILL.md",
+      "sha256": "474be36fb19d0dd99ddc8c6fa2d684836a45dca9d02051d98b5c79ac979307ed"
+    },
+    {
+      "path": "upstream/skills/auto-paper-improvement-loop/SKILL.md",
+      "upstream_path": "skills/auto-paper-improvement-loop/SKILL.md",
+      "sha256": "6472a47dae813c747a84e785b887eeaec567a65950c58bbbedecb03376ce50c5"
+    },
+    {
+      "path": "upstream/skills/auto-review-loop/SKILL.md",
+      "upstream_path": "skills/auto-review-loop/SKILL.md",
+      "sha256": "5ffe1d2ae9a78350c52e7317fcad7d9fbd18ffeb2a6a244779d9dfa3c9573f4a"
+    },
+    {
+      "path": "upstream/skills/auto-review-loop-llm/SKILL.md",
+      "upstream_path": "skills/auto-review-loop-llm/SKILL.md",
+      "sha256": "f46c40b1a3edcc63b07cf263253fc01e706d2335bd851d672d66099b29774cf8"
+    },
+    {
+      "path": "upstream/skills/auto-review-loop-minimax/SKILL.md",
+      "upstream_path": "skills/auto-review-loop-minimax/SKILL.md",
+      "sha256": "70f4952522747030f4ee8011c0e29c7670a289bd0bff73fffbcb9bac232a4102"
+    },
+    {
+      "path": "upstream/skills/citation-audit/SKILL.md",
+      "upstream_path": "skills/citation-audit/SKILL.md",
+      "sha256": "7f68355f009a93077c76ba8d999cc00df0a3a87fbe3e4cba1b5f5e0df0810c2e"
+    },
+    {
+      "path": "upstream/skills/claims-drafting/SKILL.md",
+      "upstream_path": "skills/claims-drafting/SKILL.md",
+      "sha256": "28c5027ae12cb928df35a5e079263fd5680e1bf2816bf86c847f195ad456ac40"
+    },
+    {
+      "path": "upstream/skills/comm-lit-review/SKILL.md",
+      "upstream_path": "skills/comm-lit-review/SKILL.md",
+      "sha256": "9fefbc15dae68a19176f6d7e78c348979a23b2a2363291b7ef81081c6dfb770d"
+    },
+    {
+      "path": "upstream/skills/deepxiv/SKILL.md",
+      "upstream_path": "skills/deepxiv/SKILL.md",
+      "sha256": "cbf5e46d7140d78a4e28191cf773e3d645b1c75a4926e414906d2dfa03ee22bc"
+    },
+    {
+      "path": "upstream/skills/dse-loop/SKILL.md",
+      "upstream_path": "skills/dse-loop/SKILL.md",
+      "sha256": "ae8e147011f7c1a6add208b6cecb218d03a83949fba0ef9b0b1936e4b0ee18bf"
+    },
+    {
+      "path": "upstream/skills/embodiment-description/SKILL.md",
+      "upstream_path": "skills/embodiment-description/SKILL.md",
+      "sha256": "8833b4569435077554d51ac59f79c8b4ceca64b777f129b1e8eaa328be9bb9a2"
+    },
+    {
+      "path": "upstream/skills/exa-search/SKILL.md",
+      "upstream_path": "skills/exa-search/SKILL.md",
+      "sha256": "c9ffd1e95004f591d6bc17e1a5bf16864f0c0230f446d60c6fc2b3890afb71de"
+    },
+    {
+      "path": "upstream/skills/experiment-audit/SKILL.md",
+      "upstream_path": "skills/experiment-audit/SKILL.md",
+      "sha256": "dd5c2405aaae472cf2020f16fbd1b02b431874d8353a65a8aa4c102a65f5aef2"
+    },
+    {
+      "path": "upstream/skills/experiment-bridge/SKILL.md",
+      "upstream_path": "skills/experiment-bridge/SKILL.md",
+      "sha256": "595d41fee920c7dafb920e89d8e33c0c3967704f84457786432aaadc920767a0"
+    },
+    {
+      "path": "upstream/skills/experiment-plan/SKILL.md",
+      "upstream_path": "skills/experiment-plan/SKILL.md",
+      "sha256": "c5b53692ff95b0b55e80702e33afc79d9fe8d4f55a69e2a39714013f97ac595e"
+    },
+    {
+      "path": "upstream/skills/experiment-queue/SKILL.md",
+      "upstream_path": "skills/experiment-queue/SKILL.md",
+      "sha256": "6da32285f905d77664334bba7f7bbc2c069814ff5c3bc266ecc00f6c77d77208"
+    },
+    {
+      "path": "upstream/skills/experiment-queue/scripts/build_manifest.py",
+      "upstream_path": "skills/experiment-queue/scripts/build_manifest.py",
+      "sha256": "2fe0d13d2bba863e9bbde65f8a746f1c0f46b7e2c08e16107786fad6980a5820"
+    },
+    {
+      "path": "upstream/skills/experiment-queue/scripts/queue_manager.py",
+      "upstream_path": "skills/experiment-queue/scripts/queue_manager.py",
+      "sha256": "9b53e554bda3fec88d9d293e323e26f531d8c074b7544a8ca7b4c3b529ab0129"
+    },
+    {
+      "path": "upstream/skills/feishu-notify/SKILL.md",
+      "upstream_path": "skills/feishu-notify/SKILL.md",
+      "sha256": "1a6c2e7a92b4f10c25cb7a9c647919a9dcc9b1fc9a6c99a86e73d757c8a6edbf"
+    },
+    {
+      "path": "upstream/skills/figure-description/SKILL.md",
+      "upstream_path": "skills/figure-description/SKILL.md",
+      "sha256": "4c69bc650a67d1688f44c909c49be98ffe74ea427b3859edb3c3357ec5730136"
+    },
+    {
+      "path": "upstream/skills/figure-spec/SKILL.md",
+      "upstream_path": "skills/figure-spec/SKILL.md",
+      "sha256": "090a28a1b6464d3b88cf32b9bf59f6a1008e7e63d638801070f0b888c3ef9c5b"
+    },
+    {
+      "path": "upstream/skills/figure-spec/scripts/figure_renderer.py",
+      "upstream_path": "skills/figure-spec/scripts/figure_renderer.py",
+      "sha256": "02b4e01e46b51aeca12722ddd7b21bb7da3c3b175bba5d129c45d671fb07a0bc"
+    },
+    {
+      "path": "upstream/skills/formula-derivation/SKILL.md",
+      "upstream_path": "skills/formula-derivation/SKILL.md",
+      "sha256": "2e5f5ce665023cdc460126c9c8403503c17961145a2b052d25200f9bbd9a9b4d"
+    },
+    {
+      "path": "upstream/skills/gemini-search/SKILL.md",
+      "upstream_path": "skills/gemini-search/SKILL.md",
+      "sha256": "a8778e4e1dacae68691d13342a9a33200ade427beb777a4defbbb91dfcb030e3"
+    },
+    {
+      "path": "upstream/skills/grant-proposal/SKILL.md",
+      "upstream_path": "skills/grant-proposal/SKILL.md",
+      "sha256": "b7870c8f02db4da3be64f77b4225818306ced16c771331143768c3f9b1fc46ac"
+    },
+    {
+      "path": "upstream/skills/idea-creator/SKILL.md",
+      "upstream_path": "skills/idea-creator/SKILL.md",
+      "sha256": "e78e20b2eff657953ba95134e89779954c77399779eee0134459b77d84efb602"
+    },
+    {
+      "path": "upstream/skills/idea-discovery/SKILL.md",
+      "upstream_path": "skills/idea-discovery/SKILL.md",
+      "sha256": "ac2d06bde65bf7335d9e9a290cc1c10bbc813b6256480e7d1da9cf102a76fa23"
+    },
+    {
+      "path": "upstream/skills/idea-discovery-robot/SKILL.md",
+      "upstream_path": "skills/idea-discovery-robot/SKILL.md",
+      "sha256": "945decb901aa5cf0780e996d1bbc6fb7aecb8c246a513b9fe6169f06196680dc"
+    },
+    {
+      "path": "upstream/skills/integrity-forensics/SKILL.md",
+      "upstream_path": "skills/integrity-forensics/SKILL.md",
+      "sha256": "33cdf3f4fd2a8dea073a73e2cba870576c576b1d201efa3d0a4bde2e7e7256ed"
+    },
+    {
+      "path": "upstream/skills/interview-cheatsheet/SKILL.md",
+      "upstream_path": "skills/interview-cheatsheet/SKILL.md",
+      "sha256": "37291536f9a4f70d6463df129e875eb0eb32102db6e2cfa92d3e22494f944ca2"
+    },
+    {
+      "path": "upstream/skills/invention-structuring/SKILL.md",
+      "upstream_path": "skills/invention-structuring/SKILL.md",
+      "sha256": "ced6627e44e96f57e92098018e158d79ac01420659e98dccf5edff53f25fd087"
+    },
+    {
+      "path": "upstream/skills/jurisdiction-format/SKILL.md",
+      "upstream_path": "skills/jurisdiction-format/SKILL.md",
+      "sha256": "7683f58c4ad6465b4c4dd4f360876b12b0132777ca4ba40c1e48b777f4b40bb9"
+    },
+    {
+      "path": "upstream/skills/kill-argument/SKILL.md",
+      "upstream_path": "skills/kill-argument/SKILL.md",
+      "sha256": "7a222081ddd9548f7ce560a202c3888783cc34ee0fe81c35ee87c5a7b652aa59"
+    },
+    {
+      "path": "upstream/skills/mermaid-diagram/SKILL.md",
+      "upstream_path": "skills/mermaid-diagram/SKILL.md",
+      "sha256": "b7cb4fb550b43be0c49224b608ff2a3a4a208997b8c8ce1d6a6310d165915f50"
+    },
+    {
+      "path": "upstream/skills/meta-apply/SKILL.md",
+      "upstream_path": "skills/meta-apply/SKILL.md",
+      "sha256": "0760749e7a26315d836f0ce52c94b2014f09b186f5de015cb3da5ead9875e629"
+    },
+    {
+      "path": "upstream/skills/meta-optimize/SKILL.md",
+      "upstream_path": "skills/meta-optimize/SKILL.md",
+      "sha256": "0599dcc7eec1b7204e67bb7960487c652b5034af8b2d18323f0a3ff057580fd2"
+    },
+    {
+      "path": "upstream/skills/monitor-experiment/SKILL.md",
+      "upstream_path": "skills/monitor-experiment/SKILL.md",
+      "sha256": "0527977308bb7b26139ffb56cd2d45ecc72a9dd2961073ad51fac4aac106961d"
+    },
+    {
+      "path": "upstream/skills/novelty-check/SKILL.md",
+      "upstream_path": "skills/novelty-check/SKILL.md",
+      "sha256": "7738e665e8a7ad358e016ea3fcfa0f994e1f064f3626fe2fa454217a2750f3a0"
+    },
+    {
+      "path": "upstream/skills/openalex/SKILL.md",
+      "upstream_path": "skills/openalex/SKILL.md",
+      "sha256": "4c853b646987c4472a8360e044ad232aa9731dcfb60c7183073e8e5f3e6ac9c1"
+    },
+    {
+      "path": "upstream/skills/overleaf-sync/SKILL.md",
+      "upstream_path": "skills/overleaf-sync/SKILL.md",
+      "sha256": "15644b418d9d043ac1f66e03242a9f8ecebc63569fc0a43f913252f3bfb2abe7"
+    },
+    {
+      "path": "upstream/skills/paper-claim-audit/SKILL.md",
+      "upstream_path": "skills/paper-claim-audit/SKILL.md",
+      "sha256": "7a6e76d6355a99c53ec451db2325343c46bd9ef1ca825889a4f26e781ec5c1d4"
+    },
+    {
+      "path": "upstream/skills/paper-compile/SKILL.md",
+      "upstream_path": "skills/paper-compile/SKILL.md",
+      "sha256": "ca064e9b7dffe80d9c3bcabb060f81c651e4926eb1c069a04c6416a8e58fed93"
+    },
+    {
+      "path": "upstream/skills/paper-figure/SKILL.md",
+      "upstream_path": "skills/paper-figure/SKILL.md",
+      "sha256": "1bcc797faf94af2bb06b1627d686c110c04fc358fed97225776a8128eb1c0ac6"
+    },
+    {
+      "path": "upstream/skills/paper-illustration/SKILL.md",
+      "upstream_path": "skills/paper-illustration/SKILL.md",
+      "sha256": "af9307d178b8242c9a8d2e94c1264add91d5aa2bbc6444556b51b501c1918e65"
+    },
+    {
+      "path": "upstream/skills/paper-illustration-image2/SKILL.md",
+      "upstream_path": "skills/paper-illustration-image2/SKILL.md",
+      "sha256": "178b200cd549e53dd1b02450a8bf086cfde7dbf4042613d8d87fe555b9411842"
+    },
+    {
+      "path": "upstream/skills/paper-illustration-image2/scripts/paper_illustration_image2.py",
+      "upstream_path": "skills/paper-illustration-image2/scripts/paper_illustration_image2.py",
+      "sha256": "bc97f5b1ae14ffaff10c24240b6e93f3c1282ffd340d4756ea80477649f32890"
+    },
+    {
+      "path": "upstream/skills/paper-plan/SKILL.md",
+      "upstream_path": "skills/paper-plan/SKILL.md",
+      "sha256": "755e0f06c488dc1887162120f112a978010cd4123a0e29e3d7a5266a8ca8d819"
+    },
+    {
+      "path": "upstream/skills/paper-poster/SKILL.md",
+      "upstream_path": "skills/paper-poster/SKILL.md",
+      "sha256": "7dec9b7f9bc2d12df23148cd38f51ea344b0b23370051ef6e03779ed41e97260"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/DESIGN_FINAL.md",
+      "upstream_path": "skills/paper-poster-html/DESIGN_FINAL.md",
+      "sha256": "1e1931569efe301a05ce815c238f48b05b7f27a92a7d179f84ebe1d5e22fdf25"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/IMPLEMENTATION_CONVENTIONS.md",
+      "upstream_path": "skills/paper-poster-html/IMPLEMENTATION_CONVENTIONS.md",
+      "sha256": "59cdf8fafb92a22efa93971b647e05386f46c473909c752674d65990b8886483"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/LICENSES/posterly-MIT.txt",
+      "upstream_path": "skills/paper-poster-html/LICENSES/posterly-MIT.txt",
+      "sha256": "0f097b552f2be95d202723d681c73a1dec10d64d0afea3ee0a0eaf63def9a5be"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/NOTICE.md",
+      "upstream_path": "skills/paper-poster-html/NOTICE.md",
+      "sha256": "058090d55f2c7d143f70b4e3020cb7bcb8349480edd9dbf46921e05067862ab1"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/SKILL.md",
+      "upstream_path": "skills/paper-poster-html/SKILL.md",
+      "sha256": "b3c55d212f5c0cbccc94ec62813ad8df9302467edd825c62959edb4ba2778f8e"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/scripts/_posterly/__init__.py",
+      "upstream_path": "skills/paper-poster-html/scripts/_posterly/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/scripts/_posterly/canvas.py",
+      "upstream_path": "skills/paper-poster-html/scripts/_posterly/canvas.py",
+      "sha256": "11503d98ebc2b817c34d3d05e85c169c8b9ccee55cc0d19ff4c6d488f39c36ec"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/scripts/_posterly/measure.py",
+      "upstream_path": "skills/paper-poster-html/scripts/_posterly/measure.py",
+      "sha256": "ffaab446329621f5621fa29fd7e0cabb38a5be1a31e92be6acd36b818de416e3"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/scripts/_posterly/polish.py",
+      "upstream_path": "skills/paper-poster-html/scripts/_posterly/polish.py",
+      "sha256": "d401dbf27ee198a35b4d4a83aaf1df2c23e148f353557b66599f88155f9df96b"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/scripts/_posterly/preflight.py",
+      "upstream_path": "skills/paper-poster-html/scripts/_posterly/preflight.py",
+      "sha256": "ca81022db3d92b9b3f3414128378df55bc2aba6560681d4d930e1e3426e31d32"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/scripts/_posterly/render.py",
+      "upstream_path": "skills/paper-poster-html/scripts/_posterly/render.py",
+      "sha256": "0ba4bcb874e0648b9058a1ae0b0168dc16f4c8ee382f005f69326d45acf9034b"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/scripts/_posterly/textutil.py",
+      "upstream_path": "skills/paper-poster-html/scripts/_posterly/textutil.py",
+      "sha256": "a2b32524cf004810d46bb442b6f418ff7445b3aff4d7995a8bf6b7784de36c3e"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/scripts/_posterly/verify_final.py",
+      "upstream_path": "skills/paper-poster-html/scripts/_posterly/verify_final.py",
+      "sha256": "bb2c737496d49d5028e7c8798f2aa39837c0f72677fa6b444c5710dac6e3d283"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/scripts/asset_check.py",
+      "upstream_path": "skills/paper-poster-html/scripts/asset_check.py",
+      "sha256": "84f6b34560c903ddf8d6748ad70858ec00734f03a590d5705914c6ce53c6e37c"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/scripts/extract_pdf_figures.py",
+      "upstream_path": "skills/paper-poster-html/scripts/extract_pdf_figures.py",
+      "sha256": "5f2f48392c69a50d7e894ad5ac2462e4e6971e266a8ab9f760f786e00c222910"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/scripts/poster_check.py",
+      "upstream_path": "skills/paper-poster-html/scripts/poster_check.py",
+      "sha256": "a048eeba87444be279b8b0fb3796079419546315ed10b460778bc82c752e4db6"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/scripts/preprocess_figures.py",
+      "upstream_path": "skills/paper-poster-html/scripts/preprocess_figures.py",
+      "sha256": "74d18140aab1ba5e10d0f26fb21c99cc2b7293fb4f2ab6a9d891d91d4328ad47"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/scripts/render_preview.py",
+      "upstream_path": "skills/paper-poster-html/scripts/render_preview.py",
+      "sha256": "5114c27fb2fc0703c2a3c749f2b84cfd6d6cc29051b44572e99db87b7ca8ea52"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/scripts/run_gates.py",
+      "upstream_path": "skills/paper-poster-html/scripts/run_gates.py",
+      "sha256": "807d59964259e1eff1a6bd13af2f34b3c1d1404316d1a3a32558b420308fb7e3"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/scripts/style_check.py",
+      "upstream_path": "skills/paper-poster-html/scripts/style_check.py",
+      "sha256": "029eff049907ea1a8ca4ee65ca8d10fe26d09591d6d96684fc6cb14e90879530"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/templates/COMPONENTS.md",
+      "upstream_path": "skills/paper-poster-html/templates/COMPONENTS.md",
+      "sha256": "382e60604f4bbe9a8aa96272348f34314089de847760c1897a6f701b5984f8b8"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/templates/README.md",
+      "upstream_path": "skills/paper-poster-html/templates/README.md",
+      "sha256": "366923d0de663296a2e3aca8479775423ac280b126d9d9272aa0041413dca309"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/templates/landscape_4col.html",
+      "upstream_path": "skills/paper-poster-html/templates/landscape_4col.html",
+      "sha256": "1e72098d28541968bcd7b3960be70d545b86680998c6976f545615d5b7b735d8"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/templates/landscape_hero.html",
+      "upstream_path": "skills/paper-poster-html/templates/landscape_hero.html",
+      "sha256": "fd82519f94a25397fbb799af6b5ec887140763980f39b42598a6ad27a470ed93"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/templates/portrait_2col.html",
+      "upstream_path": "skills/paper-poster-html/templates/portrait_2col.html",
+      "sha256": "c6031ab64807f04d5db19ef5aa2d57bc49db0853e1a98c18de38f81b804e1779"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/templates/tokens/acl.json",
+      "upstream_path": "skills/paper-poster-html/templates/tokens/acl.json",
+      "sha256": "e9c2bcef6c7433f9ca79437bae729b513f59ff61b8b843c575a205be52f2e4e8"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/templates/tokens/cvpr.json",
+      "upstream_path": "skills/paper-poster-html/templates/tokens/cvpr.json",
+      "sha256": "921e1c08dabf2f10531c87a4a10bd9228642afc2e089ed3d3a9fcef3ea24288c"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/templates/tokens/generic.json",
+      "upstream_path": "skills/paper-poster-html/templates/tokens/generic.json",
+      "sha256": "229084d6c166d589b3c3ec2cf024c4e6341c91eea45b07fb84bd7be8c1e6bf82"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/templates/tokens/iclr.json",
+      "upstream_path": "skills/paper-poster-html/templates/tokens/iclr.json",
+      "sha256": "b176829c14d8fbaa7b0eb49873ce7b9cb3150aad13990b4eecaa2c825582a65b"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/templates/tokens/icml.json",
+      "upstream_path": "skills/paper-poster-html/templates/tokens/icml.json",
+      "sha256": "078dbb6101e8579559ba24a41582af0b3b8dbc3f487a8fb9676ca5ba41b5e345"
+    },
+    {
+      "path": "upstream/skills/paper-poster-html/templates/tokens/neurips.json",
+      "upstream_path": "skills/paper-poster-html/templates/tokens/neurips.json",
+      "sha256": "f59567e68fa011eae86ec58d85abe564d6acce5174896a755e7588e3da33954c"
+    },
+    {
+      "path": "upstream/skills/paper-slides/SKILL.md",
+      "upstream_path": "skills/paper-slides/SKILL.md",
+      "sha256": "e887b9b393753f9e8af1aabfc1ce93e9b01a500ebf2c2ace775b45a3f93fd3fc"
+    },
+    {
+      "path": "upstream/skills/paper-talk/SKILL.md",
+      "upstream_path": "skills/paper-talk/SKILL.md",
+      "sha256": "0bd7722963e9dc721cff4d66fda72e5e4242a116370dfae2fc9669b408d2f199"
+    },
+    {
+      "path": "upstream/skills/paper-write/SKILL.md",
+      "upstream_path": "skills/paper-write/SKILL.md",
+      "sha256": "dc4f4024d6cdcb639d8bf75b796132408f75d14a4b4b316f388c884e35a62366"
+    },
+    {
+      "path": "upstream/skills/paper-write/templates/IEEEtran.bst",
+      "upstream_path": "skills/paper-write/templates/IEEEtran.bst",
+      "sha256": "314f0ece704568faf827011bac498650691b2b5ee06320720830e782416d5a5f"
+    },
+    {
+      "path": "upstream/skills/paper-write/templates/IEEEtran.cls",
+      "upstream_path": "skills/paper-write/templates/IEEEtran.cls",
+      "sha256": "da751920a317ed318b7b5cd7fa585a6cc7d28502d457856382e9be24b10a3bd7"
+    },
+    {
+      "path": "upstream/skills/paper-write/templates/iclr2026.tex",
+      "upstream_path": "skills/paper-write/templates/iclr2026.tex",
+      "sha256": "1e4c20b3c5b7445966194151d33c3e2023e828e621be8baf7ffb234b987cfc23"
+    },
+    {
+      "path": "upstream/skills/paper-write/templates/icml2025.tex",
+      "upstream_path": "skills/paper-write/templates/icml2025.tex",
+      "sha256": "d346d4b5b96276a4e04ccd7590ad158cce4aabcc090281dca7c4b0900d11530b"
+    },
+    {
+      "path": "upstream/skills/paper-write/templates/ieee_conference.tex",
+      "upstream_path": "skills/paper-write/templates/ieee_conference.tex",
+      "sha256": "a3dc3a175a7dd1512f4a2fdb844a0a482a9e919162e37dc27373d501fbafafbc"
+    },
+    {
+      "path": "upstream/skills/paper-write/templates/ieee_journal.tex",
+      "upstream_path": "skills/paper-write/templates/ieee_journal.tex",
+      "sha256": "bdff7ff0aa376d8a46675bdb6e96c4dd715463360735706aa5fbaa5f834b7604"
+    },
+    {
+      "path": "upstream/skills/paper-write/templates/math_commands.tex",
+      "upstream_path": "skills/paper-write/templates/math_commands.tex",
+      "sha256": "3efe4556b2c33b4a93c1b6e86b99b9a3ecbd9c9565ccc06bf8a1f51293470dc6"
+    },
+    {
+      "path": "upstream/skills/paper-write/templates/neurips2025.tex",
+      "upstream_path": "skills/paper-write/templates/neurips2025.tex",
+      "sha256": "fef6448048e58b748d67f438dce6fcfedcc49467542a951d1986dc5b81ca256c"
+    },
+    {
+      "path": "upstream/skills/paper-writing/SKILL.md",
+      "upstream_path": "skills/paper-writing/SKILL.md",
+      "sha256": "310a9b29b6869eec0690f953095ffe57488e3ec60a23523fe83ea3ecff536dfd"
+    },
+    {
+      "path": "upstream/skills/patent-novelty-check/SKILL.md",
+      "upstream_path": "skills/patent-novelty-check/SKILL.md",
+      "sha256": "895a084526fafaaa6d90504d0958b30a23b43ee006327af87aadceb0312268f4"
+    },
+    {
+      "path": "upstream/skills/patent-pipeline/SKILL.md",
+      "upstream_path": "skills/patent-pipeline/SKILL.md",
+      "sha256": "4c6a598de26fe5f8e4b78e16ce8d47ada9b3f63a2999c7c1ae2732f4abd11201"
+    },
+    {
+      "path": "upstream/skills/patent-review/SKILL.md",
+      "upstream_path": "skills/patent-review/SKILL.md",
+      "sha256": "8c02c3040f0f9db54fd22b6ecb33937677092de7e78c54b0494c953bc14874e9"
+    },
+    {
+      "path": "upstream/skills/pixel-art/SKILL.md",
+      "upstream_path": "skills/pixel-art/SKILL.md",
+      "sha256": "e65d74863168eeefb0405c6da9db1858bd7940d4bda40af9d3e85acffba5dc8c"
+    },
+    {
+      "path": "upstream/skills/prior-art-search/SKILL.md",
+      "upstream_path": "skills/prior-art-search/SKILL.md",
+      "sha256": "8793fb26c522de4c44a64b68df81e5d12718a99866c639658261cea680bd58b2"
+    },
+    {
+      "path": "upstream/skills/proof-checker/SKILL.md",
+      "upstream_path": "skills/proof-checker/SKILL.md",
+      "sha256": "65900678dc8d68c5157971c087497094c8cc0e05b3c6d22e6a9351b88882657e"
+    },
+    {
+      "path": "upstream/skills/proof-orchestrator/NOTICE.md",
+      "upstream_path": "skills/proof-orchestrator/NOTICE.md",
+      "sha256": "a496eb4ac401ae1fcfcd0958f47e585c1949e4cf43553517468fcdf73fc17124"
+    },
+    {
+      "path": "upstream/skills/proof-orchestrator/SKILL.md",
+      "upstream_path": "skills/proof-orchestrator/SKILL.md",
+      "sha256": "bde239fa93e051281a529fb436c9dc277b82221cffe0941e1aab54c203fbc9f5"
+    },
+    {
+      "path": "upstream/skills/proof-orchestrator/references/audit-output-contract.md",
+      "upstream_path": "skills/proof-orchestrator/references/audit-output-contract.md",
+      "sha256": "cff8da1ef42794c64aba244decb19895b97ae912651e023c5c0b54a110e3eb7e"
+    },
+    {
+      "path": "upstream/skills/proof-orchestrator/references/deepseek-routing.md",
+      "upstream_path": "skills/proof-orchestrator/references/deepseek-routing.md",
+      "sha256": "1a3072362c8831b602b4adc4d69fba743a27584fac1c1413ca79a5831e9715eb"
+    },
+    {
+      "path": "upstream/skills/proof-orchestrator/references/dispatch-prompts.md",
+      "upstream_path": "skills/proof-orchestrator/references/dispatch-prompts.md",
+      "sha256": "a32693defd4ec03fe7c23a813d3e7a6b5b868ce34ac3ffe34b798ad624f469b7"
+    },
+    {
+      "path": "upstream/skills/proof-orchestrator/references/notation-audit.md",
+      "upstream_path": "skills/proof-orchestrator/references/notation-audit.md",
+      "sha256": "8db3079a9209d9c71b977d448cff1abe33c5cf6414b1923735c813c9fc56e757"
+    },
+    {
+      "path": "upstream/skills/proof-orchestrator/references/proof-audit-rubric.md",
+      "upstream_path": "skills/proof-orchestrator/references/proof-audit-rubric.md",
+      "sha256": "fb962314da5291f5376da55f502f94a9337f380b481cf12208d6b586341b86bf"
+    },
+    {
+      "path": "upstream/skills/proof-orchestrator/references/stress-tests.md",
+      "upstream_path": "skills/proof-orchestrator/references/stress-tests.md",
+      "sha256": "5d865f4bc1df6d872103b6da7cfb2a24c6b8d40432c6228e94285e136fe48614"
+    },
+    {
+      "path": "upstream/skills/proof-writer/SKILL.md",
+      "upstream_path": "skills/proof-writer/SKILL.md",
+      "sha256": "d59b1865ba06f060b40920ace4ff8f61dc729615387bb91b1eb22a5d5442f2fe"
+    },
+    {
+      "path": "upstream/skills/qzcli/SKILL.md",
+      "upstream_path": "skills/qzcli/SKILL.md",
+      "sha256": "328953e6e4a21f8a38e979f9729818721af387724b799cb7cc96e072d0012d2f"
+    },
+    {
+      "path": "upstream/skills/rebuttal/SKILL.md",
+      "upstream_path": "skills/rebuttal/SKILL.md",
+      "sha256": "36b9f570181c5afcf4149e4a911613f421733d4f3fcb84579709c8097d514f02"
+    },
+    {
+      "path": "upstream/skills/render-html/SKILL.md",
+      "upstream_path": "skills/render-html/SKILL.md",
+      "sha256": "2d34c2a878194209e1d4679147cfa8eef47eaa75271d4abbee6721060bead97b"
+    },
+    {
+      "path": "upstream/skills/render-html/scripts/render_html.py",
+      "upstream_path": "skills/render-html/scripts/render_html.py",
+      "sha256": "f563872737d1fafbc38ea6a6de85451063daa196b219e163dcb32c3abeb6d58f"
+    },
+    {
+      "path": "upstream/skills/render-html/scripts/templates/academic.html",
+      "upstream_path": "skills/render-html/scripts/templates/academic.html",
+      "sha256": "af3a2f998091edd2804b9e64eab21bf77b6caa57349fcfbbe767b1a8d16380cc"
+    },
+    {
+      "path": "upstream/skills/render-html/scripts/templates/dashboard.html",
+      "upstream_path": "skills/render-html/scripts/templates/dashboard.html",
+      "sha256": "156e0825a131279debe55d1b91d7aa7c5f85e755458414932110687c9c3b3779"
+    },
+    {
+      "path": "upstream/skills/research-implement-feature/SKILL.md",
+      "upstream_path": "skills/research-implement-feature/SKILL.md",
+      "sha256": "453416dee9d15117f950244115a22dce6ebb33f5fe4792374369d799b6a1a88f"
+    },
+    {
+      "path": "upstream/skills/research-lit/SKILL.md",
+      "upstream_path": "skills/research-lit/SKILL.md",
+      "sha256": "00d9f549e4db72f3b02d55b9f6dcd61b20403f5a7e25cf3396160423140b9183"
+    },
+    {
+      "path": "upstream/skills/research-pipeline/SKILL.md",
+      "upstream_path": "skills/research-pipeline/SKILL.md",
+      "sha256": "3dd1f071770ffd700c55e607f8a6f641b7be5d4fbd3c2e0ab203bbfe22fd2d3b"
+    },
+    {
+      "path": "upstream/skills/research-refine/SKILL.md",
+      "upstream_path": "skills/research-refine/SKILL.md",
+      "sha256": "2888a5d78cce27851dc029240a76dd50fb8d8114f34e2041c67fb15651017837"
+    },
+    {
+      "path": "upstream/skills/research-refine-pipeline/SKILL.md",
+      "upstream_path": "skills/research-refine-pipeline/SKILL.md",
+      "sha256": "d5091663645dae48b84ce273d0f774090aeb2c553ed064d2d4cfc17fad9c52e9"
+    },
+    {
+      "path": "upstream/skills/research-review/SKILL.md",
+      "upstream_path": "skills/research-review/SKILL.md",
+      "sha256": "85c75d2bef1f08e2e7d2e6a7f6bc0ae42faecf942d5314d25f17376e1292597f"
+    },
+    {
+      "path": "upstream/skills/research-wiki/SKILL.md",
+      "upstream_path": "skills/research-wiki/SKILL.md",
+      "sha256": "3bd314f83f2db97fcfafb74495f1ca23bebad37a69d355bc61aaea8cbb519552"
+    },
+    {
+      "path": "upstream/skills/resubmit-pipeline/SKILL.md",
+      "upstream_path": "skills/resubmit-pipeline/SKILL.md",
+      "sha256": "4fa03710fe1f0ec8ad7009c07204a0380d2f72cd719d053a64c75e27178a4763"
+    },
+    {
+      "path": "upstream/skills/result-to-claim/SKILL.md",
+      "upstream_path": "skills/result-to-claim/SKILL.md",
+      "sha256": "ba53865e333fb05271ad116b94879d567d1e681f592dec2a7e8ae7eac6ef13d6"
+    },
+    {
+      "path": "upstream/skills/run-experiment/SKILL.md",
+      "upstream_path": "skills/run-experiment/SKILL.md",
+      "sha256": "4d481ce95d8bcadb93b095c3dd9bda51d68b6edea6b710316d6c0c74bb5bcfa8"
+    },
+    {
+      "path": "upstream/skills/semantic-scholar/SKILL.md",
+      "upstream_path": "skills/semantic-scholar/SKILL.md",
+      "sha256": "41be9cd7d08d2d795d4fe0c87d23288712febd2807b8d4d38a2ea9c54ebb31e8"
+    },
+    {
+      "path": "upstream/skills/serverless-modal/SKILL.md",
+      "upstream_path": "skills/serverless-modal/SKILL.md",
+      "sha256": "e8444d7c5e4cb53f400602a96bf9fbb8c682b85ffda8c24bcceb19cc3337e31f"
+    },
+    {
+      "path": "upstream/skills/shared-references/acceptance-gate.md",
+      "upstream_path": "skills/shared-references/acceptance-gate.md",
+      "sha256": "acfe2e790d97445396ff4eb605b91e4de756082d617b89cf9278bff76dc25623"
+    },
+    {
+      "path": "upstream/skills/shared-references/assurance-contract.md",
+      "upstream_path": "skills/shared-references/assurance-contract.md",
+      "sha256": "01745ff874cf2e662ce1349f79fa7549db4d6f25182af86ef90b621d598b755b"
+    },
+    {
+      "path": "upstream/skills/shared-references/capture-antipatterns.md",
+      "upstream_path": "skills/shared-references/capture-antipatterns.md",
+      "sha256": "419b914ade074842b815bff5133c18993a31305ca36e40b08918856777857378"
+    },
+    {
+      "path": "upstream/skills/shared-references/citation-discipline.md",
+      "upstream_path": "skills/shared-references/citation-discipline.md",
+      "sha256": "01fc1cf751d7e0e6bef04897df6ef1bcf1e1b20e5b56d9f208e020cc48ba6725"
+    },
+    {
+      "path": "upstream/skills/shared-references/compute-env-contract.md",
+      "upstream_path": "skills/shared-references/compute-env-contract.md",
+      "sha256": "293606bcf6281712e0f5e1a05be9b67e001f2e5b567e2a956e2099de9c648974"
+    },
+    {
+      "path": "upstream/skills/shared-references/effort-contract.md",
+      "upstream_path": "skills/shared-references/effort-contract.md",
+      "sha256": "c1cb84a099d7d465ce71e0fc6c8fe7449c8273072b4cb977e0e58744d767f482"
+    },
+    {
+      "path": "upstream/skills/shared-references/evidence-precheck.md",
+      "upstream_path": "skills/shared-references/evidence-precheck.md",
+      "sha256": "919a437a2e4a618ff6bcac6c03b7ec12bde3fef33d1a2aea25c9d98fcbd5e2d2"
+    },
+    {
+      "path": "upstream/skills/shared-references/experiment-integrity.md",
+      "upstream_path": "skills/shared-references/experiment-integrity.md",
+      "sha256": "22150fbdc5867e7790c88f968bccb367079c2db4c190ddce980709aea7e76f60"
+    },
+    {
+      "path": "upstream/skills/shared-references/external-cadence.md",
+      "upstream_path": "skills/shared-references/external-cadence.md",
+      "sha256": "d0d8e92c9c8f5e60555c8ddf32cf15c78d0bdc61a367ef35d8b0fef8dab906f3"
+    },
+    {
+      "path": "upstream/skills/shared-references/fan-out-pattern.md",
+      "upstream_path": "skills/shared-references/fan-out-pattern.md",
+      "sha256": "a788fd9fdc88d8b8e1331bcd9c64979914a44cf69018e1ce5be4cfd071a240cb"
+    },
+    {
+      "path": "upstream/skills/shared-references/injection-hygiene.md",
+      "upstream_path": "skills/shared-references/injection-hygiene.md",
+      "sha256": "bcab2455e4327eaa4feb3810035d1bf6e6a3e352e329badcad6ed95e5fe534de"
+    },
+    {
+      "path": "upstream/skills/shared-references/integration-contract.md",
+      "upstream_path": "skills/shared-references/integration-contract.md",
+      "sha256": "891b4254337b6da02b25bef55cbe750e90f36fd7c8b537218e49febf6d69ddc0"
+    },
+    {
+      "path": "upstream/skills/shared-references/output-composition.md",
+      "upstream_path": "skills/shared-references/output-composition.md",
+      "sha256": "8de81708431091a21a641be5f91db7958bb9f9a4b85d4fe03f52c5b496948651"
+    },
+    {
+      "path": "upstream/skills/shared-references/output-language.md",
+      "upstream_path": "skills/shared-references/output-language.md",
+      "sha256": "7b326400dca5130ce4beedf72fc2010680afe96eb56a6ab21210d323adc9a52e"
+    },
+    {
+      "path": "upstream/skills/shared-references/output-manifest.md",
+      "upstream_path": "skills/shared-references/output-manifest.md",
+      "sha256": "28e29bc8e53c52afe4eeeb590df8893282a3bbced08e105e154ad228b6cd1922"
+    },
+    {
+      "path": "upstream/skills/shared-references/output-versioning.md",
+      "upstream_path": "skills/shared-references/output-versioning.md",
+      "sha256": "73a4269b537be728b0ecc35789f11fa6d1fafa6d0430d07ad2738f064b1e4da3"
+    },
+    {
+      "path": "upstream/skills/shared-references/patent-format-cn.md",
+      "upstream_path": "skills/shared-references/patent-format-cn.md",
+      "sha256": "e5be6c2c6fab3c84c795b53ca419198192b95f2c1ccd63833b5d0510a8f93c1f"
+    },
+    {
+      "path": "upstream/skills/shared-references/patent-format-ep.md",
+      "upstream_path": "skills/shared-references/patent-format-ep.md",
+      "sha256": "8cf58ac775fe524c230cd7f371abd0ce25eb774029129bc336f884026c58ba23"
+    },
+    {
+      "path": "upstream/skills/shared-references/patent-format-us.md",
+      "upstream_path": "skills/shared-references/patent-format-us.md",
+      "sha256": "13f179cc70fc8664f356d5258bdaa52a4cc577496e385e5ac5cdd421a12f4f65"
+    },
+    {
+      "path": "upstream/skills/shared-references/patent-writing-principles.md",
+      "upstream_path": "skills/shared-references/patent-writing-principles.md",
+      "sha256": "8c8dc8250948bd0741b792d350e3afdc686ed194a1bf02359fb0e55b81468d1d"
+    },
+    {
+      "path": "upstream/skills/shared-references/prior-art-databases.md",
+      "upstream_path": "skills/shared-references/prior-art-databases.md",
+      "sha256": "8225843987fbabb5f11788c19ed8a739f10691319865485d5cb876e7bc2a3cb7"
+    },
+    {
+      "path": "upstream/skills/shared-references/resumable-runs.md",
+      "upstream_path": "skills/shared-references/resumable-runs.md",
+      "sha256": "bf522bfed126b0db96dfb22ab84f0011ba6f79bedc4f6a28a3a40f67500abb61"
+    },
+    {
+      "path": "upstream/skills/shared-references/review-scope-limits.md",
+      "upstream_path": "skills/shared-references/review-scope-limits.md",
+      "sha256": "e383dbaa57aed6f8fd2c2bb6bcaefc6806648126d11b21cb6c39eeeec76100f6"
+    },
+    {
+      "path": "upstream/skills/shared-references/review-tracing.md",
+      "upstream_path": "skills/shared-references/review-tracing.md",
+      "sha256": "b531253ccee0414bde9e3d233e743d9dba9a4283cd40ec527c5863ba0fee6d44"
+    },
+    {
+      "path": "upstream/skills/shared-references/reviewer-independence.md",
+      "upstream_path": "skills/shared-references/reviewer-independence.md",
+      "sha256": "fbbfcb6e7ff53010b596e8e01ce456d1906734f5bd198745f76ccd62787af3e3"
+    },
+    {
+      "path": "upstream/skills/shared-references/reviewer-routing.md",
+      "upstream_path": "skills/shared-references/reviewer-routing.md",
+      "sha256": "1133cde722784f7fbad48a346c24182b755900ca5de12521bb6aa716ab9bd93b"
+    },
+    {
+      "path": "upstream/skills/shared-references/skill-governance.md",
+      "upstream_path": "skills/shared-references/skill-governance.md",
+      "sha256": "2da8e745ce5dc511206ab3a6a378a26d3bc6e4ca035c1f763f7a0b1793155c73"
+    },
+    {
+      "path": "upstream/skills/shared-references/taste-calibration.md",
+      "upstream_path": "skills/shared-references/taste-calibration.md",
+      "sha256": "245e12a52b6c013022ddbcd8c682e4e5290bda6e38ecc6f14d7b2eaeb2988af8"
+    },
+    {
+      "path": "upstream/skills/shared-references/venue-checklists.md",
+      "upstream_path": "skills/shared-references/venue-checklists.md",
+      "sha256": "712396be66d4db85f0038c5ff5479a5fc66db03bc7175c8ed931f7284802f4e2"
+    },
+    {
+      "path": "upstream/skills/shared-references/wiki-helper-resolution.md",
+      "upstream_path": "skills/shared-references/wiki-helper-resolution.md",
+      "sha256": "ef6af207034a2eea17d437ac2f4c620962f72960ae7a5bf0d00818e1bafc71c2"
+    },
+    {
+      "path": "upstream/skills/shared-references/writing-principles.md",
+      "upstream_path": "skills/shared-references/writing-principles.md",
+      "sha256": "25c71f6b76fad1a198b47b4eae9b1d101561578cc0a8767e91706957829f0abe"
+    },
+    {
+      "path": "upstream/skills/skills-codex-claude-review/README.md",
+      "upstream_path": "skills/skills-codex-claude-review/README.md",
+      "sha256": "3b3583babc0dee5389a03bc7e38223870c6352d3dd328ba12f1aeb9c641f3531"
+    },
+    {
+      "path": "upstream/skills/skills-codex-claude-review/README_CN.md",
+      "upstream_path": "skills/skills-codex-claude-review/README_CN.md",
+      "sha256": "53e3da0faac1d75f8df21a6e9ac133c60e11f880f8fee78b837fc21842d27b34"
+    },
+    {
+      "path": "upstream/skills/skills-codex-claude-review/auto-paper-improvement-loop/SKILL.md",
+      "upstream_path": "skills/skills-codex-claude-review/auto-paper-improvement-loop/SKILL.md",
+      "sha256": "b0a8a6a64f8ac0403bc75d25aaec2d8add7dfba987a11c52de95a581e231d4bf"
+    },
+    {
+      "path": "upstream/skills/skills-codex-claude-review/auto-review-loop/SKILL.md",
+      "upstream_path": "skills/skills-codex-claude-review/auto-review-loop/SKILL.md",
+      "sha256": "cd2e877606a8b3eb2d636edff19f8ff068a2ef021928abcd17ece0fbfff2917b"
+    },
+    {
+      "path": "upstream/skills/skills-codex-claude-review/novelty-check/SKILL.md",
+      "upstream_path": "skills/skills-codex-claude-review/novelty-check/SKILL.md",
+      "sha256": "6727fe56d02e44611a0a4a8be090532c223d0f753034544cbdd2d5c5ba9ec0fd"
+    },
+    {
+      "path": "upstream/skills/skills-codex-claude-review/paper-figure/SKILL.md",
+      "upstream_path": "skills/skills-codex-claude-review/paper-figure/SKILL.md",
+      "sha256": "1e2ec8dfeff340a6b42adac53a096b2f6b9ef628d579f94230e4b113cdebb1fe"
+    },
+    {
+      "path": "upstream/skills/skills-codex-claude-review/paper-plan/SKILL.md",
+      "upstream_path": "skills/skills-codex-claude-review/paper-plan/SKILL.md",
+      "sha256": "273a99d453145e2da7c5361137c163c77034992d9d03d7f2499779e134a74d9e"
+    },
+    {
+      "path": "upstream/skills/skills-codex-claude-review/paper-write/SKILL.md",
+      "upstream_path": "skills/skills-codex-claude-review/paper-write/SKILL.md",
+      "sha256": "f30d2b055883fcb9b34d7904c8690d1a1c8ecd2ee444e25b9ceaaa165833478f"
+    },
+    {
+      "path": "upstream/skills/skills-codex-claude-review/research-refine/SKILL.md",
+      "upstream_path": "skills/skills-codex-claude-review/research-refine/SKILL.md",
+      "sha256": "9cb8f40b527028e4dd71321f70f4a76e5e432dd140d4c7be582cc480ae8f2579"
+    },
+    {
+      "path": "upstream/skills/skills-codex-claude-review/research-review/SKILL.md",
+      "upstream_path": "skills/skills-codex-claude-review/research-review/SKILL.md",
+      "sha256": "250861cd3cb6b1a650cfcd1fcdac0a468582b44f9b645f24670aae5fae0729c0"
+    },
+    {
+      "path": "upstream/skills/skills-codex-gemini-review/README.md",
+      "upstream_path": "skills/skills-codex-gemini-review/README.md",
+      "sha256": "07bf82c23dbd2613db49d39935a6f62449768cb9846b7786cb3a359c04f7844c"
+    },
+    {
+      "path": "upstream/skills/skills-codex-gemini-review/README_CN.md",
+      "upstream_path": "skills/skills-codex-gemini-review/README_CN.md",
+      "sha256": "6916272c6ffd02a0d191124e19baf7e4d798af6eb67e4cb01a78271bdd134a77"
+    },
+    {
+      "path": "upstream/skills/skills-codex-gemini-review/auto-paper-improvement-loop/SKILL.md",
+      "upstream_path": "skills/skills-codex-gemini-review/auto-paper-improvement-loop/SKILL.md",
+      "sha256": "418edbee8d6c61bff9ab871fd84a06f2ae37eb129df7b815b52f9778c2ee75b2"
+    },
+    {
+      "path": "upstream/skills/skills-codex-gemini-review/auto-review-loop/SKILL.md",
+      "upstream_path": "skills/skills-codex-gemini-review/auto-review-loop/SKILL.md",
+      "sha256": "b98a321c39d4285ff8383b76881077466ca2b45d6f4cc9cf4dddd8524e7d1771"
+    },
+    {
+      "path": "upstream/skills/skills-codex-gemini-review/grant-proposal/SKILL.md",
+      "upstream_path": "skills/skills-codex-gemini-review/grant-proposal/SKILL.md",
+      "sha256": "8e834ea2ce5fc82591140bf57d7a723a5e74b6232039fb793fe3d9f8a025a72c"
+    },
+    {
+      "path": "upstream/skills/skills-codex-gemini-review/idea-creator/SKILL.md",
+      "upstream_path": "skills/skills-codex-gemini-review/idea-creator/SKILL.md",
+      "sha256": "eabd84c6e6b0ad5d02cda0c24582d73417306a187530bf5c9b366019416ceeb2"
+    },
+    {
+      "path": "upstream/skills/skills-codex-gemini-review/idea-discovery/SKILL.md",
+      "upstream_path": "skills/skills-codex-gemini-review/idea-discovery/SKILL.md",
+      "sha256": "618a9f8aa7ea804e162d8e1ab3b10ee1e393a966107401fcc661b2a1d8f7de78"
+    },
+    {
+      "path": "upstream/skills/skills-codex-gemini-review/idea-discovery-robot/SKILL.md",
+      "upstream_path": "skills/skills-codex-gemini-review/idea-discovery-robot/SKILL.md",
+      "sha256": "dd0e7f33bff7b7a16fd4fca3bca1b475e3acd7ce24de68af6fdd20ad778c7e29"
+    },
+    {
+      "path": "upstream/skills/skills-codex-gemini-review/novelty-check/SKILL.md",
+      "upstream_path": "skills/skills-codex-gemini-review/novelty-check/SKILL.md",
+      "sha256": "5ef22b3605664b41a42ecaea22175e26aba19dda59eb701dca7ba602b8181e49"
+    },
+    {
+      "path": "upstream/skills/skills-codex-gemini-review/paper-figure/SKILL.md",
+      "upstream_path": "skills/skills-codex-gemini-review/paper-figure/SKILL.md",
+      "sha256": "5dc702aa809cf4a53f906167f292643fb76748ee66998aa4da3e1e945ee134d2"
+    },
+    {
+      "path": "upstream/skills/skills-codex-gemini-review/paper-plan/SKILL.md",
+      "upstream_path": "skills/skills-codex-gemini-review/paper-plan/SKILL.md",
+      "sha256": "74cb50a2ca3f09611eb557af7d10b4511ecb6762535366178d8f925599e44a38"
+    },
+    {
+      "path": "upstream/skills/skills-codex-gemini-review/paper-poster-html/SKILL.md",
+      "upstream_path": "skills/skills-codex-gemini-review/paper-poster-html/SKILL.md",
+      "sha256": "618fa29802098c59bcb3ad449b2db00b50f7f72bf09343b443809664e527bac3"
+    },
+    {
+      "path": "upstream/skills/skills-codex-gemini-review/paper-slides/SKILL.md",
+      "upstream_path": "skills/skills-codex-gemini-review/paper-slides/SKILL.md",
+      "sha256": "3cca23fa611bacd9c0838de2eed702a320163a429e90079227f6387bc5c8fdd4"
+    },
+    {
+      "path": "upstream/skills/skills-codex-gemini-review/paper-write/SKILL.md",
+      "upstream_path": "skills/skills-codex-gemini-review/paper-write/SKILL.md",
+      "sha256": "1b37c50aaa69fad1814e319911a7e65af3189586403e15016371a10e07a740c4"
+    },
+    {
+      "path": "upstream/skills/skills-codex-gemini-review/paper-writing/SKILL.md",
+      "upstream_path": "skills/skills-codex-gemini-review/paper-writing/SKILL.md",
+      "sha256": "dac8f71654be7fd575e968a701d1e6d821bfc7b0be0278becb6eb7fc63b4283f"
+    },
+    {
+      "path": "upstream/skills/skills-codex-gemini-review/research-refine/SKILL.md",
+      "upstream_path": "skills/skills-codex-gemini-review/research-refine/SKILL.md",
+      "sha256": "e70c912082ebe40709b3684e254e823e61536a992d50694ae1a7c7a6e8982772"
+    },
+    {
+      "path": "upstream/skills/skills-codex-gemini-review/research-review/SKILL.md",
+      "upstream_path": "skills/skills-codex-gemini-review/research-review/SKILL.md",
+      "sha256": "098ddea8057fa492b7abcad890be4ce2d1fbd6b3d6f7c2383d1499480d88c04f"
+    },
+    {
+      "path": "upstream/skills/slides-polish/SKILL.md",
+      "upstream_path": "skills/slides-polish/SKILL.md",
+      "sha256": "dbb0b8b507c45aae428562ba64ccbb328589210d75fc801eb25881efae5322f9"
+    },
+    {
+      "path": "upstream/skills/specification-writing/SKILL.md",
+      "upstream_path": "skills/specification-writing/SKILL.md",
+      "sha256": "69fdfc8a5d46a603881d3fa301d981e113b9897189703d96a5f289e6f9c04ac4"
+    },
+    {
+      "path": "upstream/skills/system-profile/SKILL.md",
+      "upstream_path": "skills/system-profile/SKILL.md",
+      "sha256": "9d31e32d2a63cf2f27a843e171c652327596c3f9e911c265660618d4ba27c48e"
+    },
+    {
+      "path": "upstream/skills/training-check/SKILL.md",
+      "upstream_path": "skills/training-check/SKILL.md",
+      "sha256": "b4f27bbc58aaae314d8c51fe309fb41e42f47dce4f69ba07fac1ce7f0080c789"
+    },
+    {
+      "path": "upstream/skills/vast-gpu/SKILL.md",
+      "upstream_path": "skills/vast-gpu/SKILL.md",
+      "sha256": "69aabce36540fd6fce55bf47b6f043166fc118fd708d03efddb57d168a99f4e5"
+    },
+    {
+      "path": "upstream/skills/web-debug-search/SKILL.md",
+      "upstream_path": "skills/web-debug-search/SKILL.md",
+      "sha256": "ffb5f3ccf61c45d90c41901c251263f945c67baba0f91cb300cc1d53dcd63d01"
+    },
+    {
+      "path": "upstream/skills/wiki-enrich/SKILL.md",
+      "upstream_path": "skills/wiki-enrich/SKILL.md",
+      "sha256": "ef2636d24dedbf0824f4b0bec96dee8daf1aef3c4b72ebe772b87a2febe3ea39"
+    },
+    {
+      "path": "upstream/skills/writing-systems-papers/SKILL.md",
+      "upstream_path": "skills/writing-systems-papers/SKILL.md",
+      "sha256": "385fcf41742514b4aa9ecf93a0582a1bfd3452cacd12a54c87cf5bd82adccf7f"
+    },
+    {
+      "path": "upstream/templates/CLAUDE_MD_TEMPLATE.md",
+      "upstream_path": "templates/CLAUDE_MD_TEMPLATE.md",
+      "sha256": "b0676223a52aa3c651ba31210615d9e110f4ea6670e638e27ab1c1b12c239880"
+    },
+    {
+      "path": "upstream/templates/EXPERIMENT_LOG_TEMPLATE.md",
+      "upstream_path": "templates/EXPERIMENT_LOG_TEMPLATE.md",
+      "sha256": "32126068df3cf2168d0a7d24f8658d7e97890df506155746dbe570302f12b59f"
+    },
+    {
+      "path": "upstream/templates/EXPERIMENT_PLAN_TEMPLATE.md",
+      "upstream_path": "templates/EXPERIMENT_PLAN_TEMPLATE.md",
+      "sha256": "a28f0795f4c8e203216be6b5d91b4d9def60f5af7cdbfcc7ed0a2ebf205abb67"
+    },
+    {
+      "path": "upstream/templates/EXPERIMENT_PLAN_TEMPLATE_CN.md",
+      "upstream_path": "templates/EXPERIMENT_PLAN_TEMPLATE_CN.md",
+      "sha256": "bec2b65c78f95902040bc7a2f2a728be42c82a8d0242a9c265602400e29da34f"
+    },
+    {
+      "path": "upstream/templates/FINDINGS_TEMPLATE.md",
+      "upstream_path": "templates/FINDINGS_TEMPLATE.md",
+      "sha256": "c3d98f53f780a5c91988d785e6cbb118c9e2b6d1ac819db8943639e17d55255f"
+    },
+    {
+      "path": "upstream/templates/IDEA_CANDIDATES_TEMPLATE.md",
+      "upstream_path": "templates/IDEA_CANDIDATES_TEMPLATE.md",
+      "sha256": "832bf7ac924894982cf73fae8f2d026b76111cf952f14f6ca3e3b130ee14e984"
+    },
+    {
+      "path": "upstream/templates/IDEA_CANDIDATES_TEMPLATE_CN.md",
+      "upstream_path": "templates/IDEA_CANDIDATES_TEMPLATE_CN.md",
+      "sha256": "b57f0086f8fcbe9159aa611ad866c39fcc5faf3149d75529e02bc7cbd06a8fbf"
+    },
+    {
+      "path": "upstream/templates/INVENTION_BRIEF_TEMPLATE.md",
+      "upstream_path": "templates/INVENTION_BRIEF_TEMPLATE.md",
+      "sha256": "9fd8c4ca0912bfd5e449dcb6b034196dfad05c11f44abe04e5c177de5d6357f9"
+    },
+    {
+      "path": "upstream/templates/MANIFEST_TEMPLATE.md",
+      "upstream_path": "templates/MANIFEST_TEMPLATE.md",
+      "sha256": "513bc08b2744b20825bb00063e77e22d536293e428fb419ca0c7b0ed9f7ea6d2"
+    },
+    {
+      "path": "upstream/templates/NARRATIVE_REPORT_TEMPLATE.md",
+      "upstream_path": "templates/NARRATIVE_REPORT_TEMPLATE.md",
+      "sha256": "108481c051e96976b432f038c3903968d89d9d3556cc6bbef45c3947198713b6"
+    },
+    {
+      "path": "upstream/templates/PAPER_PLAN_TEMPLATE.md",
+      "upstream_path": "templates/PAPER_PLAN_TEMPLATE.md",
+      "sha256": "0c323fa0e65c0d9e13100e7de1d6d7ea9f4857706b9e32e81afe9d632adf981d"
+    },
+    {
+      "path": "upstream/templates/PATENT_CLAIMS_TEMPLATE.md",
+      "upstream_path": "templates/PATENT_CLAIMS_TEMPLATE.md",
+      "sha256": "cbcfcb9715e951087e6a1a5f0937db04f9f9f123048dc6d3f9edb9d87a2927b3"
+    },
+    {
+      "path": "upstream/templates/PATENT_SPECIFICATION_TEMPLATE.md",
+      "upstream_path": "templates/PATENT_SPECIFICATION_TEMPLATE.md",
+      "sha256": "8a058790ac4b97ae0a9d95d2c65026eca76194be98841b1e16f8037a47849fa0"
+    },
+    {
+      "path": "upstream/templates/README.md",
+      "upstream_path": "templates/README.md",
+      "sha256": "334aac9654abd110dd1201f0e56915f11a3e1e47304079856ce0db66c25dc635"
+    },
+    {
+      "path": "upstream/templates/RESEARCH_BRIEF_TEMPLATE.md",
+      "upstream_path": "templates/RESEARCH_BRIEF_TEMPLATE.md",
+      "sha256": "f3aae6dcb26028a4115994aeb5a37b3fe408aa6cca18743bac693cfc1ad08688"
+    },
+    {
+      "path": "upstream/templates/RESEARCH_BRIEF_TEMPLATE_CN.md",
+      "upstream_path": "templates/RESEARCH_BRIEF_TEMPLATE_CN.md",
+      "sha256": "4e341cc84147061bc67a1fa15379b54ba3ea11e1ad0917150333471686b2d4dc"
+    },
+    {
+      "path": "upstream/templates/RESEARCH_CONTRACT_TEMPLATE.md",
+      "upstream_path": "templates/RESEARCH_CONTRACT_TEMPLATE.md",
+      "sha256": "e71ee594951a50aaa93b1644318c28a705d6fcf9780ca1f61030b1c1bb44696a"
+    },
+    {
+      "path": "upstream/templates/claude-hooks/corpus_write_guard.json",
+      "upstream_path": "templates/claude-hooks/corpus_write_guard.json",
+      "sha256": "b32a2d9200be0d70a55ea3d14e199db04a42b0cc5aab243afeee354329ccc363"
+    },
+    {
+      "path": "upstream/templates/claude-hooks/corpus_write_guard.py",
+      "upstream_path": "templates/claude-hooks/corpus_write_guard.py",
+      "sha256": "9005bc1bc94378952237439096d9c2c05f1ff6243456878da5c9fc94efdd5893"
+    },
+    {
+      "path": "upstream/templates/claude-hooks/meta_logging.json",
+      "upstream_path": "templates/claude-hooks/meta_logging.json",
+      "sha256": "4162f4d902e6ba6740a377b0a7d01d85f15f7a36bda2645b6181bb51636aa303"
+    },
+    {
+      "path": "upstream/templates/gitignore-trace.txt",
+      "upstream_path": "templates/gitignore-trace.txt",
+      "sha256": "9fbc968ad5c3f249200c96ddb115324ac95991ddaea9dbc2af493e7c2983166d"
+    },
+    {
+      "path": "upstream/tools/arxiv_fetch.py",
+      "upstream_path": "tools/arxiv_fetch.py",
+      "sha256": "588be920e4620d8c20db93b1bec4951182034a67e46d9b0e04431ee476bd1425"
+    },
+    {
+      "path": "upstream/tools/capture_filter.py",
+      "upstream_path": "tools/capture_filter.py",
+      "sha256": "04cf93f079612fa1454e424101cef3069bb29c79dad11488e659b40bb1c118d0"
+    },
+    {
+      "path": "upstream/tools/check_skills_inventory.py",
+      "upstream_path": "tools/check_skills_inventory.py",
+      "sha256": "fe50c1eb2fd10c1d61cc484183b6b047caeb65a70577f0685a46ca5248b2cb1b"
+    },
+    {
+      "path": "upstream/tools/convert_skills_to_llm_chat.py",
+      "upstream_path": "tools/convert_skills_to_llm_chat.py",
+      "sha256": "66ce3650c23915a978deb6c9388d2ddd77be7dfd1862f73464cd481fb5810004"
+    },
+    {
+      "path": "upstream/tools/copilot_native_evidence.py",
+      "upstream_path": "tools/copilot_native_evidence.py",
+      "sha256": "f8137fccba9874b7d04e0ddbbee5755d2d036509415680da760910959d7aff02"
+    },
+    {
+      "path": "upstream/tools/deepxiv_fetch.py",
+      "upstream_path": "tools/deepxiv_fetch.py",
+      "sha256": "764ef7a4bb87a25df1e92c6fc51060d4b92615df7f1306df71faf0fb6020630f"
+    },
+    {
+      "path": "upstream/tools/evidence_check.py",
+      "upstream_path": "tools/evidence_check.py",
+      "sha256": "2edbd901d760d22e7e43a14e8e88ab0e089303f489055cd9b5e9d1f4dce50382"
+    },
+    {
+      "path": "upstream/tools/exa_search.py",
+      "upstream_path": "tools/exa_search.py",
+      "sha256": "f29f9950d476fdf66b1f7bf8ccdcd7a827ae069060c5980d86b3b6f580b437b1"
+    },
+    {
+      "path": "upstream/tools/experiment_queue/README.md",
+      "upstream_path": "tools/experiment_queue/README.md",
+      "sha256": "df7757d1b2cec27a52fd655a233948c5a031b846ea93e2167811a668877924b3"
+    },
+    {
+      "path": "upstream/tools/experiment_queue/build_manifest.py",
+      "upstream_path": "tools/experiment_queue/build_manifest.py",
+      "sha256": "e1daa4116e24a36f970e5fddf6d1493e6a7396933c4e21468c85593ca35d4a25"
+    },
+    {
+      "path": "upstream/tools/experiment_queue/queue_manager.py",
+      "upstream_path": "tools/experiment_queue/queue_manager.py",
+      "sha256": "eac75a1285c81eb1683906cc979486f14bbba612c7cf434c753dfacec1f79dda"
+    },
+    {
+      "path": "upstream/tools/extract_paper_style.py",
+      "upstream_path": "tools/extract_paper_style.py",
+      "sha256": "020baeed072f7ab8ac0f4bc0b341609b2498f82121b6dd6d4e3961f0669eb1f2"
+    },
+    {
+      "path": "upstream/tools/figure_renderer.py",
+      "upstream_path": "tools/figure_renderer.py",
+      "sha256": "88f667eb398d491fc49f5f4d24c6ee06de27862d1e9187c2a23f8ff3079b165c"
+    },
+    {
+      "path": "upstream/tools/forensics_gate.py",
+      "upstream_path": "tools/forensics_gate.py",
+      "sha256": "6b702cffb656aada0290b7d06f218a96c2cc47d2cef924838b4b53f79233f80b"
+    },
+    {
+      "path": "upstream/tools/generate_codex_claude_review_overrides.py",
+      "upstream_path": "tools/generate_codex_claude_review_overrides.py",
+      "sha256": "c32a65ec2d9cc06031493718869b47f2326b27564c39d5a6cadde984e996c349"
+    },
+    {
+      "path": "upstream/tools/idea_discovery_gate.py",
+      "upstream_path": "tools/idea_discovery_gate.py",
+      "sha256": "129662358d7d38bdc9cb3d20d0bb9d7e2e8bf75aad45d0228766e9637475133e"
+    },
+    {
+      "path": "upstream/tools/install_aris.ps1",
+      "upstream_path": "tools/install_aris.ps1",
+      "sha256": "4eebea14bb58019304bdb52e1f4073537e754e12c610971cf3038521960b93a4"
+    },
+    {
+      "path": "upstream/tools/install_aris.sh",
+      "upstream_path": "tools/install_aris.sh",
+      "sha256": "c781cbf5da633f40bc9f5de40ef95569a4c818bdc09460dd899bb1e849a29db4"
+    },
+    {
+      "path": "upstream/tools/install_aris_codex.sh",
+      "upstream_path": "tools/install_aris_codex.sh",
+      "sha256": "f9df60648bf057481c9b11ce59ab0943b678d77677a145f247484c92d24fa88a"
+    },
+    {
+      "path": "upstream/tools/install_aris_copilot.sh",
+      "upstream_path": "tools/install_aris_copilot.sh",
+      "sha256": "2b9ff14c6143583625d4bbf1399d8622664965ddbc885c39425975535031f229"
+    },
+    {
+      "path": "upstream/tools/iteration_log.py",
+      "upstream_path": "tools/iteration_log.py",
+      "sha256": "819c22ba20bb270e0a514edb2626e7e3a1c4bade36f809e3ee9571cc076f7cb0"
+    },
+    {
+      "path": "upstream/tools/lint_skills_helpers.sh",
+      "upstream_path": "tools/lint_skills_helpers.sh",
+      "sha256": "8ac51929052f4a930439c4479508f01763b03cd486337c9b2ad9af18202fc82a"
+    },
+    {
+      "path": "upstream/tools/meta_opt/check_ready.sh",
+      "upstream_path": "tools/meta_opt/check_ready.sh",
+      "sha256": "6c581e592893db7fb288c91bb8b4a7f94c34c13bb8e4d5fe11f6f5205f841fc6"
+    },
+    {
+      "path": "upstream/tools/meta_opt/log_event.sh",
+      "upstream_path": "tools/meta_opt/log_event.sh",
+      "sha256": "9bf323361b0f0613e70c3d88d44600b8608f647433ca288cc8eda2411cdefce1"
+    },
+    {
+      "path": "upstream/tools/meta_opt/trigger_eval.py",
+      "upstream_path": "tools/meta_opt/trigger_eval.py",
+      "sha256": "ec0dfb8b08de96c97b751968dd9b8e08bf323828cbf727e757a8bf2fc2d6ed76"
+    },
+    {
+      "path": "upstream/tools/meta_opt/trigger_evals.sample.json",
+      "upstream_path": "tools/meta_opt/trigger_evals.sample.json",
+      "sha256": "20db057ba06ac3c7d1cd89e1297b80449c38462c1bf010531e053f368139f7f7"
+    },
+    {
+      "path": "upstream/tools/openalex_fetch.py",
+      "upstream_path": "tools/openalex_fetch.py",
+      "sha256": "83a097cc925c321d6dbf74e72bd5c6e1fdcdb82840323d3cf246bb25c005d530"
+    },
+    {
+      "path": "upstream/tools/overleaf_audit.sh",
+      "upstream_path": "tools/overleaf_audit.sh",
+      "sha256": "2d4bcaa33d541a74166bd83bf2262f0d92ad9600c502b5f88c80190aa6ed9274"
+    },
+    {
+      "path": "upstream/tools/overleaf_setup.sh",
+      "upstream_path": "tools/overleaf_setup.sh",
+      "sha256": "f2274ad4da248d590ef9b861551886aa7175bff26a003b87362996a9e92a076f"
+    },
+    {
+      "path": "upstream/tools/paper_illustration_image2.py",
+      "upstream_path": "tools/paper_illustration_image2.py",
+      "sha256": "f7c6221f70d00b113646f1c3d481a37a1b04a5bcef2f0e055b3d9b22d8b9c01f"
+    },
+    {
+      "path": "upstream/tools/provenance.py",
+      "upstream_path": "tools/provenance.py",
+      "sha256": "355bcd4ef02903d4686460fa6142badc57bb34ea62b369e5239f673a4f615a1e"
+    },
+    {
+      "path": "upstream/tools/research_wiki.py",
+      "upstream_path": "tools/research_wiki.py",
+      "sha256": "455bfe5f0a5d53d5a06bd729350dc44e81257100a681ff3405c7277bd6001c0b"
+    },
+    {
+      "path": "upstream/tools/review_gate.py",
+      "upstream_path": "tools/review_gate.py",
+      "sha256": "fc0830dee82349ee92e4ab1ae7b13ed8dd584456e6e521b179ebc2cdb5390a45"
+    },
+    {
+      "path": "upstream/tools/run_state.py",
+      "upstream_path": "tools/run_state.py",
+      "sha256": "5fc466462e2d4c26c6de078dcb04100bafa3a9c56df9a0dc4e38f316a33df5b5"
+    },
+    {
+      "path": "upstream/tools/save_trace.sh",
+      "upstream_path": "tools/save_trace.sh",
+      "sha256": "052896125aa6f655ff1b6c5f8262766fa6f3c3f758cb5b0ec142f46ee38a9de0"
+    },
+    {
+      "path": "upstream/tools/semantic_scholar_fetch.py",
+      "upstream_path": "tools/semantic_scholar_fetch.py",
+      "sha256": "2b8b2f5164b886eb0f9d73ea5495e43991e9b52fc84631de87e941bc3e3ccb7c"
+    },
+    {
+      "path": "upstream/tools/skill-groups.tsv",
+      "upstream_path": "tools/skill-groups.tsv",
+      "sha256": "403397ba3d9c04a6c7698f40fdf130534f9eefe9c119f403ebdbe82496ae32e6"
+    },
+    {
+      "path": "upstream/tools/skill_picker.py",
+      "upstream_path": "tools/skill_picker.py",
+      "sha256": "3d08bbf141abfc65e5b348735f10c9fe56fa92afc33bdd6ae7edae85a17cac14"
+    },
+    {
+      "path": "upstream/tools/smart_update.ps1",
+      "upstream_path": "tools/smart_update.ps1",
+      "sha256": "16ed12f54305e23268a3ced533734c78ed39cf3ba1e7125c9919b861660f4590"
+    },
+    {
+      "path": "upstream/tools/smart_update.sh",
+      "upstream_path": "tools/smart_update.sh",
+      "sha256": "40ffbfba8b52ddafd87fb11642382877cbd0a4d93a3576fce7cae5fe5ab4ef87"
+    },
+    {
+      "path": "upstream/tools/smart_update_codex.sh",
+      "upstream_path": "tools/smart_update_codex.sh",
+      "sha256": "d8f659a7d453bea7816bbaa200a0bc9312853cec46551c156101730b80759d75"
+    },
+    {
+      "path": "upstream/tools/smart_update_copilot.sh",
+      "upstream_path": "tools/smart_update_copilot.sh",
+      "sha256": "586d6fae1202ac180c0d6a68c13ff798302e7fcad5a91aa4b709f8f8b5c9e955"
+    },
+    {
+      "path": "upstream/tools/threat_scan.py",
+      "upstream_path": "tools/threat_scan.py",
+      "sha256": "fe0f6d4ec38baa09b58a9dbdb4bde3039b9863a3e52dc79ada33d79f3c84e268"
+    },
+    {
+      "path": "upstream/tools/verify_paper_audits.sh",
+      "upstream_path": "tools/verify_paper_audits.sh",
+      "sha256": "7dd8c07a6e9458077a202c3075c4207985b2bba7a196b10687d286b9c9dd455d"
+    },
+    {
+      "path": "upstream/tools/verify_papers.py",
+      "upstream_path": "tools/verify_papers.py",
+      "sha256": "28e6a3b1276d08fff971b71b03360a00a279d5f3c2ccacfd14b78a76d7fef76e"
+    },
+    {
+      "path": "upstream/tools/verify_wiki_coverage.sh",
+      "upstream_path": "tools/verify_wiki_coverage.sh",
+      "sha256": "cdc619caacc680fef77f25def48aa7e4ad72ca2e0cb7842da5dfdfa8cbb8a709"
+    },
+    {
+      "path": "upstream/tools/watchdog.py",
+      "upstream_path": "tools/watchdog.py",
+      "sha256": "f03e40799e855d1201fdb4428c4625311691d204e719ca9e32acc33e0d0377ae"
+    }
+  ]
+}

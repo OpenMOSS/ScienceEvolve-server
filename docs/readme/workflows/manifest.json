@@ -1,0 +1,149 @@
+[
+  {
+    "id": "dynamic-research-workflow",
+    "source": "example/dynamic-research-workflow/workflow.json",
+    "sourceSha256": "a94bc9125c002523cf237475b261c8997a276c2409c1cbbc164282b4a61ce4ce",
+    "screenshot": "dynamic-research-workflow.jpg",
+    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+  },
+  {
+    "id": "01-ahe-evolve",
+    "source": "example/01-ahe-evolve/workflow.json",
+    "sourceSha256": "7177f848d021d80244199da45140e340574c005eaa6a30ed9ddba9bfd9b10389",
+    "screenshot": "01-ahe-evolve.jpg",
+    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+  },
+  {
+    "id": "02-software-development",
+    "source": "example/02-software-development/workflow.json",
+    "sourceSha256": "def6a577ac1c4babf41f2864432a757678ed2dcfca5caf8a6774219ad4ceed42",
+    "screenshot": "02-software-development.jpg",
+    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+  },
+  {
+    "id": "aris",
+    "source": "example/aris/workflow.json",
+    "sourceSha256": "f730dde2dd7d2379ce82698056b1146bd532ebf2ea7263740e814b51ef058e64",
+    "screenshot": "aris.jpg",
+    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+  },
+  {
+    "id": "metaharness",
+    "source": "example/metaharness/workflow.json",
+    "sourceSha256": "693861f97e6088ac029a9d132b18e1e50ed6cdb6df8b39093eddce939e8105b6",
+    "screenshot": "metaharness.jpg",
+    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+  },
+  {
+    "id": "autoresearch",
+    "source": "example/autoresearch/workflow.json",
+    "sourceSha256": "8fabadffe37a216f6d2cad1eb5cd183d643507f491c3e2a9b522ccd397bfdbb2",
+    "screenshot": "autoresearch.jpg",
+    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+  },
+  {
+    "id": "funsearch",
+    "source": "example/funsearch/workflow.json",
+    "sourceSha256": "50e875ec98a30abc2d8e2755f900cf1ce6a808213277e3c5b3c4ca248ae0ca2d",
+    "screenshot": "funsearch.jpg",
+    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+  },
+  {
+    "id": "agent-laboratory",
+    "source": "example/agent-laboratory/workflow.json",
+    "sourceSha256": "b1458e74feb40ad13b0fda10051781ad9b75875d0ca401f3d801aab8e2bc1efe",
+    "screenshot": "agent-laboratory.jpg",
+    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+  },
+  {
+    "id": "sciagents",
+    "source": "example/sciagents/workflow.json",
+    "sourceSha256": "bada3038a51b8b270f342f74d781b4cea9f6f125e66641b9e22b8db9f41c4a71",
+    "screenshot": "sciagents.jpg",
+    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+  },
+  {
+    "id": "robin",
+    "source": "example/robin/workflow.json",
+    "sourceSha256": "06bb293a413b62a10a7a46703f6a0f7f2968e61c0b91e45e0680f35d7b217346",
+    "screenshot": "robin.jpg",
+    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+  },
+  {
+    "id": "co-scientist",
+    "source": "example/co-scientist/workflow.json",
+    "sourceSha256": "b3512010dabc8605d8d6312f22406839f1abbb6fca19f76724b7742db5225b9c",
+    "screenshot": "co-scientist.jpg",
+    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+  },
+  {
+    "id": "biomni",
+    "source": "example/biomni/workflow.json",
+    "sourceSha256": "38683f23c64b0126623de6c11528c614fe371c718af50fecc408a4d7f6365a1a",
+    "screenshot": "biomni.jpg",
+    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+  },
+  {
+    "id": "agentrxiv",
+    "source": "example/agentrxiv/workflow.json",
+    "sourceSha256": "bb670fb64795bff390ef641a5513900a0c74a139c76fe8a3867b656b50852c25",
+    "screenshot": "agentrxiv.jpg",
+    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+  },
+  {
+    "id": "rrsi",
+    "source": "example/rrsi/workflow.json",
+    "sourceSha256": "8e056cb5049e75ef249bb6d30f57baca0e806ed29af2262529130a9b517cd7cf",
+    "screenshot": "rrsi.jpg",
+    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+  },
+  {
+    "id": "drugevolve",
+    "source": "example/drugevolve/workflow.json",
+    "sourceSha256": "4ab31994ac99f0b8d645c75f6af37f6be4cccf871bf12da3f8fd67308bf992f8",
+    "screenshot": "drugevolve.jpg",
+    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+  },
+  {
+    "id": "scientist-two",
+    "source": "example/scientist-two/workflow.json",
+    "sourceSha256": "9d9bb7b7b9423781c15487df39907c4298e5bec37176b0d8eefb376288568896",
+    "screenshot": "scientist-two.jpg",
+    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+  },
+  {
+    "id": "ai-scientist-v2",
+    "source": "example/ai-scientist-v2/workflow.json",
+    "sourceSha256": "5ac8bba046da57266a4ae6fd7db45e135040ff032477434b7afbeb3008a81cb6",
+    "screenshot": "ai-scientist-v2.jpg",
+    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+  },
+  {
+    "id": "internagent-1-5",
+    "source": "example/internagent-1-5/workflow.json",
+    "sourceSha256": "e0b83da59ad2671b222023cce4b16348ec112b1094b5be1d44e591e9c70c7ebe",
+    "screenshot": "internagent-1-5.jpg",
+    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+  },
+  {
+    "id": "biomni-r0",
+    "source": "example/biomni-r0/workflow.json",
+    "sourceSha256": "15faabcdcad7036182a0f1ac71f3854f966d9b31b5940822dfabcd71126cfdc2",
+    "screenshot": "biomni-r0.jpg",
+    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+  },
+  {
+    "id": "chemical-coscientist",
+    "source": "example/chemical-coscientist/workflow.json",
+    "sourceSha256": "5ff156d0d49bb850c83eb74a7df721d8e284b6adea9651f8fea7cd500a486dc6",
+    "screenshot": "chemical-coscientist.jpg",
+    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+  },
+  {
+    "id": "raven",
+    "source": "example/raven/workflow.json",
+    "sourceSha256": "6aa56f93f832c18f8d06e659b68211e2543f4bf71280096ddfd541c23f31c440",
+    "screenshot": "raven.jpg",
+    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+  }
+]

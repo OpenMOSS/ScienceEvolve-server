@@ -1,0 +1,5 @@
+{
+  "repository": "https://github.com/stanford-iris-lab/meta-harness",
+  "commit": "0cbc31e97c9e6d24232d1dc754827c02e1ec415c",
+  "reference": "reference_examples/text_classification/meta_harness.py"
+}

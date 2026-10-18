@@ -1,0 +1,63 @@
+{
+  "fixtureVersion": "openfars-r7-legacy-git-off-v1",
+  "description": "A pre-v2 serial project whose workflow, Agent configuration, permissions and canvas must round-trip unchanged with Git disabled.",
+  "serializedProject": {
+    "agents": {
+      "main": { "model": "model-main", "permission": "yolo", "decisionBy": "main" },
+      "researcher": { "model": "model-research", "permission": "workspace", "decisionBy": "main" },
+      "writer": { "model": "model-write", "permission": "compute", "decisionBy": "agent" }
+    },
+    "orchestration": {
+      "agents": [
+        { "name": "main", "template": "main" },
+        { "name": "researcher", "template": "idea" },
+        { "name": "writer", "template": "writing" }
+      ],
+      "input": { "source": "input", "target": "researcher" },
+      "routes": {
+        "main": [
+          { "target": "researcher", "kind": "weak" },
+          { "target": "writer", "kind": "weak" }
+        ],
+        "researcher": [{ "target": "writer", "kind": "strong" }],
+        "writer": [{ "target": "finish", "kind": "weak" }]
+      },
+      "decisionPlans": {
+        "main": "Choose one next Agent.",
+        "researcher": "Hand evidence to the writer.",
+        "writer": "Deliver the final result."
+      },
+      "allowUserIntervention": true,
+      "allowMainReconfiguration": false,
+      "termination": {
+        "agent": "writer",
+        "condition": "A final report exists.",
+        "decisionBy": "main",
+        "automatic": true
+      },
+      "canvas": {
+        "schemaVersion": 1,
+        "nodes": {
+          "input": { "x": 40, "y": 120 },
+          "main": { "x": 40, "y": 20 },
+          "researcher": { "x": 320, "y": 120 },
+          "writer": { "x": 620, "y": 120 },
+          "finish": { "x": 920, "y": 120 }
+        },
+        "edges": {},
+        "viewport": { "x": 0, "y": 0, "zoom": 0.82 },
+        "layoutMode": "free",
+        "connections": { "input": true, "termination": true }
+      }
+    }
+  },
+  "expected": {
+    "git": { "enabled": false, "status": "disabled" },
+    "collaborations": [],
+    "outerNodeIds": ["main", "researcher", "writer"],
+    "canvasNodeIds": ["input", "main", "researcher", "writer", "finish"],
+    "mainSystemTargets": ["researcher", "writer"],
+    "groupControlsVisible": false,
+    "repositoryCreated": false
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "repository": "https://github.com/Future-House/robin",
+  "commit": "4a5cce310f3bc7663a67117db88af43b84733ffe",
+  "files": [
+    {
+      "path": "upstream/robin/__init__.py",
+      "upstream_path": "robin/__init__.py",
+      "sha256": "9ddb3cbcac9bc76a145d075f75c6cd64a4d0d0d3c881d3ea9d65b91d6b308e5c"
+    },
+    {
+      "path": "upstream/robin/analyses.py",
+      "upstream_path": "robin/analyses.py",
+      "sha256": "065c5fe2df9856a750316714af053f3f2687cee566c4413db863819fa19f2eec"
+    },
+    {
+      "path": "upstream/robin/assays.py",
+      "upstream_path": "robin/assays.py",
+      "sha256": "b60fc99180db27d85cb6df082fcf433388ea380f5c8a2efcddb948db896b82c5"
+    },
+    {
+      "path": "upstream/robin/candidates.py",
+      "upstream_path": "robin/candidates.py",
+      "sha256": "837f57ab170247822cbf84c30dae91a3c1f28985a24962d9ac24c22792d28623"
+    },
+    {
+      "path": "upstream/robin/configuration.py",
+      "upstream_path": "robin/configuration.py",
+      "sha256": "53824ec6f7b19fe450f9b9c3596c7d1ed4c079da12f8148850ae80f1dc7b88a8"
+    },
+    {
+      "path": "upstream/robin/multitrajectory_runner.py",
+      "upstream_path": "robin/multitrajectory_runner.py",
+      "sha256": "93f87ded57bd05cca552feaadb15347d9e00f89260b1568c32b4554fc834ae41"
+    },
+    {
+      "path": "upstream/robin/prompts.py",
+      "upstream_path": "robin/prompts.py",
+      "sha256": "279c1930c9c5c645825347959d62c2b2aa6a2c8307704122dfb0c1e5e2b8e864"
+    },
+    {
+      "path": "upstream/robin/utils.py",
+      "upstream_path": "robin/utils.py",
+      "sha256": "e86ca84d923a212f9d06206c4365723804b8f657ac875706dd978e4d5209446e"
+    },
+    {
+      "path": "upstream/LICENSE",
+      "upstream_path": "LICENSE",
+      "sha256": "a3cc48830cac658c9aa07edfcb5c3c027e1ed9cd6aed2fe54c94744060e80baf"
+    },
+    {
+      "path": "upstream/pyproject.toml",
+      "upstream_path": "pyproject.toml",
+      "sha256": "18efa83b25ac1461a77669c76359363e5553255197a11bc81d4b47cfb29c512b"
+    },
+    {
+      "path": "upstream/README.md",
+      "upstream_path": "README.md",
+      "sha256": "3c627917c290885ad25a3115aa29ce24ee9da6f4c9aa4bcd2384fb24ba61fc90"
+    },
+    {
+      "path": "upstream/robin_demo.ipynb",
+      "upstream_path": "robin_demo.ipynb",
+      "sha256": "7055cfd98394bbf65ef238106e34b0d8ede5b189f801b6e0a7ea458a48cdb605"
+    },
+    {
+      "path": "upstream/robin_full.ipynb",
+      "upstream_path": "robin_full.ipynb",
+      "sha256": "3ddd0bb5e8ba9430b34cac00e01b5f82dce80c93b9d6146f36542ba3fe7e6551"
+    }
+  ]
+}

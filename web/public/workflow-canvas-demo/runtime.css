@@ -1,0 +1,79 @@
+/* Live embedding keeps the demo's drawing and animation system. */
+.runtime-mode, .runtime-mode body { min-width: 0; height: 100%; }
+.runtime-mode .app-header,
+.runtime-mode .left-panel,
+.runtime-mode .inspector,
+.runtime-mode .run-status-actions,
+.runtime-mode .toolbar-group:first-child,
+.runtime-mode #clear-canvas-button,
+.runtime-mode #undo-button,
+.runtime-mode #fit-button,
+.runtime-mode #layered-layout-button,
+.runtime-mode #layout-menu-button,
+.runtime-mode #layout-menu,
+.runtime-mode .node-port,
+.runtime-mode .node-more,
+.runtime-mode .main-dispatch-port,
+.runtime-mode .canvas-toolbar .toolbar-separator,
+.runtime-mode .edge-hit { display: none !important; }
+.runtime-mode .app-shell { height: 100%; min-height: 0; }
+.runtime-mode .workspace,
+.runtime-mode .workspace.is-demo-running { height: 100%; max-height: 100%; grid-template-columns: minmax(0, 1fr); }
+.runtime-mode .canvas-area { grid-template-rows: auto 44px minmax(0, 1fr) auto auto; }
+.runtime-mode .canvas-toolbar { justify-content: flex-end; min-height: 44px; }
+.runtime-mode .toolbar-right { margin-left: auto; }
+.runtime-mode .layout-direct-actions { display: flex; }
+.runtime-mode .layout-control { display: block; }
+.runtime-mode .run-log-panel { min-height: 0; max-height: 128px; grid-template-rows: 28px auto; }
+.runtime-mode .run-log-list { max-height: 32px; overflow: auto; }
+.runtime-mode .runtime-log-expanded .run-log-list { max-height: 94px; }
+.runtime-mode .run-status-bar { flex-wrap: wrap; gap: 6px; }
+.runtime-mode .run-status-main { min-width: 0; flex: 1; }
+.runtime-mode .workflow-canvas { touch-action: none; }
+.runtime-mode .run-status-dot.phase-failed,
+.runtime-mode .run-status-dot.phase-interrupted,
+.runtime-mode .run-status-dot.phase-cancelled { background: #a65365; }
+.runtime-mode .agent-node { cursor: pointer; }
+.runtime-mode .agent-node.is-collaboration { width: 240px; border-color: #76599d; }
+.runtime-mode .runtime-group-leader { margin-top: 5px; color: #654889; font-size: 10px; overflow-wrap: anywhere; }
+.runtime-mode .runtime-group-actions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.runtime-mode .runtime-group-actions button,
+.runtime-mode .runtime-group-members button { border: 1px solid #d6c9e8; border-radius: 5px; padding: 4px 6px; color: #654889; background: #f1ebf8; cursor: pointer; font: inherit; font-size: 10px; }
+.runtime-mode .runtime-group-actions button:focus-visible,
+.runtime-mode .runtime-group-members button:focus-visible { outline: 2px solid #76599d; outline-offset: 2px; }
+.runtime-mode .runtime-group-members { display: grid; gap: 5px; margin: 8px 0 0; padding: 7px 0 0; border-top: 1px solid #e1d8ec; list-style: none; }
+.runtime-mode .runtime-group-members li { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.runtime-mode .runtime-group-members strong,
+.runtime-mode .runtime-group-members button { min-width: 0; max-width: 132px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.runtime-mode .runtime-group-members small { margin-left: auto; font-size: 10px; white-space: nowrap; }
+.runtime-mode .runtime-group-members em { color: #654889; font-size: 9px; font-style: normal; }
+.runtime-mode .workflow-edge.runtime-edge-active { stroke: #25714e; stroke-width: 3; }
+.runtime-mode .workflow-edge.runtime-edge-traversed { stroke: #25714e; opacity: .7; }
+.runtime-mode .workflow-edge.runtime-edge-candidate { stroke: #b56f17; }
+.runtime-mode .workflow-edge.runtime-edge-rejected { opacity: .25; }
+.runtime-mode .edge-label.runtime-edge-active rect { fill: #e7f1e9; stroke: #25714e; }
+/* Runtime activity must preserve the parallel edge's semantic color, dash
+   pattern and double-chevron marker, including before any Agent starts. */
+.runtime-mode .workflow-edge.parallel { stroke: #2159b5; stroke-width: 4.2; stroke-dasharray: 14 4 2 4; marker-end: url(#arrow-parallel); }
+.runtime-mode .workflow-edge.parallel.runtime-edge-active,
+.runtime-mode .workflow-edge.parallel.is-outgoing-highlight,
+.runtime-mode .workflow-edge.parallel.is-related-highlight,
+.runtime-mode .workflow-edge.parallel.is-incoming-context,
+.runtime-mode .workflow-edge.parallel.is-selected { marker-end: url(#arrow-parallel-highlight); filter: drop-shadow(0 0 4px rgba(33, 89, 181, .72)); }
+.runtime-mode .workflow-edge.parallel.runtime-edge-active { stroke-width: 4.8; }
+.runtime-mode .edge-label.parallel rect { fill: #e1edff; stroke: #6b9be4; stroke-width: 1.3; }
+.runtime-mode .agent-node.is-runtime-queued,
+.runtime-mode .agent-node.is-runtime-retrying { border-color: #b56f17; background: #fff8eb; }
+.runtime-mode .agent-node.is-runtime-interrupted { border-color: #a65365; background: #f9eaed; }
+.runtime-mode .canvas-footer { height: auto; min-height: 38px; flex-wrap: wrap; padding: 8px 12px; }
+.runtime-mode:not(.runtime-ready) .canvas-area::after { content: "正在同步课题 Workflow…"; position: absolute; inset: 0; display: grid; place-items: center; background: #f4f6f1; z-index: 20; color: #69746d; }
+@media (max-width: 620px) {
+  .runtime-mode .canvas-area { grid-template-rows: auto 44px minmax(0, 1fr) auto auto; }
+  .runtime-mode .run-status-bar { padding: 8px; }
+  .runtime-mode .run-status-metrics { flex-wrap: wrap; gap: 6px; }
+  .runtime-mode .runtime-log-expanded .run-log-list { max-height: 70px; }
+  .runtime-mode .canvas-legend { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .runtime-mode .agent-node { transition: none; }
+}

@@ -1,0 +1,291 @@
+{
+  "schemaVersion": 2,
+  "name": "Google AI co-scientist：完整科研流程",
+  "agents": {
+    "main": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-co-scientist"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "按Skill完整执行Google AI co-scientist科研流程。先将用户目标、全部文献/多模态材料、约束、novelty要求、评价标准和显式运行预算写research_plan；不要自行固定总轮数。按用户要求以同步调度替换异步worker，用scripts/pool.py维护实际持久假设池、不可变候选、评审、相似图、比赛和meta反馈。根据池统计、生成/进化来源的有效性与待处理工作分配资源，保存策略/理由；每个必要职责必须得到执行，不可长期饿死。迭代任务为generation/用户输入假设→reflection全部适用评审→proximity图更新→ranking比赛→evolution生成新候选和meta_review反馈→下一轮。高排名对手采用多轮辩论，低排名可单轮；所有比赛须有实际理由/结果后程序更新Elo。新的进化候选重新评审参赛，不覆盖父本。expert反馈或目标变化写新plan版本，旧评审/排名不可伪称对新目标有效。研究概览、具体可证伪实验与有来源的专家联系人建议由meta_review定期提供；不自动联系他人。需要真实实验时交wetlab，调用已配置实验工具取回原始结果再分析；没有实验回执不能宣布已验证。持续至用户预算/停止条件或中断，不用固定2轮冒充方法。全部角色消费最新meta反馈，generation保留多样性防止过拟合评论。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "generation": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-co-scientist"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "按Skill的四种生成方式开展文献检索与综合、多轮自我辩论、递归可检验假设/子假设分解、根据已有假设和meta概览扩展新方向。逐条保存证据引用、机制、假设链、科学摘要/类别和实验方案，通过pool.py add登记新ID，来源generation或expert，初始Elo1200。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "reflection": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-co-scientist"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "逐候选执行initial、full、deep_verification、observation、simulation、recurrent六类评审的适用分支，详见Skill。initial先不查外部工具快速过滤；通过后full真实查文献、deep独立检查去情境化子假设及是否根本性错误、observation检查长尾观测解释力、simulation逐步推演实验/机制失败情境。后者是推演而非湿实验结果。recurrent在新比赛/meta/专家意见后重新评估。原文、引用、每项通过/拒绝/适用性写pool；根本错误过滤，非根本问题反馈evolution，不能自行覆盖假设。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "proximity": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-co-scientist"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "按研究目标对候选机制/实验的相似性作有理由的判断，写完整pair similarities。调用pool.py graph构建真实持久图、相似cluster与邻居，服务近邻比赛、去重与多样化概览；不可随机生成相似度或物理删除不同来源的相似假设。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "ranking": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-co-scientist"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "通过pool.py pair根据近邻/新候选/高分优先选择比赛。高排名双方进行多轮科学论辩，交换呈现顺序并比较novelty/correctness/testability，低排名按原单轮策略；保存双方论点、反驳、完整结论和winner/tie后执行match更新Elo。不得先用分数决定赢家；Elo只是相对判断，不能冒充实验测量。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "evolution": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-co-scientist"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "依Skill保留六种策略：文献支撑/补证、连贯与可行性、受一个或多个优质假设启发、组合优点、简化可验证性、偏离当前方向的发散想法。消费review/争论/meta反馈，从高排名父本提新假设，通过pool.py add保存parent IDs与strategy；原父本不修改，新候选从1200重新评审参赛。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "meta_review": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-co-scientist"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "综合所有候选评审、比赛论辩和实验反馈，识别反复出现的问题，形成下一轮对所有角色的具体改进意见。定期输出top假设的research overview、研究方向、理由、具体实验/区分性观测，以及来自实际文献的可联系专家与推荐理由；按用户需要生成NIH Specific Aims等格式。通过pool.py feedback保存新版本，交Main对每个角色广播。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "wetlab": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-co-scientist"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "把获选假设转为实际实验工具可执行的协议，使用Task中配置的湿实验MCP/CLI/API进行方案校验、提交、查询和结果回收。记录protocol版本、真实job ID、状态、原始文件及工具日志；失败/仍运行继续处理，不能以生成protocol或模拟成功当实验证实。工具由外部实验平台提供，非本workflow需要实现的共享基础设施。将真实观测与假设ID关联后交Main/reflection；缺实际工具配置时明确停在实验接口，不生成假回执。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    }
+  },
+  "orchestration": {
+    "agents": [
+      {
+        "name": "main",
+        "template": "main"
+      },
+      {
+        "name": "generation",
+        "template": "general"
+      },
+      {
+        "name": "reflection",
+        "template": "general"
+      },
+      {
+        "name": "proximity",
+        "template": "general"
+      },
+      {
+        "name": "ranking",
+        "template": "general"
+      },
+      {
+        "name": "evolution",
+        "template": "general"
+      },
+      {
+        "name": "meta_review",
+        "template": "general"
+      },
+      {
+        "name": "wetlab",
+        "template": "general"
+      }
+    ],
+    "input": {
+      "source": "input",
+      "target": "main"
+    },
+    "routes": {
+      "main": [
+        {
+          "target": "generation",
+          "kind": "weak"
+        },
+        {
+          "target": "reflection",
+          "kind": "weak"
+        },
+        {
+          "target": "proximity",
+          "kind": "weak"
+        },
+        {
+          "target": "ranking",
+          "kind": "weak"
+        },
+        {
+          "target": "evolution",
+          "kind": "weak"
+        },
+        {
+          "target": "meta_review",
+          "kind": "weak"
+        },
+        {
+          "target": "wetlab",
+          "kind": "weak"
+        }
+      ],
+      "generation": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "reflection": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "proximity": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "ranking": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "evolution": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "meta_review": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "wetlab": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ]
+    },
+    "decisionPlans": {
+      "main": "遵循完整协议、真实状态和阶段门槛调度。",
+      "generation": "按完整协议执行当前职责并交 main。",
+      "reflection": "按完整协议执行当前职责并交 main。",
+      "proximity": "按完整协议执行当前职责并交 main。",
+      "ranking": "按完整协议执行当前职责并交 main。",
+      "evolution": "按完整协议执行当前职责并交 main。",
+      "meta_review": "按完整协议执行当前职责并交 main。",
+      "wetlab": "按完整协议执行当前职责并交 main。"
+    },
+    "allowUserIntervention": true,
+    "allowMainReconfiguration": false,
+    "termination": {
+      "agent": "main",
+      "condition": "原流程规定的终点已达到且交付完整；持续运行方法仅在用户明确要求结束时完成。环境阻断不能当成功。",
+      "decisionBy": "main",
+      "automatic": false
+    },
+    "resultFormat": {
+      "presets": [
+        "可复现证据"
+      ],
+      "custom": "完整状态、候选/版本、原始结果、分析及终止状态，路径见Skill。"
+    }
+  },
+  "git": {
+    "enabled": false
+  }
+}

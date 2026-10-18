@@ -1,0 +1,6 @@
+{
+  "repository": "https://github.com/SamuelSchmidgall/AgentLaboratory",
+  "commit": "d9017d90e329112d2a80b7712f37ee9094d2cd27",
+  "reference": "AgentRxiv, literature_review, report_write, parallel_labs in ai_lab_repo.py; complete agents/mlesolver/papersolver; app.py API endpoints",
+  "paper": "https://arxiv.org/abs/2503.18102"
+}

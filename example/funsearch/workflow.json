@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 2,
+  "name": "FunSearch：完整公开串行执行管线",
+  "agents": {
+    "main": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-funsearch"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "遵循官方implementation/funsearch.py完整串行流程。用随Skill脚本初始化specification、test inputs、配置和实际Sandbox适配器，先评测基线并注册所有岛，再反复prompt→sample→evaluate。上游默认10岛、每prompt4样本、温度0.1/周期30000、14400秒弱岛重置；不擅自缩为4岛/1候选或用平均分改原排序。持续至用户中止/用户明确预算，不自设20次上限。每轮必须4个样本均处理完才能取新prompt，保持同一island/version关联。缺Sandbox或基线无有效结果时request_user，不能用模型打分代替。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "sample": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-funsearch"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "先执行runtime.py prompt获取上游数据库生成的真实版本化函数prompt，保留island_id/version_generated；按samples_per_prompt配置产生独立函数体样本，每个保存原文。用SCIENCEEVOLVE模型替代原抽象LLM._draw_sample，不能修改冻结specification/evaluator。生成一个样本后回Main继续新会话采下一个，直到本轮样本数齐全，再交evaluate。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "evaluate": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-funsearch"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "逐个调用runtime.py evaluate处理已生成样本；原Evaluator负责trim、版本函数重命名、祖先调用拒绝、逐输入Sandbox执行及注册。脚本保存每个测试原始返回/成功状态。无效候选仍完成本轮计数但不能伪造分数。全部样本完成后回Main继续下一轮。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    }
+  },
+  "orchestration": {
+    "agents": [
+      {
+        "name": "main",
+        "template": "main"
+      },
+      {
+        "name": "sample",
+        "template": "general"
+      },
+      {
+        "name": "evaluate",
+        "template": "general"
+      }
+    ],
+    "input": {
+      "source": "input",
+      "target": "main"
+    },
+    "routes": {
+      "main": [
+        {
+          "target": "sample",
+          "kind": "weak"
+        },
+        {
+          "target": "evaluate",
+          "kind": "weak"
+        }
+      ],
+      "sample": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "evaluate": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ]
+    },
+    "decisionPlans": {
+      "main": "遵循完整协议、真实状态和阶段门槛调度。",
+      "sample": "按完整协议执行当前职责并交 main。",
+      "evaluate": "按完整协议执行当前职责并交 main。"
+    },
+    "allowUserIntervention": true,
+    "allowMainReconfiguration": false,
+    "termination": {
+      "agent": "main",
+      "condition": "原流程规定的终点已达到且交付完整；持续运行方法仅在用户明确要求结束时完成。环境阻断不能当成功。",
+      "decisionBy": "main",
+      "automatic": false
+    },
+    "resultFormat": {
+      "presets": [
+        "可复现证据"
+      ],
+      "custom": "完整状态、候选/版本、原始结果、分析及终止状态，路径见Skill。"
+    }
+  },
+  "git": {
+    "enabled": false
+  }
+}

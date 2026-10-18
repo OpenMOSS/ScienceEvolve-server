@@ -1,0 +1,25 @@
+# dsh 网关配置 —— 复制自同网关已验证的 provider 定义
+llm-pi-ai:
+  providers:
+    sii-qwen:
+      displayName: SII 网关 Qwen3.8-27B
+      apiKeyEnv: SII_GW_API_KEY
+      api: openai-completions
+      baseURL: https://cqhbod8bjjjbcoakk8pmeebgkaq9akcq.openapi-sj.sii.edu.cn/v1
+      # 实测备注: reasoning_effort 仅 low/medium 可用（high/xhigh 400）；无 off 档
+      compat:
+        thinkingFormat: openai
+        supportsReasoningEffort: true
+        supportsDeveloperRole: false
+      models:
+        - id: Qwen3.8-27B
+          name: Qwen3.8-27B
+          contextWindow: 1000000
+          reasoningEfforts:
+            low: low
+            medium: medium
+            high: medium
+agent-default-model:
+  provider: sii-qwen
+  model: Qwen3.8-27B
+  reasoningEffort: high

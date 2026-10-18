@@ -1,0 +1,5 @@
+方法：AI Scientist v2
+workflow.json 是现有 workflow.draft.json 的逐字节副本，保留原 r6 模型、Git、工具和方法合同，未重新生成。
+本次只设计/校验，不启动真实运行。运行前按现有 ai-scientist-v2 工具与 prepare-ai-scientist.mjs 准备新的科学状态/工作区，提供真实 Task/数据清单、Iris/breast-cancer 输入、四阶段预算、有效 CPU/vision/ICML 编译服务和 backend 依赖。
+从现有 MCP envFrom 设置 SCIENCEEVOLVE_AISCI_SCIENCE_ROOT、SCIENCEEVOLVE_AISCI_PUBLIC_PROXY_URI、SCIENCEEVOLVE_AISCI_DEPENDENCY_ANCHOR（不把凭据写入文件）；dataDir/workspace 分离。既有 Git repositoryName 指向 r6，不自动复用旧 run/dataDir 来运行新任务。
+必须保留想法→四阶段 BFTS→真实 CPU/VLM→三个 seed 聚合→写作/反思/图文核对/独立 review→正式交付；当前历史证据未完整通过，不能用新文件名补齐验收。

@@ -1,0 +1,26 @@
+{
+  "reference": "Complete public Robin assay/candidate/experiment/analysis feedback workflow",
+  "capabilities": {
+    "assay_queries": "assay_queries",
+    "assay_literature": "assay_literature",
+    "assay_proposals": "assay_proposals",
+    "assay_reports": "assay_reports",
+    "assay_rank": "assay_rank",
+    "candidate_queries": "candidate_queries",
+    "candidate_literature": "candidate_literature",
+    "candidate_proposals": "candidate_proposals",
+    "candidate_reports": "candidate_reports",
+    "candidate_rank": "candidate_rank",
+    "analysis": "analysis",
+    "consensus": "consensus",
+    "interpret": "interpret",
+    "followup": "followup",
+    "external_real_experiments": "main request_user/respond",
+    "feedback_loop": "main"
+  },
+  "substitutions": {
+    "ordinary LLM calls": "SCIENCEEVOLVE roles; original prompts",
+    "remote domain agents": "original Edison tools",
+    "experimental ranking source bug": "rank current-round reports"
+  }
+}

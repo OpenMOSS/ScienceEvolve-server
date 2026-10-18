@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="239" height="26" viewBox="0 0 239 26" role="img" aria-label="⚙️ 详细配置 · Harness · 网关 · Git">
+  <title>⚙️ 详细配置 · Harness · 网关 · Git</title>
+  <linearGradient id="shine" x2="0" y2="100%"><stop offset="0" stop-color="#fff" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient>
+  <clipPath id="round"><rect width="239" height="26" rx="4"/></clipPath>
+  <g clip-path="url(#round)">
+    <path fill="#555" d="M0 0h94v26H0z"/>
+    <path fill="#587887" d="M94 0h145v26H94z"/>
+    <rect width="239" height="26" fill="url(#shine)"/>
+  </g>
+  <text x="11" y="18" font-family="Apple Color Emoji,Segoe UI Emoji,Noto Color Emoji,sans-serif" font-size="14">⚙️</text>
+  <g fill="#fff" font-family="Verdana,Geneva,DejaVu Sans,Arial,PingFang SC,Microsoft YaHei,sans-serif" font-size="12">
+    <text x="34" y="17.5">详细配置</text>
+    <text x="166.5" y="17.5" text-anchor="middle">Harness · 网关 · Git</text>
+  </g>
+</svg>

@@ -1,0 +1,20 @@
+{
+  "seed_count": 6,
+  "initial_candidates": 3,
+  "experiment_rounds": 4,
+  "evolved_per_round": 1,
+  "seeds_per_round": 1,
+  "successful_ideas": 4,
+  "limitation_rounds": 16,
+  "engineering_rounds": 2,
+  "ablation_refinements": 1,
+  "rebuttal_rounds": 2,
+  "review_threshold": 8,
+  "meta_refinements": 1,
+  "draft_attempts": 3,
+  "content_reflections": 3,
+  "literature_expansions": 3,
+  "novelty_questions": 5,
+  "soundness_questions": 5,
+  "draft_review_ensemble": 3
+}

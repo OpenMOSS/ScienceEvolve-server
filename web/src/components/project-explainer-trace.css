@@ -1,0 +1,19 @@
+.explainer-trace-tool, .explainer-trace-summary, .explainer-trace-output { margin: 0 0 12px; padding: 9px 10px; border: 1px solid #e0e7e2; border-radius: 8px; background: #f7faf8; color: #52695a; overflow-wrap: anywhere; font-size: 11px; line-height: 1.65; min-width: 0; }
+.explainer-trace-tool-heading { display: flex; align-items: center; gap: 7px; }
+.explainer-trace-tool-heading > strong { flex: 1; min-width: 0; color: #365541; }
+.explainer-trace-tool-heading > span { flex-shrink: 0; font-size: 10px; }
+.explainer-trace-tool-name { display: block; color: #7b887f; font-size: 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.explainer-trace-tool small { display: block; margin-top: 3px; }
+.explainer-trace-tool details { margin-top: 5px; }
+.explainer-trace-tool summary, .explainer-trace-summary > summary, .explainer-trace-output > summary { cursor: pointer; }
+.explainer-trace-summary > summary { display: flex; align-items: center; gap: 7px; font-weight: 600; }
+.explainer-trace-chevron { margin-left: auto; transform: rotate(-90deg); }
+.explainer-trace-summary[open] .explainer-trace-chevron { transform: none; }
+.explainer-trace-summary p { margin: 7px 0; }
+.explainer-trace-tool pre, .explainer-trace-output pre { margin: 7px 0 0; padding: 8px; max-height: 230px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: 5px; background: #eef3ef; font-size: 10px; line-height: 1.6; }
+.explainer-trace-tool.is-failed { border-color: #ebc5bf; background: #fff7f5; color: #9b5149; }
+.explainer-trace-tool.is-failed strong { color: #9b5149; }
+.explainer-reply-status { display: flex; align-items: center; gap: 6px; margin: 8px 0; min-width: 0; color: #718078; font-size: 11px; line-height: 1.6; }
+.explainer-reply-status > svg { flex-shrink: 0; }
+.explainer-reply-status > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.explainer-reply-status.phase-failed { color: #a24f48; }

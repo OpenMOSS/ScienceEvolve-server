@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f4f6f1" />
+    <link rel="icon" href="data:," />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta
+      name="description"
+      content="ScienceEvolve Agent Flow - 多智能体工作流画布演示"
+    />
+    <title>ScienceEvolve Agent Flow</title>
+    <script src="./runtime-bootstrap.js"></script>
+    <link rel="stylesheet" href="./styles.css?v=workflow-demo-4" />
+    <link rel="stylesheet" href="./runtime.css?v=workflow-runtime-2" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="1"></circle>
+              <path d="M20.2 20.2c2.04-2.03.02-7.36-4.5-11.88C11.18 3.8 5.85 1.78 3.82 3.82c-2.04 2.03-.02 7.36 4.5 11.88 4.52 4.52 9.85 6.54 11.88 4.5Z"></path>
+              <path d="M15.7 15.7c4.52-4.52 6.54-9.85 4.5-11.88-2.03-2.04-7.36-.02-11.88 4.5-4.52 4.52-6.54 9.85-4.5 11.88 2.03 2.04 7.36.02 11.88-4.5Z"></path>
+            </svg>
+          </div>
+          <div class="brand-copy">
+            <strong>ScienceEvolve</strong>
+            <small>科研智能体工作台</small>
+          </div>
+          <span class="header-divider" aria-hidden="true"></span>
+          <label class="workflow-name-field">
+            <span class="sr-only">工作流名称</span>
+            <input id="workflow-name" value="科研协作工作流" maxlength="48" />
+          </label>
+        </div>
+
+        <div class="header-actions">
+          <span id="save-state" class="save-state" aria-live="polite">
+            <i></i>未保存
+          </span>
+          <div id="demo-scenario-selector" class="demo-scenario-selector" role="group" aria-label="Demo 时长">
+            <button class="demo-scenario-button is-selected" type="button" data-demo-scenario="quick" aria-pressed="true">
+              <strong>30s</strong><span>快速</span>
+            </button>
+            <button class="demo-scenario-button" type="button" data-demo-scenario="full" aria-pressed="false">
+              <strong>60s</strong><span>完整</span>
+            </button>
+          </div>
+          <button id="demo-run-button" class="run-button" type="button" title="播放动态工作流执行 Demo">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m8 5 11 7-11 7z"></path>
+            </svg>
+            <span>开始执行</span>
+          </button>
+          <button id="demo-stage-button" class="stage-run-button" type="button" title="分阶段播放动态工作流 Demo">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 5h12"></path>
+              <path d="M6 12h8"></path>
+              <path d="M6 19h12"></path>
+              <path d="M17 9l3 3-3 3"></path>
+            </svg>
+            <span>分阶段执行</span>
+          </button>
+          <button id="gif-export-button" class="gif-export-button" type="button" title="按分阶段流程导出整个 Demo 为 GIF">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+              <path d="M7 8h4M7 12h3M7 16h2M15 8v8M18 8v8"></path>
+            </svg>
+            <span>导出 GIF</span>
+          </button>
+          <button id="export-button" class="download-button" type="button" title="下载工作流 JSON 配置" aria-label="下载工作流 JSON 配置">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <path d="m7 10 5 5 5-5"></path>
+              <path d="M12 15V3"></path>
+            </svg>
+            <span>下载配置</span>
+          </button>
+          <button id="save-button" class="primary-button" type="button">
+            保存流程
+          </button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <aside class="left-panel">
+          <section class="panel-section agent-library-section">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">AGENT LIBRARY</p>
+                <h2>常驻 Agent</h2>
+              </div>
+              <button id="new-agent-button" class="icon-button" type="button" title="创建自定义 Agent" aria-label="创建自定义 Agent">
+                <span aria-hidden="true">+</span>
+              </button>
+            </div>
+            <div id="agent-library" class="agent-library" aria-label="Agent 模板库"></div>
+          </section>
+
+          <section class="panel-section saved-section">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">SAVED FLOWS</p>
+                <h2>已保存流程</h2>
+              </div>
+              <div class="panel-heading-actions">
+                <span id="saved-count" class="count-badge">0</span>
+                <button id="new-workflow-button" class="icon-button" type="button" title="新建流程" aria-label="新建流程">
+                  <span aria-hidden="true">+</span>
+                </button>
+              </div>
+            </div>
+            <div id="saved-workflows" class="saved-workflows"></div>
+          </section>
+
+          <section class="edge-guide" aria-label="连接类型说明">
+            <div><span class="edge-sample strong"></span><span>强边 · 必经执行</span><small>从 Agent 直接连接</small></div>
+            <div><span class="edge-sample weak"></span><span>弱边 · 可选执行</span><small>从 Agent 直接连接</small></div>
+          </section>
+        </aside>
+
+        <section class="canvas-area" aria-label="Agent 工作流画布">
+          <div id="run-status-bar" class="run-status-bar" hidden>
+            <div class="run-status-main">
+              <span id="run-status-dot" class="run-status-dot" aria-hidden="true"></span>
+              <strong id="run-status-label">执行中</strong>
+              <span id="run-status-detail">正在准备运行</span>
+            </div>
+            <div class="run-status-metrics">
+              <span id="run-scenario-label">30s 快速演示</span>
+              <span id="run-current-agent">当前：--</span>
+              <span id="run-parallel-count">并行：0</span>
+              <span id="run-version">流程 v1</span>
+            </div>
+            <div class="run-status-actions">
+              <button id="run-pause-button" class="run-mini-button" type="button" title="暂停 Demo">暂停</button>
+              <button id="run-stop-button" class="run-mini-button danger" type="button" title="停止 Demo">停止</button>
+            </div>
+          </div>
+          <div class="canvas-toolbar">
+            <div class="toolbar-group">
+              <button id="add-agent-button" class="toolbar-button" type="button" title="添加 Agent">
+                <span aria-hidden="true">+</span><span>Agent</span>
+              </button>
+              <button id="connect-button" class="toolbar-button" type="button" title="从任意连接点拖到另一个 Agent">
+                <span aria-hidden="true">&#8594;</span><span>拖拽连线</span>
+              </button>
+              <span class="toolbar-separator" aria-hidden="true"></span>
+              <div class="edge-type-toggle" aria-label="新连接类型">
+                <button class="edge-type-button active" data-edge-type="strong" type="button" aria-pressed="true">强边</button>
+                <button class="edge-type-button" data-edge-type="weak" type="button" aria-pressed="false">弱边</button>
+              </div>
+              <span class="edge-mode-note">强边必经 · 弱边可选</span>
+            </div>
+            <div class="toolbar-group toolbar-right">
+              <span id="connect-status" class="connect-status"></span>
+              <button id="zoom-out-button" class="icon-button toolbar-icon" type="button" title="缩小画布" aria-label="缩小画布">
+                <span aria-hidden="true">&#8722;</span>
+              </button>
+              <button id="zoom-reset-button" class="zoom-reset-button" type="button" title="重置缩放" aria-label="重置缩放">100%</button>
+              <button id="zoom-in-button" class="icon-button toolbar-icon" type="button" title="放大画布" aria-label="放大画布">
+                <span aria-hidden="true">+</span>
+              </button>
+              <button id="clear-canvas-button" class="icon-button toolbar-icon" type="button" title="清空画布" aria-label="清空画布">
+                <span aria-hidden="true">&#128465;</span>
+              </button>
+              <span class="toolbar-separator" aria-hidden="true"></span>
+              <button id="undo-button" class="toolbar-button compact-command" type="button" title="撤销最近一次操作" aria-label="撤销最近一次操作" disabled>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m9 14-5-5 5-5"></path>
+                  <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"></path>
+                </svg>
+                <span>撤销</span>
+              </button>
+              <div id="layout-control" class="layout-control">
+                <div class="layout-direct-actions" aria-label="布局操作">
+                  <button id="fit-button" class="toolbar-button compact-command layout-action-button layout-primary" type="button" title="整理重叠、过短连线和轻微错位" aria-label="智能整理布局">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <rect width="7" height="6" x="3" y="4" rx="1"></rect>
+                      <rect width="7" height="6" x="14" y="14" rx="1"></rect>
+                      <path d="M10 7h2a3 3 0 0 1 3 3v4"></path>
+                      <path d="m12 12 3 3 3-3"></path>
+                    </svg>
+                    <span>智能整理</span>
+                  </button>
+                  <button id="layered-layout-button" class="toolbar-button compact-command layout-action-button" type="button" title="依次执行分层重排、智能整理和适应画布" aria-label="依次执行分层重排、智能整理和适应画布">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="6" height="5" rx="1"></rect><rect x="15" y="4" width="6" height="5" rx="1"></rect><rect x="9" y="15" width="6" height="5" rx="1"></rect><path d="M6 9v2h12V9M12 11v4"></path></svg>
+                    <span>分层重排</span>
+                  </button>
+                  <button id="fit-viewport-button" class="toolbar-button compact-command layout-action-button" type="button" title="缩放并居中显示全部流程" aria-label="适应画布">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"></path></svg>
+                    <span>适应画布</span>
+                  </button>
+                </div>
+                <button id="layout-menu-button" class="layout-menu-button" type="button" title="更多布局操作" aria-label="更多布局操作" aria-haspopup="menu" aria-expanded="false">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg>
+                </button>
+                <div id="layout-menu" class="layout-menu" role="menu" hidden>
+                  <button type="button" role="menuitem" data-layout-action="tidy">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3-1.4 3.6L7 8l3.6 1.4L12 13l1.4-3.6L17 8l-3.6-1.4L12 3Z"></path><path d="m5 14-.9 2.1L2 17l2.1.9L5 20l.9-2.1L8 17l-2.1-.9L5 14Z"></path><path d="m19 13-.7 1.8-1.8.7 1.8.7L19 18l.7-1.8 1.8-.7-1.8-.7L19 13Z"></path></svg>
+                    <span><strong>智能整理</strong></span>
+                  </button>
+                  <button type="button" role="menuitem" data-layout-action="layered" title="依次执行分层重排、智能整理和适应画布">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="6" height="5" rx="1"></rect><rect x="15" y="4" width="6" height="5" rx="1"></rect><rect x="9" y="15" width="6" height="5" rx="1"></rect><path d="M6 9v2h12V9M12 11v4"></path></svg>
+                    <span><strong>分层重排</strong></span>
+                  </button>
+                  <button type="button" role="menuitem" data-layout-action="viewport">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"></path></svg>
+                    <span><strong>适应画布</strong></span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="canvas" class="workflow-canvas" tabindex="0">
+            <svg id="edge-layer" class="edge-layer" aria-label="Agent 连接">
+              <defs>
+                <marker id="arrow-strong" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse">
+                  <path d="M 0 0 L 14 7 L 0 14 z" class="arrow-strong" />
+                </marker>
+                <marker id="arrow-weak" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse">
+                  <path d="M 0 0 L 14 7 L 0 14 z" class="arrow-weak" />
+                </marker>
+                <marker id="arrow-parallel" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse">
+                  <path d="M 1 1 L 7 7 L 1 13 M 5 1 L 12 7 L 5 13" fill="none" stroke="#2159b5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+                </marker>
+                <marker id="arrow-termination" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse">
+                  <path d="M 0 0 L 14 7 L 0 14 z" class="arrow-termination" />
+                </marker>
+                <marker id="arrow-main-dispatch" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="userSpaceOnUse">
+                  <path d="M 0 0 L 12 6 L 0 12 z" class="arrow-main-dispatch" />
+                </marker>
+                <marker id="arrow-pending" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse">
+                  <path d="M 0 0 L 14 7 L 0 14 z" class="arrow-pending" />
+                </marker>
+                <marker id="arrow-strong-highlight" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto" markerUnits="userSpaceOnUse">
+                  <path d="M 0 0 L 18 9 L 0 18 z" class="arrow-strong" />
+                </marker>
+                <marker id="arrow-weak-highlight" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto" markerUnits="userSpaceOnUse">
+                  <path d="M 0 0 L 18 9 L 0 18 z" class="arrow-weak" />
+                </marker>
+                <marker id="arrow-parallel-highlight" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto" markerUnits="userSpaceOnUse">
+                  <path d="M 1 1 L 9 9 L 1 17 M 7 1 L 16 9 L 7 17" fill="none" stroke="#174b9e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+                </marker>
+                <marker id="arrow-termination-highlight" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto" markerUnits="userSpaceOnUse">
+                  <path d="M 0 0 L 18 9 L 0 18 z" class="arrow-termination" />
+                </marker>
+                <marker id="arrow-main-dispatch-highlight" markerWidth="16" markerHeight="16" refX="14" refY="8" orient="auto" markerUnits="userSpaceOnUse">
+                  <path d="M 0 0 L 16 8 L 0 16 z" class="arrow-main-dispatch" />
+                </marker>
+              </defs>
+              <g id="main-control-layer" class="main-control-layer" aria-hidden="true"></g>
+              <g id="edges"></g>
+              <g id="flow-particle-layer" class="flow-particle-layer" aria-hidden="true"></g>
+              <g id="pending-layer" class="pending-layer"><path id="pending-edge" class="pending-edge" hidden></path></g>
+            </svg>
+            <div id="nodes" class="nodes-layer"></div>
+            <div id="alignment-guides" class="alignment-guides" aria-hidden="true">
+              <i class="alignment-guide vertical"></i>
+              <i class="alignment-guide horizontal"></i>
+            </div>
+            <div id="run-floating-update" class="run-floating-update" hidden></div>
+            <div id="run-dispatch-note" class="run-dispatch-note" hidden></div>
+            <div id="canvas-empty" class="canvas-empty" hidden>
+              <strong>工作流从一个 Agent 开始</strong>
+              <button id="empty-add-button" type="button">添加 Agent</button>
+            </div>
+            <div class="canvas-corner-label">WORKFLOW CANVAS</div>
+          </div>
+
+          <footer class="canvas-footer">
+            <div class="flow-summary" id="flow-summary"></div>
+            <div class="canvas-legend">
+              <span><i class="legend-line strong"></i>直接执行</span>
+              <span><i class="legend-line weak"></i>弱边 · 可选</span>
+              <span><i class="legend-line termination"></i>结束</span>
+            </div>
+          </footer>
+          <div id="run-log-panel" class="run-log-panel" hidden>
+            <div class="run-log-header">
+              <span><i></i>运行事件</span>
+              <button id="run-log-toggle" class="run-log-toggle" type="button" title="展开或收起运行事件">展开日志</button>
+            </div>
+            <div id="run-log-list" class="run-log-list"></div>
+          </div>
+        </section>
+
+        <aside id="inspector" class="inspector" aria-label="Agent 属性面板"></aside>
+      </main>
+    </div>
+
+    <dialog id="agent-dialog" class="agent-dialog">
+      <form id="agent-form" method="dialog">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">CUSTOM AGENT</p>
+            <h2 id="agent-dialog-title">新建 Agent</h2>
+          </div>
+          <button class="icon-button" type="button" data-close-dialog title="关闭" aria-label="关闭">
+            <span aria-hidden="true">&#215;</span>
+          </button>
+        </div>
+        <label>
+          <span>Agent 名称</span>
+          <input name="name" maxlength="32" placeholder="例如 Verifier Agent" required />
+        </label>
+        <label>
+          <span>职责说明</span>
+          <textarea name="description" rows="3" maxlength="180" placeholder="例如：核验论证、结果和交付质量" required></textarea>
+        </label>
+        <div class="dialog-actions">
+          <button class="secondary-button" type="button" data-close-dialog>取消</button>
+          <button id="agent-dialog-submit" class="primary-button" type="submit">添加到画布</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="flow-dialog" class="agent-dialog flow-dialog">
+      <form id="flow-form" method="dialog">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">SAVED FLOW</p>
+            <h2 id="flow-dialog-title">新建流程</h2>
+          </div>
+          <button class="icon-button" type="button" data-close-flow-dialog title="关闭" aria-label="关闭">
+            <span aria-hidden="true">&#215;</span>
+          </button>
+        </div>
+        <label>
+          <span>流程名称</span>
+          <input id="flow-dialog-name" name="name" maxlength="48" placeholder="例如 文献调研工作流" required />
+        </label>
+        <div class="dialog-actions">
+          <button class="secondary-button" type="button" data-close-flow-dialog>取消</button>
+          <button id="flow-dialog-submit" class="primary-button" type="submit">创建流程</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="./vendor/elk.bundled.js?v=0.9.3"></script>
+    <script src="./vendor/html2canvas.min.js?v=1.4.1"></script>
+    <script src="./vendor/omggif.js?v=1.0.10"></script>
+    <script src="./app.js?v=workflow-demo-6"></script>
+    <script src="./runtime.js"></script>
+  </body>
+</html>

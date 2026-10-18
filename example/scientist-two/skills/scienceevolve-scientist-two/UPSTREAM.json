@@ -1,0 +1,161 @@
+{
+  "sources": [
+    {
+      "name": "ScientistTwo",
+      "url": "https://arxiv.org/html/2609.19644v1",
+      "license": "CC-BY-4.0",
+      "html_sha256": "23f93180ac10e5b4e1cbdf9f1e532aa80c33351b7968345752ec7c6d12925aa3"
+    },
+    {
+      "name": "PaperOrchestra",
+      "url": "https://github.com/google-research/paper-orchestra",
+      "commit": "ca1b3fa01c2970fc7cda32d16245db38d57b3f56",
+      "license": "Apache-2.0",
+      "note": "Explicit reference version; ScientistTwo did not pin its dependency commit."
+    },
+    {
+      "name": "ScholarPeer",
+      "url": "https://arxiv.org/html/2601.22638v2",
+      "license": "http://creativecommons.org/licenses/by/4.0/",
+      "note": "Appendix G prompts, published v2 reference configuration."
+    }
+  ],
+  "files": [
+    {
+      "path": "upstream/paper-orchestra/LICENSE",
+      "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd"
+    },
+    {
+      "path": "upstream/paper-orchestra/README.md",
+      "sha256": "6d48d5b964cb09e8362541a7c5c0df800e8b179636415299a66abc562863a795"
+    },
+    {
+      "path": "upstream/paper-orchestra/autoraters/agent_review.py",
+      "sha256": "7d1cf9326d68a5fe5a2744d1c284f3333e9781db99600ed3606cf01c7e00062b"
+    },
+    {
+      "path": "upstream/paper-orchestra/methods/agents/content_refinement_agent.py",
+      "sha256": "c6dc3e5d36d85adaae931b8036327756c630cccb8f1dddc9d9282d1eb4c1a038"
+    },
+    {
+      "path": "upstream/paper-orchestra/methods/agents/literature_review_agent.py",
+      "sha256": "b0eac8f21c6a3a93af07e32aa36eedff4e9ad31a228ea8fc2fd23884cc232128"
+    },
+    {
+      "path": "upstream/paper-orchestra/methods/agents/outline_agent.py",
+      "sha256": "bc1724362938e5ed2ff96f509c0d0a6169c55461b0ab860bb9cd52a4a0d7e169"
+    },
+    {
+      "path": "upstream/paper-orchestra/methods/agents/plotting_agent.py",
+      "sha256": "5119de3077212f227aafde0659a87e582decfa950c0cf8e62da0238f87d310b0"
+    },
+    {
+      "path": "upstream/paper-orchestra/methods/agents/section_writing_agent.py",
+      "sha256": "747e150ee450a7ad6a9d50b6f4a31e20e643609d619e1183de7d28e83a6f015e"
+    },
+    {
+      "path": "upstream/paper-orchestra/methods/paper_writer.py",
+      "sha256": "c9f7ef5a1d5f0f5befb72662912fc2e66127628bc320594984e6bc5a22ccf8a6"
+    },
+    {
+      "path": "upstream/paper-orchestra/methods/paper_writer_with_plotting.py",
+      "sha256": "f2bf293617ec1f6f2b8a60e1d40f109f61f902d7d61226e123da10105d01f1f6"
+    },
+    {
+      "path": "upstream/paper-orchestra/methods/prompts/content_refinement_agent.py",
+      "sha256": "539c0584d8e85505a17495f9a646c1551201e5a1c95264464516b1fcc5ff6a59"
+    },
+    {
+      "path": "upstream/paper-orchestra/methods/prompts/format_agent.py",
+      "sha256": "bac340a9721f03dc53325317256bcf11c39b9168f22be49af8616a7f2de9d04b"
+    },
+    {
+      "path": "upstream/paper-orchestra/methods/prompts/literature_review_agent.py",
+      "sha256": "f77594cbf49bc2115acb8cf6b3ff53c3c143e01043a12a34d34ac7861eeda8c4"
+    },
+    {
+      "path": "upstream/paper-orchestra/methods/prompts/outline_agent.py",
+      "sha256": "fb9d318dc432208cff41ee1fc340b920ca392e9db4da5dbc1d78a7493ebb2c5b"
+    },
+    {
+      "path": "upstream/paper-orchestra/methods/prompts/section_writing_agent.py",
+      "sha256": "e222611a6f57708fe8a1b8fbee73ddcc5318eac774cd46f03478118345d3a383"
+    },
+    {
+      "path": "upstream/paper-orchestra/requirements.txt",
+      "sha256": "1bb59b739f19ad2da8974ad7f7443887899466d158b62b606481b6eef0e595d5"
+    },
+    {
+      "path": "upstream/paper-orchestra/templates/iclr2025/fancyhdr.sty",
+      "sha256": "b56ec4434b9f4607529a4b23dc68ad8d4b94f1f631c8cddaf7da78140d53a5ea"
+    },
+    {
+      "path": "upstream/paper-orchestra/templates/iclr2025/guidelines.md",
+      "sha256": "853f9f8b9a8b57d5e0eca44c1abc77dba352440d4d4aee240431421eb3ae4eeb"
+    },
+    {
+      "path": "upstream/paper-orchestra/templates/iclr2025/iclr2025_conference.bst",
+      "sha256": "2d67552db7ed38ccfccb5957b52f95656e25c249724761d3cf5f7922ad1844c5"
+    },
+    {
+      "path": "upstream/paper-orchestra/templates/iclr2025/iclr2025_conference.sty",
+      "sha256": "9e280a9ff99be84ad190f5cafe047a1a32c2eeb9ca14232ddceae42d8489c697"
+    },
+    {
+      "path": "upstream/paper-orchestra/templates/iclr2025/math_commands.tex",
+      "sha256": "90473c4d0542070db244cea73ef962d6cddc5b2a746757e6a40ddf5fdfb90ba9"
+    },
+    {
+      "path": "upstream/paper-orchestra/templates/iclr2025/natbib.sty",
+      "sha256": "88bc70c0e48461934cab5b2accef06b74a8b3ac45ad03ccd3f2a6b7e0d6d530d"
+    },
+    {
+      "path": "upstream/paper-orchestra/templates/iclr2025/references.bib",
+      "sha256": "cdd86e7d4c31854dcf2145871657c944588a6d44c3b72e160ff4baa8df1a52fb"
+    },
+    {
+      "path": "upstream/paper-orchestra/templates/iclr2025/template.tex",
+      "sha256": "bb1ea888e8791267ecca2b05867d302d121924b3f088cbd23f4dd98663df5692"
+    },
+    {
+      "path": "upstream/paper-orchestra/utils/common_utils.py",
+      "sha256": "ff356e2aa117b4aa7abbf3994a40ed6aa55982fc68990daf936c7f702a7ade23"
+    },
+    {
+      "path": "upstream/paper-orchestra/utils/content_parsing_utils.py",
+      "sha256": "a0ea73c1d1ec35179271badee185e97b75c6ba1870e7a57ea604e241d35cd37a"
+    },
+    {
+      "path": "upstream/paper-orchestra/utils/gemini_utils.py",
+      "sha256": "024fc69a59bda7522f04262a7c21cc918733033c71ccf5a9edd7c3c3ee8ddbe3"
+    },
+    {
+      "path": "upstream/paper-orchestra/utils/llm_backend_utils.py",
+      "sha256": "c7c44033a10e2f0271c1d13d24344b3b344361fe3ae34e660445b387ad25a0fd"
+    },
+    {
+      "path": "upstream/paper-orchestra/utils/openai_utils.py",
+      "sha256": "aec08b2c46adb96650007f6db62e4d448b3e1ccbfa6467bacae4587361872052"
+    },
+    {
+      "path": "upstream/paper-orchestra/utils/paper_banana_utils.py",
+      "sha256": "b89caca598c5710b04819a5c86ffc158cec8ec31acf8a153cbdd87df3b4f0c58"
+    },
+    {
+      "path": "upstream/paper-orchestra/utils/pdf_utils.py",
+      "sha256": "30d4a6947ef249b39f357e941467271a85767b4e0a716df27e91451e803aa0e7"
+    },
+    {
+      "path": "upstream/paper-orchestra/utils/prompt_utils.py",
+      "sha256": "72b19f8adda3b870bc797c30e1260331ce5e429c346e39b05a0ad932b858df9e"
+    },
+    {
+      "path": "upstream/paper-orchestra/utils/scholar_utils.py",
+      "sha256": "a3bcaecf8289b050f764fe166e79197dbe24aed9828d63ca27256f3faa6d6742"
+    },
+    {
+      "path": "upstream/scholarpeer-prompts.md",
+      "sha256": "cbf424af6220b851f8e73e4a1505a2fb416082a77eb9932cba64678579df9184"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "reference": "text_classification/meta_harness.py and proposer Skill",
+  "capabilities": {
+    "baseline_all_configured_systems": "evaluate",
+    "history_trace_analysis": "propose",
+    "three_mechanism_hypotheses": "propose",
+    "mandatory_prototyping": "propose",
+    "interface_import_check": "evaluate",
+    "all_dataset_seed_evaluation": "evaluate",
+    "per_dataset_and_pareto_frontier": "analyze",
+    "summary_and_reports": "analyze",
+    "named_run_resume": "main",
+    "separate_freeze_union_and_test_finalize": "evaluate"
+  },
+  "substitutions": {
+    "proposer Claude wrapper": "SCIENCEEVOLVE proposer role; full prompt and interaction logs retained"
+  }
+}

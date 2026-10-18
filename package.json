@@ -1,0 +1,32 @@
+{
+  "name": "scienceevolve",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A Codex-powered autonomous multi-agent research and paper-writing system.",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c cyan,magenta \"npm run dev -w server\" \"npm run dev -w web\"",
+    "build": "npm run build -w web && npm run build -w server",
+    "build:check": "node scripts/verify-build.mjs",
+    "start": "npm run start -w server",
+    "start:web": "npm run start -w web",
+    "test": "npm run test -w server && npm run test -w web",
+    "test:server": "npm run test -w server",
+    "test:web": "npm run test -w web",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w web",
+    "r-projects:validate": "npm run build -w server && node scripts/r-projects/validate.mjs",
+    "acceptance:gateway:plan": "npm run build -w server && node server/dist/src/real-gateway-acceptance-cli.js --plan",
+    "acceptance:gateway": "npm run build -w server && node server/dist/src/real-gateway-acceptance-cli.js --run",
+    "r-projects:monitor": "node scripts/r-projects/monitor.mjs",
+    "r-projects:launch": "npm run build -w server && node scripts/r-projects/launch.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

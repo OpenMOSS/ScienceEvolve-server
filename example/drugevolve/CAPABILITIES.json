@@ -1,0 +1,23 @@
+{
+  "reference": "GAIR-NLP/DrugEvolve@e26347c4a3dfbd639702b68b2f19d1420d78199b",
+  "capabilities": {
+    "sampling": "main / original sample() and LocalDatabaseClient; UCB1/random/greedy/island, visits, parent + two references, ablations",
+    "external_cognition": "original CognitionStore, top-3 retrieval and seed import; separate from experiments",
+    "creation": "generator + inspector + implementer; original instructions/prompts/schemas; 3 creation attempts nested in 3 Researcher attempts",
+    "training": "trainer / original train() process groups and timeout; entropy monitor; 5 total attempts with debugger",
+    "scoring": "judger / original objective parser and weight normalization; judge retained when weight=0",
+    "analysis": "analyzer / baseline,parent,grandparent,case; 3 attempts",
+    "experience": "summarizer / original 4-part prompt; 3 attempts",
+    "persistence": "main / original DataElement, database, lineage, sampler visits, best snapshots; failed-attempt audit",
+    "termination": "max_rounds, patience and consecutive failure limit; skipped proposals retained separately"
+  },
+  "substitutions": {
+    "OpenAI Agents Runner": "SCIENCEEVOLVE Harness response plus original output validation, no autonomous upstream pipeline call",
+    "read_code_file/write_code_file": "Harness filesystem tools under the same candidate mutation scope",
+    "outer Python pipeline": "workflow.json Main and explicit role routes; steps.py only deterministic operations"
+  },
+  "scope_notes": [
+    "This is the released compatibility workflow, not a claim of reproducing all paper results.",
+    "Task data, evaluation adapters and compute must be supplied; missing prerequisites block the run."
+  ]
+}

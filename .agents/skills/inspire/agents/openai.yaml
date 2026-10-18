@@ -1,0 +1,3 @@
+interface:
+  display_name: "Inspire"
+  short_description: "Execution-first Inspire operations via the inspire CLI, including auth, proxy routing, notebook/image workflows, and job/HPC execution."

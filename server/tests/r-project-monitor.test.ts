@@ -1,0 +1,101 @@
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
+import { execFile } from "node:child_process";
+import { afterEach, expect, it } from "vitest";
+import { allTerminal, captureProject, collectEvents, collectTrees, summarize } from "../../scripts/r-projects/monitor.mjs";
+const roots: string[] = [];
+const projectId = `prj_${"a".repeat(32)}`;
+const temporary = async () => { const root = await fs.mkdtemp(path.join(os.tmpdir(), "r-monitor-")); roots.push(root); return root; };
+afterEach(async () => { await Promise.all(roots.splice(0).map((r) => fs.rm(r,{ recursive: true, force: true }))); });
+it("never counts no registrations, paused projects or completed projection as acceptance", () => {
+  expect(allTerminal([])).toBe(false);
+  expect(allTerminal([{ status: "paused" }])).toBe(false);
+  const row = summarize({ id: projectId, status: "completed", scopedArrivals: [], runtime: { activities: [] } });
+  expect(row.acceptance).toBe("unverified");
+  expect(row.observation).toBe("completed-needs-evidence-review");
+  expect(row).not.toHaveProperty("stoppedAt");
+  expect(allTerminal([row])).toBe(true);
+});
+it("pages all raw events past the saved cursor without losing an earlier tool error", async () => {
+  const calls: number[] = [];
+  const api = async (route: string) => {
+    const before = Number(new URL(route,"http://fixture").searchParams.get("before")); calls.push(before);
+    if (before === 7) return { events: [{ seq: 5 }, { seq: 6 }], hasMore: true };
+    if (before === 5) return { events: [{ seq: 3, level: "error", data: { call: "git_merge", result: "timeout" } }, { seq: 4 }], hasMore: true };
+    return { events: [{ seq: 1 }, { seq: 2 }], hasMore: false };
+  };
+  const result = await collectEvents(api,projectId,6,1);
+  expect(calls).toEqual([7,5,3]);
+  expect(result.events.map((e: { seq: number }) => e.seq)).toEqual([2,3,4,5,6]);
+  expect(result.events[1].data).toEqual({ call: "git_merge", result: "timeout" });
+  expect(result.gaps).toEqual([]);
+  await expect(collectEvents(async () => ({ events: [], hasMore: true }),projectId,6)).rejects.toThrow(/no progress/);
+});
+it("retains execution/FIFO/Loop/native facts and does not move its durable cursor over missing data", async () => {
+  const root = await temporary();
+  const execution = { id: "exec-1", executionBranch: "execution/one", worktreePath: "/fixture", ownershipEpoch: 1, status: "stopped" };
+  const arrival = { sequence: 2, requestId: "arrival-2", groupRunId: "group-1", agentId: "shared_worker", status: "queued", pathContext: { pathId: "path-1", loops: { rounds: { batch: 1, iterations: 2, totalIterations: 2 } } } };
+  const native = { seq: 3, ts: "2026-10-06T00:00:00Z", data: { sourceType: "scoped.agent.native_stopped", executionId: "exec-1", ownershipEpoch: 1 } };
+  const error = { seq: 2, level: "error", message: "original tool failure", data: { callId: "call-1", arguments: { file: "record" }, result: { error: "test failure" } } };
+  const project = { id: projectId, status: "paused", eventSeq: 3, scopedExecutions: [execution], scopedArrivals: [arrival] };
+  const api = async (route: string) => route.includes("view=state") ? { project } : { events: [error,native], hasMore: false };
+  const row = await captureProject(api,{ code: "R05",projectId },root);
+  expect(row.executions).toEqual([execution]);
+  expect(row.arrivals).toEqual([arrival]);
+  expect(row.nativeEvents).toEqual([native]);
+  expect(row.eventGaps).toHaveLength(1);
+  const cursor = JSON.parse(await fs.readFile(path.join(root,"R05/cursor.json"),"utf8"));
+  expect(cursor.seq).toBe(0);
+  const errors = JSON.parse(await fs.readFile(path.join(root,"R05/errors-1-3.json"),"utf8"));
+  expect(errors.errors[0]).toEqual(error);
+  const complete = async (route: string) => route.includes("view=state") ? { project } : { events: [{ seq: 1 },error,native], hasMore: false };
+  await captureProject(complete,{ code: "R05",projectId },root);
+  expect(JSON.parse(await fs.readFile(path.join(root,"R05/cursor.json"),"utf8")).seq).toBe(3);
+});
+it("captures real nested Harness failures and input/lifecycle evidence from informational traces", async () => {
+  const root = await temporary();
+  const trace = (seq: number, event: Record<string, unknown>) => ({ seq, type: "agent.trace", level: "info",
+    invocationId: "original-invocation", data: { resident: true, event: { invocationId: "original-invocation", ...event } } });
+  const started = trace(1, { kind: "lifecycle", phase: "started", sourceType: "turn.started" });
+  const received = trace(2, { kind: "user.message", phase: "completed", itemId: "original-input", message: "Original task" });
+  const failed = trace(3, { kind: "tool.failed", phase: "failed", sourceType: "item.completed",
+    tool: { name: "read_file", callId: "original-call", isError: true, input: '{"expectedVersion":""}', outputPreview: "Omit expectedVersion on the first read" } });
+  const toolError = trace(4, { kind: "tool.completed", tool: { callId: "second-call", isError: true } });
+  const harmless = trace(5, { kind: "assistant.message", message: "I will inspect the earlier error." });
+  const completed = trace(6, { kind: "lifecycle", phase: "completed", sourceType: "turn.completed" });
+  const events = [started, received, failed, toolError, harmless, completed];
+  const project = { id: projectId, status: "running", eventSeq: events.length, runtime: { activities: [{ kind: "resident" }] } };
+  const row = await captureProject(async (route: string) => route.includes("view=state") ? { project } : { events, hasMore: false },
+    { code: "R01", projectId }, root);
+  expect(row.nativeEvents).toEqual([started, received, completed]);
+  expect(row.observation).toBe("executing");
+  expect(row.acceptance).toBe("unverified"); expect(row).not.toHaveProperty("stoppedAt");
+  expect(JSON.parse(await fs.readFile(path.join(root, "R01/errors-1-6.json"), "utf8")).errors).toEqual([failed, toolError]);
+  expect(JSON.parse(await fs.readFile(path.join(root, "R01/events-1-6.json"), "utf8")).events).toEqual(events);
+});
+it("reads old PR and new head trees separately without changing the active worktree", async () => {
+  const root = await temporary(), repository = path.join(root,"repo");
+  await fs.mkdir(repository);
+  const exec = promisify(execFile);
+  const git = async (...args: string[]) => (await exec("git",["-C",repository,...args])).stdout.trim();
+  await git("init","--initial-branch=main");
+  await fs.mkdir(path.join(repository,"agent-memory/worker"),{ recursive: true });
+  await fs.writeFile(path.join(repository,"agent-memory/worker/Memory.md"),"business A\n");
+  await git("add",".");
+  await git("-c","user.name=Fixture","-c","user.email=fixture@example.invalid","commit","-m","A");
+  const a = await git("rev-parse","HEAD");
+  await fs.writeFile(path.join(repository,"diagnostic.json"),"{}\n");
+  await git("add",".");
+  await git("-c","user.name=Fixture","-c","user.email=fixture@example.invalid","commit","-m","B");
+  const b = await git("rev-parse","HEAD");
+  const result = await collectTrees({ git: { repository: { localPath: repository } }, scopedPullRequests: [{ headSha: a, mergeCommitSha: a }], scopedAgentReports: [{ headSha: b }], scopedExecutions: [{ worktreePath: repository }] },root);
+  expect(result.status).toBe("observed");
+  expect(result.trees).toHaveLength(2);
+  expect(result.trees[0].entries.map((e: { path: string }) => e.path)).toEqual(["agent-memory/worker/Memory.md"]);
+  expect(result.trees[1].entries.map((e: { path: string }) => e.path)).toContain("diagnostic.json");
+  expect(await git("rev-parse","HEAD")).toBe(b);
+  expect(await git("status","--porcelain")).toBe("");
+  await expect(collectTrees({ git: { repository: { localPath: root } } },repository)).rejects.toThrow(/outside/);
+});

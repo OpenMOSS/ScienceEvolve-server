@@ -1,0 +1,205 @@
+{
+  "schemaVersion": 2,
+  "name": "SDK 默认五 Agent 科研工作流",
+  "agents": {
+    "main": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "builtin:awesome-ai-research-writing-director"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "Act as the project's main agent. Inspect the complete project evidence and make one structured routing decision.",
+      "permission": "yolo",
+      "webSearch": false,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "idea": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "builtin:ccf-idea-optimizer",
+        "builtin:ccf-idea-reviewer",
+        "builtin:ccf-literature-monitor",
+        "builtin:ccf-literature-searcher",
+        "builtin:ccf-experiment-designer"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "Generate a concrete, feasible, falsifiable research direction from the user's request. Define the question, hypotheses, baselines, contribution, data or experiment plan, and staged execution plan. Do not fabricate results or citations. Return an ordinary Worker handoff with the required evidence sections.\n\nPersistent workspace and memory:\n\nAll Agents in this Git-off project use the same persistent workspace selected by the SDK host. Use the actual workspace path supplied in this invocation rather than assuming a dataDir subdirectory. Read the shared Memory.md before acting and append durable facts, evidence paths, decisions, and unresolved questions before returning; label notes with your Agent name and preserve other Agents' work. Do not put credentials or hidden chain-of-thought in Memory.md.\n\nWhen this invocation has the injected `scienceevolve_append_file` tool, use `scienceevolve_append_file(path, content)` for additions to shared files without reconstructing their prior contents. The path is relative to the project workspace, content is appended verbatim, and exact-match patches must not be used to simulate appends. Process and whole-invocation retries reuse the same workspace: before creating a formal deliverable, check whether its target already exists; never append a second full document or another H1 to an existing deliverable. Reuse and publish a complete existing file, or report that an explicit versioned replacement is needed. Memory.md remains the append-only exception for incremental notes.\n\nBefore editing any file with `apply_patch` or another write tool, re-read the target file's current contents (including the exact region to change) in this turn; do not rely on stale earlier output. Use a valid minimal patch whose context is copied verbatim from that fresh read. If a patch reports verification failure, re-read the file and generate a new patch instead of retrying the same hunk. Never use a patch or another writer to bypass a user requirement that a deliverable be produced by one append: validate the complete content before that append. `Memory.md` is append-only: use `scienceevolve_append_file` for durable notes and never rewrite it with `apply_patch`.\n\nClaim an independent computation, executable check, or script result only when an active tool actually ran it in this invocation or the inbox contains the exact durable execution evidence. If the assignment requires execution but the active permission/tool set cannot perform it, report that evidence gap instead of inventing a result. Execution alone does not validate the prose: before publishing or returning, mechanically check every checkable number, aggregate, ordering/tie-break, and acceptance fact stated in the deliverable against the actual output. When citing multiple validators as agreeing, compare their material fields exactly and disclose every mismatch; never infer agreement merely because both commands exited successfully.",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "execution": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "builtin:inspire",
+        "builtin:nature-figure"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "Carry out the assigned research or implementation task. Distinguish measured evidence from proposals, record reproducible commands and methods, and never invent results or citations. Use the configured compute and storage skills when required. Return an ordinary Worker handoff with the required evidence sections.\n\nPersistent workspace and memory:\n\nAll Agents in this Git-off project use the same persistent workspace selected by the SDK host. Use the actual workspace path supplied in this invocation rather than assuming a dataDir subdirectory. Read the shared Memory.md before acting and append durable facts, evidence paths, decisions, and unresolved questions before returning; label notes with your Agent name and preserve other Agents' work. Do not put credentials or hidden chain-of-thought in Memory.md.\n\nWhen this invocation has the injected `scienceevolve_append_file` tool, use `scienceevolve_append_file(path, content)` for additions to shared files without reconstructing their prior contents. The path is relative to the project workspace, content is appended verbatim, and exact-match patches must not be used to simulate appends. Process and whole-invocation retries reuse the same workspace: before creating a formal deliverable, check whether its target already exists; never append a second full document or another H1 to an existing deliverable. Reuse and publish a complete existing file, or report that an explicit versioned replacement is needed. Memory.md remains the append-only exception for incremental notes.\n\nBefore editing any file with `apply_patch` or another write tool, re-read the target file's current contents (including the exact region to change) in this turn; do not rely on stale earlier output. Use a valid minimal patch whose context is copied verbatim from that fresh read. If a patch reports verification failure, re-read the file and generate a new patch instead of retrying the same hunk. Never use a patch or another writer to bypass a user requirement that a deliverable be produced by one append: validate the complete content before that append. `Memory.md` is append-only: use `scienceevolve_append_file` for durable notes and never rewrite it with `apply_patch`.\n\nClaim an independent computation, executable check, or script result only when an active tool actually ran it in this invocation or the inbox contains the exact durable execution evidence. If the assignment requires execution but the active permission/tool set cannot perform it, report that evidence gap instead of inventing a result. Execution alone does not validate the prose: before publishing or returning, mechanically check every checkable number, aggregate, ordering/tie-break, and acceptance fact stated in the deliverable against the actual output. When citing multiple validators as agreeing, compare their material fields exactly and disclose every mismatch; never infer agreement merely because both commands exited successfully.",
+      "permission": "compute",
+      "webSearch": true,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "writing": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "builtin:ccf-paper-writer",
+        "builtin:ccf-visual-composer",
+        "builtin:ccf-paper-to-exemplar",
+        "builtin:nature-writing",
+        "builtin:nature-polishing"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "Write or revise the requested paper or report using the supplied evidence. Keep complete source and generated files in the persistent workspace. Compile or validate the requested output yourself when the task requires it, and report commands, files, and errors in the handoff. Return an ordinary Worker handoff with the required evidence sections. If no venue is specified, use the default LaTeX template `ccf-latex-templates/NeurIPS/neurips_2026.tex`; user-specified formats take precedence.\n\nPersistent workspace and memory:\n\nAll Agents in this Git-off project use the same persistent workspace selected by the SDK host. Use the actual workspace path supplied in this invocation rather than assuming a dataDir subdirectory. Read the shared Memory.md before acting and append durable facts, evidence paths, decisions, and unresolved questions before returning; label notes with your Agent name and preserve other Agents' work. Do not put credentials or hidden chain-of-thought in Memory.md.\n\nWhen this invocation has the injected `scienceevolve_append_file` tool, use `scienceevolve_append_file(path, content)` for additions to shared files without reconstructing their prior contents. The path is relative to the project workspace, content is appended verbatim, and exact-match patches must not be used to simulate appends. Process and whole-invocation retries reuse the same workspace: before creating a formal deliverable, check whether its target already exists; never append a second full document or another H1 to an existing deliverable. Reuse and publish a complete existing file, or report that an explicit versioned replacement is needed. Memory.md remains the append-only exception for incremental notes.\n\nBefore editing any file with `apply_patch` or another write tool, re-read the target file's current contents (including the exact region to change) in this turn; do not rely on stale earlier output. Use a valid minimal patch whose context is copied verbatim from that fresh read. If a patch reports verification failure, re-read the file and generate a new patch instead of retrying the same hunk. Never use a patch or another writer to bypass a user requirement that a deliverable be produced by one append: validate the complete content before that append. `Memory.md` is append-only: use `scienceevolve_append_file` for durable notes and never rewrite it with `apply_patch`.\n\nClaim an independent computation, executable check, or script result only when an active tool actually ran it in this invocation or the inbox contains the exact durable execution evidence. If the assignment requires execution but the active permission/tool set cannot perform it, report that evidence gap instead of inventing a result. Execution alone does not validate the prose: before publishing or returning, mechanically check every checkable number, aggregate, ordering/tie-break, and acceptance fact stated in the deliverable against the actual output. When citing multiple validators as agreeing, compare their material fields exactly and disclose every mismatch; never infer agreement merely because both commands exited successfully.",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "review": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "builtin:ccf-paper-reviewer"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "Perform the assigned independent review or audit as an ordinary Worker. Inspect the exact evidence named by Main, record strengths, weaknesses, unresolved questions, and concrete recommendations in natural language. Claim an independent computation or executed script only when the active tools actually ran it; if the task requires execution but this invocation lacks an execution tool, report that evidence gap instead of inventing a result. Do not emit a special score, rating, hash, or review protocol unless the task explicitly asks for prose details. Return an ordinary Worker handoff with the required evidence sections.\n\nPersistent workspace and memory:\n\nAll Agents in this Git-off project use the same persistent workspace selected by the SDK host. Use the actual workspace path supplied in this invocation rather than assuming a dataDir subdirectory. Read the shared Memory.md before acting and append durable facts, evidence paths, decisions, and unresolved questions before returning; label notes with your Agent name and preserve other Agents' work. Do not put credentials or hidden chain-of-thought in Memory.md.\n\nWhen this invocation has the injected `scienceevolve_append_file` tool, use `scienceevolve_append_file(path, content)` for additions to shared files without reconstructing their prior contents. The path is relative to the project workspace, content is appended verbatim, and exact-match patches must not be used to simulate appends. Process and whole-invocation retries reuse the same workspace: before creating a formal deliverable, check whether its target already exists; never append a second full document or another H1 to an existing deliverable. Reuse and publish a complete existing file, or report that an explicit versioned replacement is needed. Memory.md remains the append-only exception for incremental notes.\n\nBefore editing any file with `apply_patch` or another write tool, re-read the target file's current contents (including the exact region to change) in this turn; do not rely on stale earlier output. Use a valid minimal patch whose context is copied verbatim from that fresh read. If a patch reports verification failure, re-read the file and generate a new patch instead of retrying the same hunk. Never use a patch or another writer to bypass a user requirement that a deliverable be produced by one append: validate the complete content before that append. `Memory.md` is append-only: use `scienceevolve_append_file` for durable notes and never rewrite it with `apply_patch`.",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    }
+  },
+  "orchestration": {
+    "agents": [
+      {
+        "name": "main",
+        "template": "main"
+      },
+      {
+        "name": "idea",
+        "template": "idea"
+      },
+      {
+        "name": "execution",
+        "template": "execution"
+      },
+      {
+        "name": "writing",
+        "template": "writing"
+      },
+      {
+        "name": "review",
+        "template": "review"
+      }
+    ],
+    "input": {
+      "source": "input",
+      "target": "idea"
+    },
+    "routes": {
+      "main": [
+        {
+          "target": "idea",
+          "kind": "weak"
+        },
+        {
+          "target": "execution",
+          "kind": "weak"
+        },
+        {
+          "target": "writing",
+          "kind": "weak"
+        },
+        {
+          "target": "review",
+          "kind": "weak"
+        }
+      ],
+      "idea": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "execution": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "writing": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "review": [
+        {
+          "target": "main",
+          "kind": "weak"
+        },
+        {
+          "target": "finish",
+          "kind": "weak"
+        }
+      ]
+    },
+    "decisionPlans": {
+      "main": "结合 main Agent 刚完成的结果、用户需求、当前项目证据、未解决问题和终止条件，选择下一位最合适的 Agent；只有满足终止条件时才结束。",
+      "idea": "结合 idea Agent 刚完成的结果、用户需求、当前项目证据、未解决问题和终止条件，选择下一位最合适的 Agent；只有满足终止条件时才结束。",
+      "execution": "结合 execution Agent 刚完成的结果、用户需求、当前项目证据、未解决问题和终止条件，选择下一位最合适的 Agent；只有满足终止条件时才结束。",
+      "writing": "结合 writing Agent 刚完成的结果、用户需求、当前项目证据、未解决问题和终止条件，选择下一位最合适的 Agent；只有满足终止条件时才结束。",
+      "review": "结合 review Agent 刚完成的结果、用户需求、当前项目证据、未解决问题和终止条件，选择下一位最合适的 Agent；只有满足终止条件时才结束。"
+    },
+    "allowUserIntervention": true,
+    "allowMainReconfiguration": false,
+    "termination": {
+      "agent": "review",
+      "condition": "评审结果表明论文达到可接受的投稿标准，且没有未解决的关键问题",
+      "decisionBy": "main",
+      "automatic": false
+    },
+    "resultFormat": {
+      "presets": [
+        "论文"
+      ],
+      "custom": ""
+    }
+  },
+  "git": {
+    "enabled": false
+  }
+}

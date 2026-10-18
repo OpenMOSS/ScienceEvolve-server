@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "loopTwoBatches": {
+    "agentCalls": [
+      "measure", "assess",
+      "revise", "measure", "assess",
+      "revise", "measure", "assess", "main",
+      "revise", "measure", "assess",
+      "revise", "measure", "assess", "main"
+    ],
+    "state": {
+      "status": "completed",
+      "loopIterations": { "refinement": 2 },
+      "loopBatches": { "refinement": 2 },
+      "loopTotalIterations": { "refinement": 4 }
+    },
+    "events": {
+      "batchStarted": [1, 2],
+      "iterationCount": 3,
+      "exhaustedCount": 2
+    }
+  },
+  "terminationReview": {
+    "agentCalls": [
+      "measure", "assess",
+      "revise", "measure", "assess", "main",
+      "review", "main", "main"
+    ],
+    "mainDecisions": [
+      { "reason": "loop-limit", "controlMode": "autonomous", "canComplete": false, "action": "route_to_agent:review" },
+      { "reason": "weak-branch", "controlMode": "weak-branch", "routeCandidates": ["main", "finish"], "canComplete": false, "action": "route_to_agent:finish" },
+      { "reason": "termination", "controlMode": "autonomous", "canComplete": true, "action": "complete_project" }
+    ],
+    "state": {
+      "status": "completed",
+      "loopIterations": { "refinement": 1 },
+      "loopBatches": { "refinement": 1 },
+      "loopTotalIterations": { "refinement": 1 }
+    }
+  }
+}

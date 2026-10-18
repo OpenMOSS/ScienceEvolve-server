@@ -1,0 +1,51 @@
+{
+  "repository": "https://github.com/lamm-mit/SciAgentsDiscovery",
+  "commit": "c5c30451b29cba813a11b5ce078909a214dad9f2",
+  "files": [
+    {
+      "path": "LICENSE",
+      "upstream_path": "LICENSE.txt",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "path": "upstream/README.md",
+      "upstream_path": "README.md",
+      "sha256": "f31fb9e8ff70581d84eab658de9491acc91ea9ce5fdbfa92cc4c49025925c149"
+    },
+    {
+      "path": "upstream/ScienceDiscovery/__init__.py",
+      "upstream_path": "ScienceDiscovery/__init__.py",
+      "sha256": "72d56a19ef45b57155ce4c6197bd51936845e7cec17572f290c0d0cd3339ef23"
+    },
+    {
+      "path": "upstream/ScienceDiscovery/agents.py",
+      "upstream_path": "ScienceDiscovery/agents.py",
+      "sha256": "08a90d583f4320a3cfc4570ee28c5b43f3dcf466855119bc59a354037b5b4e21"
+    },
+    {
+      "path": "upstream/ScienceDiscovery/graph.py",
+      "upstream_path": "ScienceDiscovery/graph.py",
+      "sha256": "10424e3ce87a1270417221fe4b5b7d2f57e3c9b12fb3f62de775eb516536d3f4"
+    },
+    {
+      "path": "upstream/ScienceDiscovery/llm_config.py",
+      "upstream_path": "ScienceDiscovery/llm_config.py",
+      "sha256": "db2010f9fd2775e74b5f4782c3fca4ae005f145155a19814136b41bda2b012f2"
+    },
+    {
+      "path": "upstream/ScienceDiscovery/utils.py",
+      "upstream_path": "ScienceDiscovery/utils.py",
+      "sha256": "6c43aff8cac09512011f0ac93273bed6cd8aecfaa91fa33349916b460b5cf961"
+    },
+    {
+      "path": "upstream/Notebooks/SciAgents_ScienceDiscovery_GraphReasoning_automated.ipynb",
+      "upstream_path": "Notebooks/SciAgents_ScienceDiscovery_GraphReasoning_automated.ipynb",
+      "sha256": "cd9cb072bb5f34cd9f07a063e8e910e20b2564288d98e1ef20b89120fe420772"
+    },
+    {
+      "path": "upstream/Notebooks/SciAgents_ScienceDiscovery_GraphReasoning_non-automated.ipynb",
+      "upstream_path": "Notebooks/SciAgents_ScienceDiscovery_GraphReasoning_non-automated.ipynb",
+      "sha256": "bda37ae1eb44c3031c87839759f18c6d482e095b4944724c2a426347f8c771b5"
+    }
+  ]
+}

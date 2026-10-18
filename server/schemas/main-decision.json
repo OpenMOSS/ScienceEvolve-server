@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "assessment",
+    "nextAgent",
+    "message",
+    "rationale",
+    "successCriteria",
+    "display"
+  ],
+  "properties": {
+    "assessment": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nextAgent": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 1
+    },
+    "successCriteria": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 30,
+      "items": {
+        "type": "string"
+      }
+    },
+    "display": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["primary", "items"],
+      "description": "Path may be project-workspace-relative, project-relative under workspaces/, or absolute inside the common project workspace; the server resolves and canonicalizes it.",
+      "properties": {
+        "primary": { "$ref": "#/$defs/displayItem" },
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/displayItem" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "displayItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent", "path", "title"],
+      "properties": {
+        "agent": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "path": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "title": { "type": "string", "maxLength": 200 }
+      }
+    }
+  }
+}

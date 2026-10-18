@@ -1,0 +1,36 @@
+{
+  "kind": "openfars-contract-example",
+  "contractVersion": "openfars-collaboration-v2.0",
+  "case": "legacy-serial",
+  "serializedInput": {
+    "agents": [
+      { "name": "main", "template": "main" },
+      { "name": "researcher", "template": "idea" },
+      { "name": "writer", "template": "writing" }
+    ],
+    "input": { "source": "input", "target": "researcher" },
+    "routes": {
+      "main": [
+        { "target": "researcher", "kind": "weak" },
+        { "target": "writer", "kind": "weak" }
+      ],
+      "researcher": [{ "target": "writer", "kind": "strong" }],
+      "writer": [{ "target": "finish", "kind": "weak" }]
+    },
+    "decisionPlans": {},
+    "allowUserIntervention": true,
+    "termination": {
+      "agent": "writer",
+      "condition": "A final report exists.",
+      "decisionBy": "main",
+      "automatic": true
+    }
+  },
+  "normalizedExpectations": {
+    "schemaVersion": 2,
+    "collaborations": [],
+    "git": { "enabled": false, "status": "disabled" },
+    "outerNodeIds": ["main", "researcher", "writer"],
+    "behavior": "legacy-serial"
+  }
+}

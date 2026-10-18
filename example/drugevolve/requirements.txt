@@ -1,0 +1,7 @@
+# Versions used for the local adapter contract tests; Task ML dependencies are separate.
+openai-agents==0.22.3
+openai==3.19.2
+pydantic==2.12.5
+json5==0.10.0
+python-patch==0.0.1
+PyYAML==6.0.2

@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 2,
+  "name": "Meta-Harness：完整文本分类参考搜索流程",
+  "agents": {
+    "main": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-metaharness"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "按固定版本text_classification参考流程运行。Task是该目录中的MemorySystem候选、固定模型、训练/验证/测试数据与benchmark，不把候选内部Agent放入workflow。首轮按ONBOARDING核对需求与config.yaml，默认20个搜索iteration、每批3候选。用户提供具名run与迭代预算；确认未finalized，先交evaluate运行全部baseline并建立frontier，再propose→evaluate→analyze重复。提案超时/无候选/全部import失败是失败iteration，不擅自当成功候选。恢复从summary最大iteration之后继续，不能重复已完成轮次。搜索结束仅输出验证结果；只有需求显式finalize/test才冻结并交evaluate执行完整最终测试集，期间禁止再次搜索。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "propose": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-metaharness"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "严格执行Skill中的上游proposer原文：先补缺失的<=30行历史报告，读取全部summary、逐数据集frontier/config和近期真实轨迹；提出3个不同机制的可证伪假设；每个候选必须先用真实例子做2–3个原型变体比较，之后copy-then-edit实现、机制自审和import检查；冷启动、learn_from_batch等接口和禁止数据集硬编码规则不可删。写原pending_eval.json三候选及components/base_system/axis；不自行调用整个meta_harness外层循环，交evaluate。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "evaluate": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-metaharness"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "执行完整Skill评测协议：基线、候选import验证、所有有效候选×配置数据集/种子benchmark；保持基础模型和数据划分不变，保存训练轨迹/val/记忆状态。无效候选不执行，仍保留失败登记。每轮调用原benchmark frontier更新；finalize阶段冻结baseline∪Pareto∪每数据集winner集合，逐个测试并检查缺失组，失败可继续finalize但禁止回到搜索。交analyze。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "analyze": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-metaharness"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "使用真实val结果调用/复现原benchmark的逐数据集frontier与Pareto计算，按原evolution_summary格式记录每候选avg_val、axis、hypothesis、delta、outcome、components及首候选timing。保留失败candidate，不把缺失评测写成成功。补每轮报告并归纳机制线索；finalized只汇报冻结测试结果，不让test反馈回propose。回Main。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    }
+  },
+  "orchestration": {
+    "agents": [
+      {
+        "name": "main",
+        "template": "main"
+      },
+      {
+        "name": "propose",
+        "template": "general"
+      },
+      {
+        "name": "evaluate",
+        "template": "general"
+      },
+      {
+        "name": "analyze",
+        "template": "general"
+      }
+    ],
+    "input": {
+      "source": "input",
+      "target": "main"
+    },
+    "routes": {
+      "main": [
+        {
+          "target": "propose",
+          "kind": "weak"
+        },
+        {
+          "target": "evaluate",
+          "kind": "weak"
+        }
+      ],
+      "propose": [
+        {
+          "target": "evaluate",
+          "kind": "strong"
+        }
+      ],
+      "evaluate": [
+        {
+          "target": "analyze",
+          "kind": "strong"
+        }
+      ],
+      "analyze": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ]
+    },
+    "decisionPlans": {
+      "main": "遵循完整协议、真实状态和阶段门槛调度。",
+      "propose": "按完整协议执行当前职责并交 evaluate。",
+      "evaluate": "按完整协议执行当前职责并交 analyze。",
+      "analyze": "按完整协议执行当前职责并交 main。"
+    },
+    "allowUserIntervention": true,
+    "allowMainReconfiguration": false,
+    "termination": {
+      "agent": "main",
+      "condition": "原流程规定的终点已达到且交付完整；持续运行方法仅在用户明确要求结束时完成。环境阻断不能当成功。",
+      "decisionBy": "main",
+      "automatic": false
+    },
+    "resultFormat": {
+      "presets": [
+        "可复现证据"
+      ],
+      "custom": "完整状态、候选/版本、原始结果、分析及终止状态，路径见Skill。"
+    }
+  },
+  "git": {
+    "enabled": false
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "reference": "Complete Agent Laboratory with agentRxiv=true, multiple labs and papers",
+  "capabilities": {
+    "seven_subphases": "main",
+    "phase_role_dialogue_and_tools": [
+      "phd",
+      "postdoc",
+      "ml_engineer",
+      "sw_engineer"
+    ],
+    "mle_edit_replace_execute_repair_reward_reflection": [
+      "code_propose",
+      "code_execute",
+      "code_reward",
+      "code_reflect"
+    ],
+    "paper_scaffold_arxiv_edit_compile_reward": [
+      "paper_propose",
+      "paper_execute",
+      "paper_reward"
+    ],
+    "three_independent_review_personas": [
+      "review_1",
+      "review_2",
+      "review_3"
+    ],
+    "human_retry_and_return_to_plan": "main",
+    "phase_state_resume_and_previous_results": "main",
+    "final_readme": "professor",
+    "archive_semantic_top5_fulltext_summary": "archive + phd",
+    "verified_final_pdf_publication": "archive",
+    "cross_lab_cumulative_research": "main + independent SCIENCEEVOLVE projects sharing external archive"
+  },
+  "substitutions": {
+    "query_model and role sessions": "SCIENCEEVOLVE roles with original prompts and artifact context",
+    "pickle phase checkpoint": "equivalent complete JSON state",
+    "ignored human input source bug": "consume the actual y/n response",
+    "parallel_labs ThreadPoolExecutor": "independent SCIENCEEVOLVE projects, distinct workspace per lab"
+  }
+}

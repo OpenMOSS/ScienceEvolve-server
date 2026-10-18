@@ -1,0 +1,1644 @@
+{
+  "schemaVersion": 2,
+  "name": "ScientistTwo：论文全流程与嵌套写作/审稿",
+  "agents": {
+    "main": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "使用 scienceevolve-scientist-two Skill 完整执行ScientistTwo。先阅读协议/角色合同；在Task workspace调用scripts/protocol.py init（仅首次），然后next。将其当前ticket、角色、裁剪后的context及所需输出字段交给唯一指定的workflow Agent；Main不代替科学判断。worker完成后校验文件并submit其response，再按新next路由；role为空才允许结束。blocked要求补齐实际环境/数据/工具后继续当前角色，不能跳阶段或改预算。保留脚本状态和SDK状态供resume；已有state不得init重置。no_successful_idea是合法科研失败终点，不写稿。其他终点必须export完整并select_display选择交付物，然后complete_project同时报告准确outcome。首轮3、种子池6、总4轮、后续1 evolved+1 seed、S=4，其他预算见协议。不要改workflow；不要运行整个上游自治系统作为工具。",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "task_setup": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "从需求和真实资料建立 Task：科学问题、原 SOTA 论文/代码/全量结果、固定代表性 subset、全部数据集和指标方向/统计方法、允许修改范围、执行命令/资源、Google Search 与 Semantic Scholar 工具、文献截止日和统一 novelty rubric。检查数据/运行环境/检索/LaTeX/PDF视觉工具可用。冻结基准、subset与约束，不能为提高分数换测试集。task 对象包含协议要求的全部字段，报告所用模型与原论文模型替换。缺条件返回 blocked。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "limitation_extract": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "ScientistTwo §3.1：读取问题、原 SOTA 和此前 verifier 反馈，首次提取全部可操作局限；后续补充缺失项，保留原 limitations，不用覆盖集合冒充扩展。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "limitation_verify": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "独立核对所有可操作限制是否足够支持新改进；Sufficient 或 Expand，并逐项反馈缺口。最多16轮由控制器管理；上限后保留未解决限制，不能伪造验证通过。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "seed_generate": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "第一次生成 h0；后续读取全部已生成想法及 novelty 分数，提出有区别且力求更高新颖性的一个想法。每个 idea={id,hypothesis,...} 关联所解决的限制、可执行算法和验证方法，禁止改动原种子。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "novelty_check": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "使用 Google Search 实际检索两篇最相关参考论文，核验原文和截止日期，对待评种子按冻结 rubric 打分，记录创新/重叠及不确定性。references 恰好两项 {url,retrieval_evidence}，检索回执文件必须在 artifacts。不可用记忆补写引用。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "baseline_coding": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "真实复现原人类 SOTA 在冻结代表性 subset 上的主要实验，保存 E_base/C_base、环境、种子、精确命令、退出码、原始日志与所有指标。生成独立可重跑脚本；不能用论文全量表格当本地 subset 结果。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "subset_coding": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "从不可变 C_base 新建当前候选代码副本，实现当前 h，在同一 subset/全部指标上真实执行并保存 h/E/C/命令/日志。每次运行使用独立目录，不改基线和任何已提交证据。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "subset_critic": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "比较当前候选 subset 的全部数据集/指标/日志与 E_base，独立输出 Good（持续优于基线）、Bad（明显更差）或 Engineer（有希望但需要工程修复），给出实际证据和工程建议。不能任意做单标量排序。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "subset_engineering": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "按 subset critic 的工程诊断在当前候选新副本改进实现/调参，保持研究假设及基准约束，实际重跑完整 subset。最多2次工程改进由状态机计数；失败保留诊断，不能替换成预期结果。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "full_coding": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "只对 subset Good 的版本扩展到完整 benchmark，覆盖全部数据集/指标，实际执行并记录 full code/results/logs/commands/hypothesis。比较对象是原人类 SOTA 全量结果，不能只重跑 subset。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "full_critic": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "比较完整 benchmark 实测结果与原 SOTA 的全部数据集/指标；给出 Good/Bad/Engineer 与证据/修复建议。subset 胜出不等于 full Good。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "full_engineering": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "根据 context.refinement 分清来源：null 为 full critic 工程回环，ablation 为消融反馈，meta 为元评审反馈。从对应当前版本或 best 创建新代码副本，实施改进后真实重跑全量 benchmark。保留 h_new/E_new/C_new，不覆盖 best；后续是否替换由 Result Comparison 决定。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "spec_filter": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "每次 coding/engineering 执行后立即检查任务约束、数据拆分/泄漏、允许修改范围、指标脚本、预算及输出来源。读取实际代码差异、命令和日志；Pass 或 Reject 并指出证据。违规结果不得进入 critic、best、消融或补实验汇总。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "idea_evolve": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "§3.3：读取此前所有轮次的完整事件，包括成功与 Bad 的 h/E/C/decision/feedback、工程尝试和失败日志，提出1个 evolved idea。明确父本和诊断如何改变假设；它不是 workflow Evolver，不改编排。控制器另加入1个未评高 novelty seed。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "selector": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "在所有 full Good 候选中，结合全部 benchmark 指标与执行日志选择最佳候选 ID，解释多指标权衡，不自行用加权单分数替代原比较。保留同版本的 h_best/E_best/C_best。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "ablation_plan": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "针对当前 best 规划完整组件级消融集合 plans=[{id,intervention,comparison,command,expected_evidence},...]。隔离每项组件与增益来源，数量由真实方法决定，不能固定只做1个。best更换后重新规划。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "ablation_coding": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "只执行当前 context.plan，从 best 新副本实现消融并真实运行，保存可重跑代码、日志和结果。不得改 best。控制器将执行全部 plans 后才汇总；失败重试当前项，不能漏项。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "ablation_critic": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "检查全部消融结果解释增益/冗余/负面组件。Good 或 Refine，给出需改进的假设和组件。最多一次 ablation-driven full refinement；更优后仍重新完成全套消融。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "result_comparison": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "独立比较 trial experiment 与不可变 best 的相同完整 benchmark、多指标、统计证据及日志。仅严格更好为 Better；相等、退化或证据不足为 NotBetter，不能用稿件观感或 reviewer score 代替性能。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "draft_outline": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "PaperOrchestra普通写作入口：从 best 想法、真实实验/消融日志、图表与 ICLR2025 template/guidelines 生成 outline.json，使用 upstream/paper-orchestra/methods/prompts/outline_agent.py 全部指令。保留 intro_related_work_plan、section_plan、citation_hints；输出不含虚构结果。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "draft_literature": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "按 upstream PaperOrchestra HybridLiteratureAgent 完整协议及 prompts/literature_review_agent.py：从 introduction搜索方向、related work各subsection查询和每章节citation_hints收集全部任务，去重；Google Search每任务最多3次，Semantic Scholar真实元信息/title match/日期过滤/去重注册，生成 references.bib、citation_map、outline_v1 和 introduction/related work LaTeX。遵循 methods/agents/literature_review_agent.py 的全部检索和引文注入细节；不得黑盒调用该自治 agent。独立查询可用工具并发，汇总所有结果，限流不丢任务。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "draft_figures": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "准备完整实验图表与方法图，使用真实数据和可重跑绘图脚本，逐图检查标注、统计误差、图例和方法一致性，输出 figures清单及源数据路径。使用普通 PaperOrchestra入口的已有图注入机制；不以生成图片代替科学数值图。若启用其可选PlottingAgent模式，必须执行上游每图规划/生成/最多3次视觉critic修订并保留日志。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "draft_sections": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "依上游 section_writing_agent.py 原prompt，以完整outline、citation_map、figure info、不可变实验日志与ICLR2025规范撰写全部章节。使用随附模板真实编译PDF，渲染并检查页面，保存tex/pdf/compile_log/screenshots四类证据。不能只提交正文文本或漏reference。入口技术失败最多3次整体尝试。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "draft_quality": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "PaperOrchestra内部独立评审：按upstream/paper-orchestra/autoraters/agent_review.py的知识充分/负责/善意persona和完整AGENTREVIEW_INSTRUCTIONS，读取分配的paper_trial全文，完成当前独立评审。控制器会调用本角色3次，每次独立非持久会话；不得读另外两份评审或state/history。返回metrics全部9个整数轴（Originality/Quality/Clarity/Significance/Soundness/Presentation/Contribution各1–4，Overall1–10，Confidence1–5），以及review对象（Summary/Strengths/Weaknesses/Questions/Limitations/Ethical Concerns/Decision）。不要自己把3次调用合并成一次。交Main按ticket提交。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "content_refine": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "依 PaperOrchestra content_refinement_agent.py 原prompt，用保留稿件、质量review、worklogs、ICLR指南、图表和不可变实验/citation_map修改；保存worklog与完整新tex，编译及视觉检查。最多3次；编译失败返回failed。控制器按Overall与分项gain/drop决定接受或丢弃，不能覆写旧稿。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。 failed时提供failure_kind：compile、missing_tex或exception，精确按上游失败分支处理。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "format_review": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "按上游format_agent.py及ICLR2025 guidelines对保留稿件PDF逐页视觉审计：图表、边界、分页、标题、引用、长度等，保存结构化figure_and_tables及other_issues。Clean 或 Fix；上游只进行一次格式修复。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "format_fix": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "仅修复格式review指出的排版问题，不能改方法、数据、科学结论或引用语义。实际编译、渲染PDF；成功返回新稿，编译失败返回failed并保留旧稿。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "review_summary": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "ScholarPeer Appendix G.1：只阅读本轮稿件，提取稠密准确summary/core claims、方法、主要结果及证据，作为独立context对象；不得把作者对自己工作的推测当结论。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "review_literature": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "ScholarPeer G.2：从summary独立研究subdomain，真实搜索并筛选顶级会议及arXiv文献，按submission cutoff严格过滤，形成有可核查引用的领域综述。不得仅复述稿件reference列表。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "review_expand": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "ScholarPeer G.3：基于本轮已有文献发现遗漏/不足、进一步真实检索与扩展，合并新证据，保留日期与质量筛选。状态机执行完整3轮，不能把3轮说成一次搜索。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "review_historian": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "ScholarPeer G.4：把本轮综述与全部3轮扩展综合为按时间组织的domain narrative，描述子领域演变、主要里程碑、当前挑战和开放问题，保留引用。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "review_baselines": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "ScholarPeer G.5：独立主动检索稿件对应任务/数据集的遗漏SOTA基线和数据集；保留截止日期、可比性、实际缺失理由及来源，不能仅比较作者列出的基线。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "novelty_questions": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "ScholarPeer G.6 novelty：阅读本轮summary、全文、domain narrative、独立综述和missing baselines，拆解5个主要贡献声明，对每项生成一个简单直接、可交给未见稿件研究助手的novelty/significance问题。questions各有id和text；不要预填答案。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "soundness_questions": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "ScholarPeer G.6 soundness：独立阅读本轮全文和domain context，提出5个critical questions审查数学、逻辑、实验有效性、指标、假设；不读取novelty答案或上一轮review来诱导问题。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "novelty_answer": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "ScholarPeer G.7 novelty：仅用 Main 提供的 protocol next 裁剪包（question、summary/domain/literature/baselines、cutoff）进行主动外部检索并回答当前问题。你没有submission，不打开稿件、state.json、其他答案或工作历史；保存查询/来源/证据/未知。一次只答一个问题，独立会话。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "soundness_answer": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "ScholarPeer G.7 technical soundness：只依本轮全文的数学、方法与实验证据及给定context回答当前问题，检查逻辑不一致、不可能的数学约束和不适当指标。禁用web，不读取novelty答案或历史review。一次一个问题，独立会话。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "peer_review": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "ScholarPeer G.8：聚合本轮summary、独立文献/domain/baselines及全部10个QA，按ICLR review guidelines形成具体review（summary、strengths、weaknesses、questions、limitations/ethics、confidence、1–10 overall score及理由）。只能用本稿本轮证据。8为停止阈值而非期望答案；Stanford Agentic Reviewer是held-out外部评价，不能读取反馈参与改稿。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。 阅读 references/iclr-review-guidelines.md 作为G.8的review_guidelines输入。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "rebuttal_plan": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "针对当前完整ScholarPeer review规划所有必要补充实验 plans，每项明确回应的问题、code change、数据/指标、命令和证据。不能仅生成回复信，不固定为一个实验。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "rebuttal_coding": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "从best代码独立副本实际执行当前补实验context.plan，记录可重跑脚本、原始日志与结果，不能修改best使原结果失配。失败明确记录并重试当前项，所有项完成后才进入enhancer。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "paper_enhancer": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "把当前review、全部补实验结果及逐点回应真正写入稿件，更新表格、图、结论与局限；保留矛盾或负结果。保存新版本，实际编译和视觉检查，不能只交rebuttal文本。随后完整重跑ScholarPeer。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "meta_review": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "ScientistTwo §3.6：基于当前稿件与其最新peer review，给出Accept或Refine及战略性反馈。分数>=8不自动等于Meta Accept。一次meta改进后仍Refine由控制器明确预算耗尽，不冒充接受。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "reference_verify": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "§4.2 search-enhanced Reference Verifier：真实检索每条参考文献，核对作者/标题/日期/来源/引用所支持的论点，保留逐条证据；Pass或Fix，假的/错引的文献交Writer修正后复核。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "method_audit": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "§4.2 Method–Code Auditor：逐条核对当前稿件方法、公式、实现、超参、数据与实验命令/最佳代码/消融补实验的一致性，建立claim-to-code/measurement对照；Pass或Fix，必须检查真实代码，不能仅信作者总结。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "integrity_writer": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "依据引用核验或method-code审计，只用真实来源、代码和已有实验修正稿件，不能篡改代码/测量来匹配夸大叙事。提交新tex/pdf/编译日志/页面，重走reference+method审计直至通过；缺证据blocked。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "score_reproduce": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "最终CoE score reproduction：在干净执行目录用best的可独立运行脚本及相同数据/种子/依赖真实重跑，逐指标比较已报告结果和预先指定统计容差。保存独立commands/logs/results和差异报告，Pass或Fail。不能把旧日志复制成重跑证据。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "final_spec_audit": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "最终CoE specification compliance：再次检查最终交付代码/重跑/稿件与原Task的全部约束，排除泄漏、违规改评测或资源超限；保存逐条证据并给出Pass或Fail。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "export": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "导出同一best版本的可执行代码、环境、运行脚本、完整结果、消融/补实验、tex/PDF、全部review和CoE证据及版本/来源清单。bundle指向冻结交付目录；明确outcome是meta_accept、meta_budget_exhausted还是retained_previous_best，不能把终止都写成Accept。\n\n读取 scienceevolve-scientist-two Skill及references/protocol.md、本角色所列上游prompt/实现。只处理 protocol next 指定ticket；输出 references/contracts.json 所需字段和 artifacts/summary，保存至独立ticket目录的response.json后交回Main，不自行提交状态或调其他角色。真实工具/数据缺失返回blocked，实际执行失败返回failed，绝不伪造科学证据。不改已提交文件，不调用apply_workflow。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "draft_quality_merge": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-scientist-two"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "PaperOrchestra内部AgentReview汇总：读取本次3个独立评审，使用upstream/paper-orchestra/autoraters/agent_review.py的meta_reviewer_system_prompt与AGENTREVIEW_INSTRUCTIONS汇总完整review。不要读历史稿/历史评审；不是ScientistTwo外层meta_review。数值轴由控制器按原算法取3评审均值并round，不自行指定。汇总无法解析时返回failed供控制器保留第一份文本评审且仍聚合数值；服务不可用返回blocked。\n\n只执行Main派发的ticket，提交完整review、summary和真实artifacts，交Main提交，不改已提交文件。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    }
+  },
+  "orchestration": {
+    "agents": [
+      {
+        "name": "main",
+        "template": "main"
+      },
+      {
+        "name": "task_setup",
+        "template": "general"
+      },
+      {
+        "name": "limitation_extract",
+        "template": "general"
+      },
+      {
+        "name": "limitation_verify",
+        "template": "general"
+      },
+      {
+        "name": "seed_generate",
+        "template": "general"
+      },
+      {
+        "name": "novelty_check",
+        "template": "general"
+      },
+      {
+        "name": "baseline_coding",
+        "template": "general"
+      },
+      {
+        "name": "subset_coding",
+        "template": "general"
+      },
+      {
+        "name": "subset_critic",
+        "template": "general"
+      },
+      {
+        "name": "subset_engineering",
+        "template": "general"
+      },
+      {
+        "name": "full_coding",
+        "template": "general"
+      },
+      {
+        "name": "full_critic",
+        "template": "general"
+      },
+      {
+        "name": "full_engineering",
+        "template": "general"
+      },
+      {
+        "name": "spec_filter",
+        "template": "general"
+      },
+      {
+        "name": "idea_evolve",
+        "template": "general"
+      },
+      {
+        "name": "selector",
+        "template": "general"
+      },
+      {
+        "name": "ablation_plan",
+        "template": "general"
+      },
+      {
+        "name": "ablation_coding",
+        "template": "general"
+      },
+      {
+        "name": "ablation_critic",
+        "template": "general"
+      },
+      {
+        "name": "result_comparison",
+        "template": "general"
+      },
+      {
+        "name": "draft_outline",
+        "template": "general"
+      },
+      {
+        "name": "draft_literature",
+        "template": "general"
+      },
+      {
+        "name": "draft_figures",
+        "template": "general"
+      },
+      {
+        "name": "draft_sections",
+        "template": "general"
+      },
+      {
+        "name": "draft_quality",
+        "template": "general"
+      },
+      {
+        "name": "content_refine",
+        "template": "general"
+      },
+      {
+        "name": "format_review",
+        "template": "general"
+      },
+      {
+        "name": "format_fix",
+        "template": "general"
+      },
+      {
+        "name": "review_summary",
+        "template": "general"
+      },
+      {
+        "name": "review_literature",
+        "template": "general"
+      },
+      {
+        "name": "review_expand",
+        "template": "general"
+      },
+      {
+        "name": "review_historian",
+        "template": "general"
+      },
+      {
+        "name": "review_baselines",
+        "template": "general"
+      },
+      {
+        "name": "novelty_questions",
+        "template": "general"
+      },
+      {
+        "name": "soundness_questions",
+        "template": "general"
+      },
+      {
+        "name": "novelty_answer",
+        "template": "general"
+      },
+      {
+        "name": "soundness_answer",
+        "template": "general"
+      },
+      {
+        "name": "peer_review",
+        "template": "general"
+      },
+      {
+        "name": "rebuttal_plan",
+        "template": "general"
+      },
+      {
+        "name": "rebuttal_coding",
+        "template": "general"
+      },
+      {
+        "name": "paper_enhancer",
+        "template": "general"
+      },
+      {
+        "name": "meta_review",
+        "template": "general"
+      },
+      {
+        "name": "reference_verify",
+        "template": "general"
+      },
+      {
+        "name": "method_audit",
+        "template": "general"
+      },
+      {
+        "name": "integrity_writer",
+        "template": "general"
+      },
+      {
+        "name": "score_reproduce",
+        "template": "general"
+      },
+      {
+        "name": "final_spec_audit",
+        "template": "general"
+      },
+      {
+        "name": "export",
+        "template": "general"
+      },
+      {
+        "name": "draft_quality_merge",
+        "template": "general"
+      }
+    ],
+    "routes": {
+      "main": [
+        {
+          "target": "task_setup",
+          "kind": "weak"
+        },
+        {
+          "target": "limitation_extract",
+          "kind": "weak"
+        },
+        {
+          "target": "limitation_verify",
+          "kind": "weak"
+        },
+        {
+          "target": "seed_generate",
+          "kind": "weak"
+        },
+        {
+          "target": "novelty_check",
+          "kind": "weak"
+        },
+        {
+          "target": "baseline_coding",
+          "kind": "weak"
+        },
+        {
+          "target": "subset_coding",
+          "kind": "weak"
+        },
+        {
+          "target": "subset_critic",
+          "kind": "weak"
+        },
+        {
+          "target": "subset_engineering",
+          "kind": "weak"
+        },
+        {
+          "target": "full_coding",
+          "kind": "weak"
+        },
+        {
+          "target": "full_critic",
+          "kind": "weak"
+        },
+        {
+          "target": "full_engineering",
+          "kind": "weak"
+        },
+        {
+          "target": "spec_filter",
+          "kind": "weak"
+        },
+        {
+          "target": "idea_evolve",
+          "kind": "weak"
+        },
+        {
+          "target": "selector",
+          "kind": "weak"
+        },
+        {
+          "target": "ablation_plan",
+          "kind": "weak"
+        },
+        {
+          "target": "ablation_coding",
+          "kind": "weak"
+        },
+        {
+          "target": "ablation_critic",
+          "kind": "weak"
+        },
+        {
+          "target": "result_comparison",
+          "kind": "weak"
+        },
+        {
+          "target": "draft_outline",
+          "kind": "weak"
+        },
+        {
+          "target": "draft_literature",
+          "kind": "weak"
+        },
+        {
+          "target": "draft_figures",
+          "kind": "weak"
+        },
+        {
+          "target": "draft_sections",
+          "kind": "weak"
+        },
+        {
+          "target": "draft_quality",
+          "kind": "weak"
+        },
+        {
+          "target": "content_refine",
+          "kind": "weak"
+        },
+        {
+          "target": "format_review",
+          "kind": "weak"
+        },
+        {
+          "target": "format_fix",
+          "kind": "weak"
+        },
+        {
+          "target": "review_summary",
+          "kind": "weak"
+        },
+        {
+          "target": "review_literature",
+          "kind": "weak"
+        },
+        {
+          "target": "review_expand",
+          "kind": "weak"
+        },
+        {
+          "target": "review_historian",
+          "kind": "weak"
+        },
+        {
+          "target": "review_baselines",
+          "kind": "weak"
+        },
+        {
+          "target": "novelty_questions",
+          "kind": "weak"
+        },
+        {
+          "target": "soundness_questions",
+          "kind": "weak"
+        },
+        {
+          "target": "novelty_answer",
+          "kind": "weak"
+        },
+        {
+          "target": "soundness_answer",
+          "kind": "weak"
+        },
+        {
+          "target": "peer_review",
+          "kind": "weak"
+        },
+        {
+          "target": "rebuttal_plan",
+          "kind": "weak"
+        },
+        {
+          "target": "rebuttal_coding",
+          "kind": "weak"
+        },
+        {
+          "target": "paper_enhancer",
+          "kind": "weak"
+        },
+        {
+          "target": "meta_review",
+          "kind": "weak"
+        },
+        {
+          "target": "reference_verify",
+          "kind": "weak"
+        },
+        {
+          "target": "method_audit",
+          "kind": "weak"
+        },
+        {
+          "target": "integrity_writer",
+          "kind": "weak"
+        },
+        {
+          "target": "score_reproduce",
+          "kind": "weak"
+        },
+        {
+          "target": "final_spec_audit",
+          "kind": "weak"
+        },
+        {
+          "target": "export",
+          "kind": "weak"
+        },
+        {
+          "target": "draft_quality_merge",
+          "kind": "weak"
+        }
+      ],
+      "task_setup": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "limitation_extract": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "limitation_verify": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "seed_generate": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "novelty_check": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "baseline_coding": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "subset_coding": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "subset_critic": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "subset_engineering": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "full_coding": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "full_critic": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "full_engineering": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "spec_filter": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "idea_evolve": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "selector": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "ablation_plan": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "ablation_coding": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "ablation_critic": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "result_comparison": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "draft_outline": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "draft_literature": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "draft_figures": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "draft_sections": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "draft_quality": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "content_refine": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "format_review": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "format_fix": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "review_summary": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "review_literature": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "review_expand": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "review_historian": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "review_baselines": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "novelty_questions": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "soundness_questions": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "novelty_answer": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "soundness_answer": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "peer_review": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "rebuttal_plan": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "rebuttal_coding": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "paper_enhancer": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "meta_review": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "reference_verify": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "method_audit": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "integrity_writer": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "score_reproduce": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "final_spec_audit": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "export": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "draft_quality_merge": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ]
+    },
+    "decisionPlans": {
+      "main": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "task_setup": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "limitation_extract": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "limitation_verify": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "seed_generate": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "novelty_check": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "baseline_coding": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "subset_coding": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "subset_critic": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "subset_engineering": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "full_coding": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "full_critic": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "full_engineering": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "spec_filter": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "idea_evolve": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "selector": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "ablation_plan": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "ablation_coding": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "ablation_critic": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "result_comparison": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "draft_outline": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "draft_literature": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "draft_figures": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "draft_sections": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "draft_quality": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "content_refine": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "format_review": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "format_fix": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "review_summary": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "review_literature": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "review_expand": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "review_historian": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "review_baselines": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "novelty_questions": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "soundness_questions": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "novelty_answer": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "soundness_answer": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "peer_review": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "rebuttal_plan": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "rebuttal_coding": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "paper_enhancer": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "meta_review": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "reference_verify": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "method_audit": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "integrity_writer": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "score_reproduce": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "final_spec_audit": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "export": "按protocol.py next的ticket/role和证据协议执行；只有Main提交状态，禁止绕过门槛。",
+      "draft_quality_merge": "完成本次3独立评审的文本汇总；数值聚合由控制器执行。"
+    },
+    "allowUserIntervention": true,
+    "allowMainReconfiguration": false,
+    "termination": {
+      "agent": "main",
+      "condition": "protocol.py verify通过，next.role为null且terminal为no_successful_idea或已经完整export的meta_accept/meta_budget_exhausted/retained_previous_best。科研失败和预算终止必须原样说明；blocked不算完成。",
+      "decisionBy": "main",
+      "automatic": false
+    },
+    "resultFormat": {
+      "presets": [
+        "可复现证据"
+      ],
+      "custom": "完整best版本、论文、代码、原始实验/消融/补实验与审计证据、状态journal、所有预算和来源映射；明确科研结果与调度终止不同。"
+    },
+    "input": {
+      "source": "input",
+      "target": "main"
+    }
+  },
+  "git": {
+    "enabled": false
+  }
+}

@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 2,
+  "name": "软件设计、编码与测试闭环",
+  "agents": {
+    "main": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [],
+      "autoSkills": [],
+      "mcpServers": [],
+      "permission": "yolo",
+      "webSearch": false,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "instructions": "你是异常恢复协调者。正常流程为 coding → testing；输入直接交 coding，testing 未通过时由 SDK 自动返回 coding，全部测试通过时由 testing 自行 complete_project，你不参与正常循环。不绕过 testing 宣布完成。只有故障恢复、用户补充输入或必须澄清需求时才协调：根据证据将任务交给 coding 修复或 testing 复测；需要用户提供关键信息时 request_user。不得更改测试目标或把基础设施故障当作通过。\n\n所有 Agent 共用调用方指定的 workspace，用户通过自然语言输入软件需求；不要求 task.json 或固定代码布局。先读取用户需求、项目说明、Memory.md 和已有代码，尊重用户未提交的改动。只修改需求允许范围内的文件，不降低验收标准、不删改历史测试结果。证据保存在 development/ 下；这是本 workflow 的约定目录，不是 SDK 固定成果目录。用带 Agent 名称的追加记录维护 Memory.md，记录证据路径和交接结论。",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "coding": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [],
+      "autoSkills": [],
+      "mcpServers": [],
+      "permission": "yolo",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "instructions": "",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "testing": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [],
+      "autoSkills": [],
+      "mcpServers": [],
+      "permission": "yolo",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "instructions": "根据测试用例检查已完成的代码是否符合要求。做出分析后决定是继续修改代码还是结束任务。",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    }
+  },
+  "orchestration": {
+    "agents": [
+      {
+        "name": "main",
+        "template": "main",
+        "description": "异常恢复与用户输入协调，正常循环不调用"
+      },
+      {
+        "name": "coding",
+        "template": "general",
+        "description": "按需求设计软件、实现代码并修复测试反馈"
+      },
+      {
+        "name": "testing",
+        "template": "general",
+        "description": "独立对照测试用例，全部通过后直接结束"
+      }
+    ],
+    "input": {
+      "source": "input",
+      "target": "coding"
+    },
+    "routes": {
+      "main": [
+        {
+          "target": "coding",
+          "kind": "weak"
+        },
+        {
+          "target": "testing",
+          "kind": "weak"
+        }
+      ],
+      "coding": [
+        {
+          "target": "testing",
+          "kind": "strong"
+        }
+      ],
+      "testing": [
+        {
+          "target": "coding",
+          "kind": "weak"
+        },
+        {
+          "target": "finish",
+          "kind": "weak"
+        }
+      ]
+    },
+    "decisionPlans": {
+      "main": "仅在异常恢复或用户补充输入时协调，保持 testing 的最终验收职责。",
+      "coding": "完成本轮后交 testing 独立验收。",
+      "testing": "按当前代码的真实执行结果判断：全部用例通过则 complete_project；否则交接失败分析，SDK 直接返回 coding。"
+    },
+    "allowUserIntervention": true,
+    "allowMainReconfiguration": false,
+    "termination": {
+      "agent": "testing",
+      "condition": "当前交付代码满足用户需求；用户指定的全部测试样例、按需求补充的验收用例及相关回归均已在该版本上实际执行并通过，没有失败、错误、未执行的必测项、未解决的跳过项或环境阻断；非零测试数量及需求覆盖已核实，最终测试报告与原始证据完整。",
+      "decisionBy": "main",
+      "automatic": true
+    },
+    "resultFormat": {
+      "presets": [
+        "代码",
+        "测试报告"
+      ],
+      "custom": "workspace 中保留可运行的最终软件、测试用例和使用说明；development/ 中保存各轮测试证据及 final.md。"
+    }
+  },
+  "git": {
+    "enabled": false
+  }
+}

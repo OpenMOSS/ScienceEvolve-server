@@ -1,0 +1,206 @@
+{
+  "kind": "openfars-contract-example",
+  "contractVersion": "openfars-collaboration-v2.0",
+  "case": "collaboration-run",
+  "git": {
+    "enabled": true,
+    "status": "ready",
+    "provider": "github",
+    "repository": {
+      "owner": "example-user",
+      "name": "openfars-project-example",
+      "htmlUrl": "https://github.com/example-user/openfars-project-example",
+      "private": true,
+      "defaultBranch": "main",
+      "localPath": "repository"
+    }
+  },
+  "orchestration": {
+    "schemaVersion": 2,
+    "agents": [
+      { "name": "main", "template": "main" },
+      { "name": "caller", "template": "general" },
+      { "name": "analyst", "template": "idea" },
+      { "name": "builder", "template": "execution" },
+      { "name": "reviewer", "template": "review" }
+    ],
+    "collaborations": [
+      {
+        "id": "delivery_group",
+        "displayName": "Delivery group",
+        "memberAgentIds": ["analyst", "builder"],
+        "renamePolicy": "editable"
+      }
+    ],
+    "input": { "source": "input", "target": "caller" },
+    "routes": {
+      "main": [
+        { "target": "caller", "kind": "weak" },
+        { "target": "delivery_group", "kind": "weak" },
+        { "target": "reviewer", "kind": "weak" }
+      ],
+      "caller": [{ "target": "delivery_group", "kind": "strong" }],
+      "delivery_group": [{ "target": "reviewer", "kind": "strong" }],
+      "reviewer": [{ "target": "finish", "kind": "weak" }]
+    },
+    "decisionPlans": {},
+    "allowUserIntervention": true,
+    "termination": {
+      "agent": "reviewer",
+      "condition": "The integrated delivery is accepted.",
+      "decisionBy": "main",
+      "automatic": true
+    }
+  },
+  "expectedOuterNodeIds": ["main", "caller", "delivery_group", "reviewer"],
+  "nodeRun": {
+    "id": "nr_group_01",
+    "node": {
+      "kind": "collaboration",
+      "nodeId": "delivery_group",
+      "groupId": "delivery_group"
+    },
+    "workflowRevision": 3,
+    "activationRequestId": "activate_group_01",
+    "inputSnapshotRef": "messages/group-input-01.json",
+    "sourceAgentId": "caller",
+    "activatedByAgentId": "caller",
+    "status": "integrating"
+  },
+  "groupRun": {
+    "id": "gr_01",
+    "nodeRunId": "nr_group_01",
+    "memberSnapshot": ["analyst", "builder"],
+    "leaderAgentId": "caller",
+    "coordinatorEpoch": 1,
+    "baseCommit": "1111111111111111111111111111111111111111",
+    "groupBranch": "groups/gr_01",
+    "integrationTarget": "main",
+    "integrationOwnerExecutionId": "exec_integrate",
+    "finalPullRequestId": "pr_final",
+    "taskIds": ["task_analysis", "task_build", "task_integrate"],
+    "status": "integrating"
+  },
+  "tasks": [
+    {
+      "id": "task_analysis",
+      "nodeRunId": "nr_group_01",
+      "groupRunId": "gr_01",
+      "assignment": "Produce the evidence report.",
+      "assigneeAgentId": "analyst",
+      "dependencyTaskIds": [],
+      "queueOrdinal": 1,
+      "currentExecutionId": "exec_analysis",
+      "status": "succeeded"
+    },
+    {
+      "id": "task_build",
+      "nodeRunId": "nr_group_01",
+      "groupRunId": "gr_01",
+      "assignment": "Implement the accepted design.",
+      "assigneeAgentId": "builder",
+      "dependencyTaskIds": [],
+      "queueOrdinal": 2,
+      "currentExecutionId": "exec_build",
+      "status": "succeeded"
+    },
+    {
+      "id": "task_integrate",
+      "nodeRunId": "nr_group_01",
+      "groupRunId": "gr_01",
+      "assignment": "Own the group-to-main final integration.",
+      "assigneeAgentId": "builder",
+      "dependencyTaskIds": ["task_analysis", "task_build"],
+      "queueOrdinal": 3,
+      "currentExecutionId": "exec_integrate",
+      "status": "working"
+    }
+  ],
+  "executions": [
+    {
+      "id": "exec_analysis",
+      "nodeRunId": "nr_group_01",
+      "groupRunId": "gr_01",
+      "taskId": "task_analysis",
+      "agentId": "analyst",
+      "purpose": "delivery",
+      "ownershipEpoch": 1,
+      "status": "merged",
+      "executionBranch": "executions/exec_analysis",
+      "worktreePath": "git-worktrees/exec_analysis",
+      "pullRequestId": "pr_analysis"
+    },
+    {
+      "id": "exec_build",
+      "nodeRunId": "nr_group_01",
+      "groupRunId": "gr_01",
+      "taskId": "task_build",
+      "agentId": "builder",
+      "purpose": "delivery",
+      "ownershipEpoch": 1,
+      "status": "merged",
+      "executionBranch": "executions/exec_build",
+      "worktreePath": "git-worktrees/exec_build",
+      "pullRequestId": "pr_build"
+    },
+    {
+      "id": "exec_integrate",
+      "nodeRunId": "nr_group_01",
+      "groupRunId": "gr_01",
+      "taskId": "task_integrate",
+      "agentId": "builder",
+      "purpose": "final-integration",
+      "ownershipEpoch": 1,
+      "status": "pr_open",
+      "executionBranch": "groups/gr_01",
+      "worktreePath": "git-worktrees/exec_integrate",
+      "pullRequestId": "pr_final"
+    }
+  ],
+  "deliveryExecutionsOverlapped": ["exec_analysis", "exec_build"],
+  "pullRequests": [
+    {
+      "id": "pr_analysis",
+      "providerNumber": 11,
+      "htmlUrl": "https://github.com/example-user/openfars-project-example/pull/11",
+      "head": "executions/exec_analysis",
+      "base": "groups/gr_01",
+      "ownerExecutionId": "exec_analysis",
+      "status": "merged",
+      "mergeCommitSha": "2222222222222222222222222222222222222222",
+      "observedAt": "2026-09-22T00:00:00.000Z"
+    },
+    {
+      "id": "pr_build",
+      "providerNumber": 12,
+      "htmlUrl": "https://github.com/example-user/openfars-project-example/pull/12",
+      "head": "executions/exec_build",
+      "base": "groups/gr_01",
+      "ownerExecutionId": "exec_build",
+      "status": "merged",
+      "mergeCommitSha": "3333333333333333333333333333333333333333",
+      "observedAt": "2026-09-22T00:00:00.000Z"
+    },
+    {
+      "id": "pr_final",
+      "providerNumber": 13,
+      "htmlUrl": "https://github.com/example-user/openfars-project-example/pull/13",
+      "head": "groups/gr_01",
+      "base": "main",
+      "ownerExecutionId": "exec_integrate",
+      "status": "open",
+      "observedAt": "2026-09-22T00:05:00.000Z"
+    }
+  ],
+  "finalIntegration": {
+    "taskId": "task_integrate",
+    "executionId": "exec_integrate",
+    "pullRequestId": "pr_final",
+    "ownerMustBeMember": true,
+    "leaderMayOwn": false,
+    "head": "groups/gr_01",
+    "base": "main",
+    "completionRequiresMerged": true,
+    "mainApprovalRequired": false
+  }
+}

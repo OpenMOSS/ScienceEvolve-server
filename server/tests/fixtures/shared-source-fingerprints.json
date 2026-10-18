@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "files": {
+    "contracts.ts": "0fc7e42aec04a894f8cdd09e90cd2e75742a94d4608cc97555ba1d39c6c5c458",
+    "invocation-activity.ts": "e3926d956a442d546f08dfaa987c28e85ad717844738efe4901538bd8a69c73d",
+    "invocation-session-policy.ts": "80d5493252f2a80cba1419ae67cb9627f55c33e82ce958807707d5c7dd1f08d8",
+    "session-recovery.ts": "190a1f99f172f7145cdf03a0c82377f77547084bfaf3f8932574d98386c114b9",
+    "token-usage-ledger.ts": "ee85bf71b9584d67120274bd80d28adc56f7afc59d2468735fafbe5c2ae166dd",
+    "gateway-reasoning.ts": "74bd1c0515f41eb73dbc8644192b7d3ef44ff8659803e1650b2ce8664799c50b",
+    "configuration-recommendation.ts": "3307dc3a6f0d9d0486f732b7099e9799a947e223562a99f822e5f6c089835c34",
+    "project-explainer.ts": "924f53333648156b3400e7f3b4f6fdf03794f06120d7b7c58a92d394d156b69c",
+    "main-orchestration-policy.ts": "b19b7290063a1349f344e7eee0b03cc74d4c239f687b184367b3ec80c9ed6072"
+  }
+}

@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"00000000-0000-4000-8000-000000000001"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item-1","type":"command_execution","command":"read sentinel.txt","status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item-1","type":"command_execution","command":"read sentinel.txt","aggregated_output":"fixture-sentinel","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item-2","type":"agent_message","text":"Fixture complete."}}
+{"type":"turn.completed","usage":{"input_tokens":12,"cached_input_tokens":2,"output_tokens":4}}

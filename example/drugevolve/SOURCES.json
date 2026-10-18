@@ -1,0 +1,7 @@
+{
+  "repository": "https://github.com/GAIR-NLP/DrugEvolve",
+  "commit": "e26347c4a3dfbd639702b68b2f19d1420d78199b",
+  "paper": "https://www.biorxiv.org/content/10.64898/2026.08.16.745117v1",
+  "target": "Full public single-machine compatibility Creation pipeline; not all eleven study benchmarks or their numerical outcomes",
+  "audit": "skills/scienceevolve-drugevolve/references/mapping.md"
+}

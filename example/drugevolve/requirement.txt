@@ -1,0 +1,15 @@
+使用本示例的完整 DrugEvolve 公开单机工作流优化一个明确的药物研发算法 Task。
+
+执行前将以下项目替换为真实值；缺失时由 Main 报告阻断：
+- Task workspace：/absolute/path/to/task
+- Python（已安装示例依赖及Task依赖）：/absolute/path/to/venv/bin/python
+- 配置：/absolute/path/to/task/config.json
+- DrugEvolve run-dir：/absolute/path/to/task/.drugevolve/runs/experiment_01
+- 明确任务（如指定数据集/划分的ADMET预测）、基线代码及已测指标、固定训练/评估launcher、数据位置和算力。
+- 确认的run_spec包括总轮数、patience、连续失败上限、单次训练时限、可修改候选目录和停止条件。
+
+仅优化候选算法；不得修改固定数据、划分、评价器或编造指标。保留父候选和参考采样、独立重复检查、实现、真实训练及调试、LLM判断、六项分析、经验总结、实验库/外部知识库和best快照。允许使用实际可用的等价模型/Harness，不可省略能力。
+
+交付源码、完整谱系和失败/重试历史、原始CSV/日志、分析与经验、best以及实际停止原因。说明哪些是本次真实科研证据，哪些只是代码/流程检查。若预算内未取得改进，如实报告，不将流程结束等同科研成功。
+
+输入准备（main Git-off）：workspace/W 指运行时提供的共享 cwd。首次运行前，根据本需求填写的真实输入绝对路径与文件清单，在此目录准备 Task 并记录来源/摘要；来源只读，外部大型数据可只读引用。恢复或后续角色先检查既有输入、基线与方法状态，禁止重新导入覆盖；Task Git 在自己的子目录维护。不要用旧 --workspace 路径或仓库模板目录作为可写 Task。尚未提供必需代码/数据/配置时报告具体缺项，不能伪造输入。

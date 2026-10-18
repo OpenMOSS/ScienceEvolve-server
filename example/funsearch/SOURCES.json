@@ -1,0 +1,5 @@
+{
+  "repository": "https://github.com/google-deepmind/funsearch",
+  "commit": "cc53f274237d7ab05c19df939edbc1f9616a7c19",
+  "reference": "implementation/funsearch.py"
+}

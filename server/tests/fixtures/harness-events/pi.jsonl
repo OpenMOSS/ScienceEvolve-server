@@ -1,0 +1,9 @@
+{"type":"session","version":3,"id":"00000000-0000-4000-8000-000000000002","timestamp":"2000-01-01T00:00:00.000Z","cwd":"/fixture/workspace"}
+{"type":"agent_start"}
+{"type":"turn_start"}
+{"type":"tool_execution_start","toolCallId":"tool-1","toolName":"read","args":{"path":"sentinel.txt"}}
+{"type":"tool_execution_update","toolCallId":"tool-1","toolName":"read","args":{"path":"sentinel.txt"},"partialResult":{"content":"fixture-"}}
+{"type":"tool_execution_end","toolCallId":"tool-1","toolName":"read","result":{"content":"fixture-sentinel"},"isError":false}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"Fixture complete."}],"usage":{"input":12,"cacheRead":2,"output":4,"totalTokens":16}}}
+{"type":"turn_end","message":{"role":"assistant","content":[{"type":"text","text":"Fixture complete."}]},"toolResults":[]}
+{"type":"agent_end","messages":[]}

@@ -1,0 +1,9 @@
+方法：Biomni-R0 训练方法
+此文件是设计输入模板，本次仅生成并离线校验配置，没有启动模型/训练/GitHub/物理任务。
+
+运行前填写实际 Task manifest 的绝对路径、来源/代码/数据/评分器版本、目标、输入/输出目录、允许改动、累计候选/轮次/时间/费用预算及验收策略。预算未填写则 preflight 阻断。
+模型沿用本地已有模板的 gpt-6.1-sol / Codex / mid（部署必须将 mid 映射到已验证选项）。不把这些模型选择称为原论文模型。
+用环境变量配置 SCIENCEEVOLVE_BIOMNI_R0_BACKEND_URL、可选 SCIENCEEVOLVE_BIOMNI_R0_BACKEND_TOKEN、全新 SCIENCEEVOLVE_BIOMNI_R0_SCOPE_ID；backend 须实现 design-20261014/BACKEND-CONTRACT.md 和 workflow 中各角色的 tools.json。当前未提供真实 backend。
+Git-on v3 使用专属私有仓库与隔离 worktree。实际创建 GitHub 资源/运行任务应有该次执行的授权；本次设计请求没有执行它们。workspace 与 dataDir 均用绝对路径、互不包含。
+提供源已核验的 training/reward recipe、基础权重和 E1 task/environment/split、真实 GPU trainer/部署、authorizationId；不得以发布 R0 推理或任意缩小模型替代训练。原 recipe 未核对时停在 preflight。
+每轮读取真实当前 revision/任务，保持负面/unknown 回执和累计预算；只有实际工具可用后进入研究，不以模拟返回补齐。最终保留 report.md、acceptance.json、evidence-index.json 和全部方法/交付证据。

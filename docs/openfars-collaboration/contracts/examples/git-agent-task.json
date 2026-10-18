@@ -1,0 +1,59 @@
+{
+  "kind": "openfars-contract-example",
+  "contractVersion": "openfars-collaboration-v2.0",
+  "case": "ordinary-git-task",
+  "git": {
+    "enabled": true,
+    "status": "ready",
+    "provider": "github",
+    "repository": {
+      "owner": "example-user",
+      "name": "openfars-project-example",
+      "htmlUrl": "https://github.com/example-user/openfars-project-example",
+      "private": true,
+      "defaultBranch": "main",
+      "localPath": "repository"
+    }
+  },
+  "nodeRun": {
+    "id": "nr_01",
+    "node": { "kind": "agent", "nodeId": "writer", "agentId": "writer" },
+    "workflowRevision": 1,
+    "activationRequestId": "activate_01",
+    "inputSnapshotRef": "messages/input-01.json",
+    "activatedByAgentId": "main",
+    "status": "running"
+  },
+  "task": {
+    "id": "task_01",
+    "nodeRunId": "nr_01",
+    "assignment": "Write the delivery report.",
+    "assigneeAgentId": "writer",
+    "dependencyTaskIds": [],
+    "queueOrdinal": 1,
+    "status": "working",
+    "currentExecutionId": "exec_01"
+  },
+  "execution": {
+    "id": "exec_01",
+    "nodeRunId": "nr_01",
+    "taskId": "task_01",
+    "agentId": "writer",
+    "purpose": "delivery",
+    "ownershipEpoch": 1,
+    "status": "pr_open",
+    "executionBranch": "executions/exec_01",
+    "worktreePath": "git-worktrees/exec_01",
+    "pullRequestId": "pr_01"
+  },
+  "pullRequest": {
+    "id": "pr_01",
+    "providerNumber": 7,
+    "htmlUrl": "https://github.com/example-user/openfars-project-example/pull/7",
+    "head": "executions/exec_01",
+    "base": "main",
+    "ownerExecutionId": "exec_01",
+    "status": "open",
+    "observedAt": "2026-09-22T00:00:00.000Z"
+  }
+}

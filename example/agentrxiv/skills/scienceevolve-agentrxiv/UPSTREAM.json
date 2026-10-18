@@ -1,0 +1,61 @@
+{
+  "repository": "https://github.com/SamuelSchmidgall/AgentLaboratory",
+  "commit": "d9017d90e329112d2a80b7712f37ee9094d2cd27",
+  "files": [
+    {
+      "path": "LICENSE",
+      "upstream_path": "LICENSE",
+      "sha256": "bf38a159d01e82d58f986c2d6dd06e03ba0b9cd59a6d286dd94109aac358e583"
+    },
+    {
+      "path": "upstream/ai_lab_repo.py",
+      "upstream_path": "ai_lab_repo.py",
+      "sha256": "799a3c078d835cd632487f52ed5b8e9f155bb9514ca104a30442ecfbcb7765ff"
+    },
+    {
+      "path": "upstream/agents.py",
+      "upstream_path": "agents.py",
+      "sha256": "d8d1eda040eb1fa897d84596a1b36f277e83da75433c1a9ac2d9efe5be5c749a"
+    },
+    {
+      "path": "upstream/mlesolver.py",
+      "upstream_path": "mlesolver.py",
+      "sha256": "cc110f2b07642532cca11bd8cbf74becfc41016c7f876c16f6d40379ec59882c"
+    },
+    {
+      "path": "upstream/papersolver.py",
+      "upstream_path": "papersolver.py",
+      "sha256": "8c16d68577570fbf6332d3f070e5aec975ed3fd3e1440918940f16eb8911366c"
+    },
+    {
+      "path": "upstream/utils.py",
+      "upstream_path": "utils.py",
+      "sha256": "ea23c00695613ab346ac6646f69dbf2b0972efda7c1cafeccd5ffdb4f5f439c8"
+    },
+    {
+      "path": "upstream/tools.py",
+      "upstream_path": "tools.py",
+      "sha256": "171b36dd2507add4acb3c4608d2acc5f9d9cd7bc4631264d23efd40c3c816d23"
+    },
+    {
+      "path": "upstream/inference.py",
+      "upstream_path": "inference.py",
+      "sha256": "9f34099f0f1e7e548c7798887d9b33da6cfeef552d16e720fce343db423a5b2e"
+    },
+    {
+      "path": "upstream/common_imports.py",
+      "upstream_path": "common_imports.py",
+      "sha256": "620cdb11f91540f87dee2d61a413c5271ebc428485703b838441ef3f6f4c3e42"
+    },
+    {
+      "path": "upstream/requirements.txt",
+      "upstream_path": "requirements.txt",
+      "sha256": "8c9f6a532faf44c83aafe64a2e00add6fa7db9757bdb954309bf9e474a68b390"
+    },
+    {
+      "path": "upstream/app.py",
+      "upstream_path": "app.py",
+      "sha256": "3015bcf64679caa122eac01ba9afff1ab7736fe83385518017ec95f68b5b65ff"
+    }
+  ]
+}

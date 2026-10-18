@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="650" viewBox="0 0 1000 650" font-family="Arial, PingFang SC, Microsoft YaHei, Noto Sans CJK SC, sans-serif" role="img" aria-labelledby="title desc"><title id="title">ScienceEvolve · Improve accuracy, then write the report.</title><desc xmlns="http://www.w3.org/2000/svg" id="desc">A finite-element convergence experiment: Main starts the task, Coder, Executor and Review execute three complete rounds with illustrative RMSE 0.08, 0.04 and 0.02. The configured exit Agent Writer delivers errors.md. Agent cards label their Harness: Codex, DSH or pi, preserving the depicted configuration across recovery and intentional version changes.</desc>
+<defs><marker id="arrow-ink" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1 L9 5 L1 9 Z" fill="#24304C"/></marker><marker id="arrow-muted" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1 L9 5 L1 9 Z" fill="#62718B"/></marker><marker id="arrow-line" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1 L9 5 L1 9 Z" fill="#DEE4EF"/></marker><marker id="arrow-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1 L9 5 L1 9 Z" fill="#328FE6"/></marker><marker id="arrow-teal" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1 L9 5 L1 9 Z" fill="#17A88A"/></marker><marker id="arrow-purple" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1 L9 5 L1 9 Z" fill="#8860DA"/></marker><marker id="arrow-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1 L9 5 L1 9 Z" fill="#E99A32"/></marker><marker id="arrow-rose" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1 L9 5 L1 9 Z" fill="#DB647E"/></marker><marker id="arrow-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1 L9 5 L1 9 Z" fill="#27996D"/></marker><marker id="arrow-navy" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1 L9 5 L1 9 Z" fill="#26334F"/></marker><marker id="arrow-white" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1 L9 5 L1 9 Z" fill="#FFFFFF"/></marker><filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="4" stdDeviation="7" flood-color="#2B3C68" flood-opacity=".07"/></filter></defs><rect x="0" y="0" width="1000" height="650" rx="10" fill="#FCFCFA" stroke="none" stroke-width="1.6" /><text x="32" y="55" font-size="31" fill="#24304C" font-weight="700" text-anchor="start">Improve accuracy, then write the report.</text><text x="969" y="633" font-size="13" fill="#62718B" font-weight="700" text-anchor="end">ScienceEvolve</text><rect x="32" y="115" width="936" height="475" rx="12" fill="#FFFFFF" stroke="#DEE4EF" stroke-width="1.6" filter="url(#shadow)"/><rect x="32" y="115" width="936" height="32" rx="12" fill="#EEF2F8" stroke="none" stroke-width="1.6" /><rect x="32" y="134" width="936" height="13" rx="0" fill="#EEF2F8" stroke="none" stroke-width="1.6" /><circle cx="47" cy="131" r="3" fill="#DB647E"/><circle cx="59" cy="131" r="3" fill="#E99A32"/><circle cx="71" cy="131" r="3" fill="#17A88A"/><text x="97" y="137" font-size="15" fill="#62718B" font-weight="400" text-anchor="start" font-family="Menlo, Consolas, monospace">Finite elements · mesh convergence</text><text x="945" y="137" font-size="12" fill="#62718B" font-weight="400" text-anchor="end">Illustrative RMSE</text><g data-bubble="true"><rect x="55" y="197" width="155" height="44" rx="10" fill="#F2ECFF" stroke="#8860DA" stroke-width="1.6" /><path d="M125.5 241 l7 10 l7-10" fill="#F2ECFF" stroke="#8860DA" stroke-width="1.3"/><text x="70" y="225.0" font-size="16" fill="#8860DA" font-weight="400" text-anchor="start">Reduce error.</text></g><g xmlns="http://www.w3.org/2000/svg" data-agent="Main"><rect x="65" y="275" width="135" height="66" rx="10" fill="#F2ECFF" stroke="#8860DA" stroke-width="1.6" /><g transform="translate(74,287.3) scale(1.8)" shape-rendering="crispEdges">
+<rect x="7" y="0" width="2" height="2" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6" />
+<rect x="7.5" y="2" width="1" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="2" y="4" width="12" height="9" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="3" y="5" width="10" height="7" rx="0" fill="#8860DA" stroke="none" stroke-width="1.6" />
+<rect x="4" y="6" width="8" height="4" rx="0" fill="#E7F8FF" stroke="none" stroke-width="1.6" />
+<rect x="5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="9.5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="6.5" y="10.5" width="3" height="1" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6" />
+<rect x="0" y="6" width="2" height="5" rx="0" fill="#8860DA" stroke="none" stroke-width="1.6" />
+<rect x="14" y="6" width="2" height="5" rx="0" fill="#8860DA" stroke="none" stroke-width="1.6" />
+<rect x="5" y="13" width="6" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="3" y="14" width="10" height="6" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="4" y="14" width="8" height="5" rx="0" fill="#8860DA" stroke="none" stroke-width="1.6" />
+<rect x="0" y="14" width="3" height="4" rx="0" fill="#8860DA" stroke="none" stroke-width="1.6" />
+<rect x="13" y="14" width="3" height="4" rx="0" fill="#8860DA" stroke="none" stroke-width="1.6" />
+<rect x="0" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6" />
+<rect x="13" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6" />
+<rect x="4" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="9" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="3" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="9" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="6" y="15" width="4" height="1" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6" />
+<rect x="7" y="14" width="2" height="3" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6" />
+</g>
+<text x="113" y="308" font-size="17" fill="#8860DA" font-weight="700" text-anchor="start">Main</text></g>
+<rect x="230" y="185" width="550" height="330" rx="12" fill="#F7FAFF" stroke="#328FE6" stroke-width="1.6" /><text x="248" y="215" font-size="21" fill="#328FE6" font-weight="700" text-anchor="start">Loop</text><rect x="400" y="197" width="131" height="28" rx="8" fill="#EAF4FF" stroke="none" stroke-width="1.6" /><text x="465.5" y="217.0" font-size="13" fill="#328FE6" font-weight="700" text-anchor="middle">rounds: 3 ▾</text><rect x="547" y="197" width="212" height="28" rx="8" fill="#F2ECFF" stroke="none" stroke-width="1.6" /><text x="653.0" y="217.0" font-size="13" fill="#8860DA" font-weight="700" text-anchor="middle">exit: Writer ▾</text><path d="M200 308 H240" fill="none" stroke="#8860DA" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-purple)"/><path d="M390 308 H420" fill="none" stroke="#328FE6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/><path d="M590 308 H620" fill="none" stroke="#328FE6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/><path d="M762 325 H770 V430 H240 V325 H250" fill="none" stroke="#328FE6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/><g xmlns="http://www.w3.org/2000/svg" data-agent="Coder"><rect x="250" y="275" width="140" height="66" rx="10" fill="#EAF4FF" stroke="#328FE6" stroke-width="1.6" /><g transform="translate(259,287.3) scale(1.8)" shape-rendering="crispEdges">
+<rect x="7" y="0" width="2" height="2" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6" />
+<rect x="7.5" y="2" width="1" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="2" y="4" width="12" height="9" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="3" y="5" width="10" height="7" rx="0" fill="#328FE6" stroke="none" stroke-width="1.6" />
+<rect x="4" y="6" width="8" height="4" rx="0" fill="#E7F8FF" stroke="none" stroke-width="1.6" />
+<rect x="5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="9.5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="6.5" y="10.5" width="3" height="1" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6" />
+<rect x="0" y="6" width="2" height="5" rx="0" fill="#328FE6" stroke="none" stroke-width="1.6" />
+<rect x="14" y="6" width="2" height="5" rx="0" fill="#328FE6" stroke="none" stroke-width="1.6" />
+<rect x="5" y="13" width="6" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="3" y="14" width="10" height="6" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="4" y="14" width="8" height="5" rx="0" fill="#328FE6" stroke="none" stroke-width="1.6" />
+<rect x="0" y="14" width="3" height="4" rx="0" fill="#328FE6" stroke="none" stroke-width="1.6" />
+<rect x="13" y="14" width="3" height="4" rx="0" fill="#328FE6" stroke="none" stroke-width="1.6" />
+<rect x="0" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6" />
+<rect x="13" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6" />
+<rect x="4" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="9" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="3" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="9" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="6" y="15" width="4" height="1" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6" />
+<rect x="7" y="14" width="2" height="3" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6" />
+</g>
+<text x="298" y="308" font-size="17" fill="#328FE6" font-weight="700" text-anchor="start">Coder</text></g>
+<g xmlns="http://www.w3.org/2000/svg" data-agent="Executor"><rect x="430" y="275" width="160" height="66" rx="10" fill="#E6F8F1" stroke="#17A88A" stroke-width="1.6" /><g transform="translate(439,287.3) scale(1.8)" shape-rendering="crispEdges">
+<rect x="7" y="0" width="2" height="2" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6" />
+<rect x="7.5" y="2" width="1" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="2" y="4" width="12" height="9" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="3" y="5" width="10" height="7" rx="0" fill="#17A88A" stroke="none" stroke-width="1.6" />
+<rect x="4" y="6" width="8" height="4" rx="0" fill="#E7F8FF" stroke="none" stroke-width="1.6" />
+<rect x="5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="9.5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="6.5" y="10.5" width="3" height="1" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6" />
+<rect x="0" y="6" width="2" height="5" rx="0" fill="#17A88A" stroke="none" stroke-width="1.6" />
+<rect x="14" y="6" width="2" height="5" rx="0" fill="#17A88A" stroke="none" stroke-width="1.6" />
+<rect x="5" y="13" width="6" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="3" y="14" width="10" height="6" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="4" y="14" width="8" height="5" rx="0" fill="#17A88A" stroke="none" stroke-width="1.6" />
+<rect x="0" y="14" width="3" height="4" rx="0" fill="#17A88A" stroke="none" stroke-width="1.6" />
+<rect x="13" y="14" width="3" height="4" rx="0" fill="#17A88A" stroke="none" stroke-width="1.6" />
+<rect x="0" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6" />
+<rect x="13" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6" />
+<rect x="4" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="9" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="3" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="9" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="6" y="15" width="4" height="1" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6" />
+<rect x="7" y="14" width="2" height="3" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6" />
+</g>
+<text x="478" y="308" font-size="17" fill="#17A88A" font-weight="700" text-anchor="start">Executor</text></g>
+<g xmlns="http://www.w3.org/2000/svg" data-agent="Review"><rect x="630" y="275" width="132" height="66" rx="10" fill="#FFF3DF" stroke="#E99A32" stroke-width="1.6" /><g transform="translate(639,287.3) scale(1.8)" shape-rendering="crispEdges">
+<rect x="7" y="0" width="2" height="2" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6" />
+<rect x="7.5" y="2" width="1" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="2" y="4" width="12" height="9" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="3" y="5" width="10" height="7" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6" />
+<rect x="4" y="6" width="8" height="4" rx="0" fill="#E7F8FF" stroke="none" stroke-width="1.6" />
+<rect x="5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="9.5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="6.5" y="10.5" width="3" height="1" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6" />
+<rect x="0" y="6" width="2" height="5" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6" />
+<rect x="14" y="6" width="2" height="5" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6" />
+<rect x="5" y="13" width="6" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="3" y="14" width="10" height="6" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="4" y="14" width="8" height="5" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6" />
+<rect x="0" y="14" width="3" height="4" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6" />
+<rect x="13" y="14" width="3" height="4" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6" />
+<rect x="0" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6" />
+<rect x="13" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6" />
+<rect x="4" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="9" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="3" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="9" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="6" y="15" width="4" height="1" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6" />
+<rect x="7" y="14" width="2" height="3" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6" />
+</g>
+<text x="678" y="308" font-size="17" fill="#E99A32" font-weight="700" text-anchor="start">Review</text></g>
+<path d="M762 308 H804" fill="none" stroke="#8860DA" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-purple)" stroke-dasharray="6 6"/><text x="792" y="292" font-size="13" fill="#8860DA" font-weight="700" text-anchor="middle">3/3</text><g xmlns="http://www.w3.org/2000/svg" data-agent="Writer"><rect x="814" y="275" width="134" height="66" rx="10" fill="#F2ECFF" stroke="#8860DA" stroke-width="1.6" /><g transform="translate(823,287.3) scale(1.8)" shape-rendering="crispEdges">
+<rect x="7" y="0" width="2" height="2" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6" />
+<rect x="7.5" y="2" width="1" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="2" y="4" width="12" height="9" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="3" y="5" width="10" height="7" rx="0" fill="#8860DA" stroke="none" stroke-width="1.6" />
+<rect x="4" y="6" width="8" height="4" rx="0" fill="#E7F8FF" stroke="none" stroke-width="1.6" />
+<rect x="5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="9.5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="6.5" y="10.5" width="3" height="1" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6" />
+<rect x="0" y="6" width="2" height="5" rx="0" fill="#8860DA" stroke="none" stroke-width="1.6" />
+<rect x="14" y="6" width="2" height="5" rx="0" fill="#8860DA" stroke="none" stroke-width="1.6" />
+<rect x="5" y="13" width="6" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="3" y="14" width="10" height="6" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="4" y="14" width="8" height="5" rx="0" fill="#8860DA" stroke="none" stroke-width="1.6" />
+<rect x="0" y="14" width="3" height="4" rx="0" fill="#8860DA" stroke="none" stroke-width="1.6" />
+<rect x="13" y="14" width="3" height="4" rx="0" fill="#8860DA" stroke="none" stroke-width="1.6" />
+<rect x="0" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6" />
+<rect x="13" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6" />
+<rect x="4" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="9" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="3" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="9" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6" />
+<rect x="6" y="15" width="4" height="1" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6" />
+<rect x="7" y="14" width="2" height="3" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6" />
+</g>
+<text x="862" y="308" font-size="17" fill="#8860DA" font-weight="700" text-anchor="start">Writer</text></g>
+<g data-bubble="true"><rect x="250" y="357" width="140" height="37" rx="10" fill="#EAF4FF" stroke="#328FE6" stroke-width="1.6" /><path d="M250 373 l-10 8 h10" fill="#EAF4FF" stroke="#328FE6" stroke-width="1.4"/><text x="267" y="382.5" font-size="14" fill="#328FE6" font-weight="400" text-anchor="start">Refine mesh.</text></g><g data-bubble="true"><rect x="430" y="357" width="160" height="37" rx="10" fill="#E6F8F1" stroke="#17A88A" stroke-width="1.6" /><path d="M430 373 l-10 8 h10" fill="#E6F8F1" stroke="#17A88A" stroke-width="1.4"/><text x="447" y="382.5" font-size="14" fill="#17A88A" font-weight="400" text-anchor="start">Run solver.</text></g><g data-bubble="true"><rect x="630" y="357" width="132" height="37" rx="10" fill="#FFF3DF" stroke="#E99A32" stroke-width="1.6" /><path d="M630 373 l-10 8 h10" fill="#FFF3DF" stroke="#E99A32" stroke-width="1.4"/><text x="647" y="382.5" font-size="14" fill="#E99A32" font-weight="400" text-anchor="start">Error is down.</text></g><text x="508" y="415" font-size="14" fill="#328FE6" font-weight="700" text-anchor="middle">whole group ×3</text><rect x="250" y="463" width="149" height="28" rx="8" fill="#E6F8F1" stroke="none" stroke-width="1.6" /><text x="324.5" y="483.0" font-size="12" fill="#17A88A" font-weight="700" text-anchor="middle">Round 1 · 0.08</text><rect x="430" y="463" width="149" height="28" rx="8" fill="#E6F8F1" stroke="none" stroke-width="1.6" /><text x="504.5" y="483.0" font-size="12" fill="#17A88A" font-weight="700" text-anchor="middle">Round 2 · 0.04</text><rect x="610" y="463" width="149" height="28" rx="8" fill="#E6F8F1" stroke="none" stroke-width="1.6" /><text x="684.5" y="483.0" font-size="12" fill="#17A88A" font-weight="700" text-anchor="middle">Round 3 · 0.02</text><g data-bubble="true"><rect x="810" y="358" width="140" height="37" rx="10" fill="#F2ECFF" stroke="#8860DA" stroke-width="1.6" /><path d="M810 374 l-10 8 h10" fill="#F2ECFF" stroke="#8860DA" stroke-width="1.4"/><text x="827" y="383.5" font-size="15" fill="#8860DA" font-weight="400" text-anchor="start">Write results.</text></g><path d="M881 396 V425" fill="none" stroke="#27996D" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-green)"/><rect x="814" y="436" width="134" height="71" rx="10" fill="#FFFFFF" stroke="#27996D" stroke-width="1.6" /><text x="881" y="462" font-size="15" fill="#27996D" font-weight="700" text-anchor="middle" font-family="Menlo, Consolas, monospace">errors.md</text><text x="881" y="491" font-size="12" fill="#27996D" font-weight="400" text-anchor="middle" font-family="Menlo, Consolas, monospace">RMSE: 0.02</text><g xmlns="http://www.w3.org/2000/svg" data-harness-for="Main" data-harness="pi"><rect x="113" y="316" width="55" height="16" rx="4" fill="#F2ECFF" /><text x="140.5" y="327.7" fill="#8860DA" font-size="10.5" font-weight="700" text-anchor="middle" font-family="Menlo, Consolas, monospace">pi</text></g>
+<g xmlns="http://www.w3.org/2000/svg" data-harness-for="Coder" data-harness="Codex"><rect x="298" y="316" width="55" height="16" rx="4" fill="#EAF4FF" /><text x="325.5" y="327.7" fill="#328FE6" font-size="10.5" font-weight="700" text-anchor="middle" font-family="Menlo, Consolas, monospace">Codex</text></g>
+<g xmlns="http://www.w3.org/2000/svg" data-harness-for="Executor" data-harness="DSH"><rect x="478" y="316" width="55" height="16" rx="4" fill="#FFF3DF" /><text x="505.5" y="327.7" fill="#B77522" font-size="10.5" font-weight="700" text-anchor="middle" font-family="Menlo, Consolas, monospace">DSH</text></g>
+<g xmlns="http://www.w3.org/2000/svg" data-harness-for="Review" data-harness="DSH"><rect x="678" y="316" width="55" height="16" rx="4" fill="#FFF3DF" /><text x="705.5" y="327.7" fill="#B77522" font-size="10.5" font-weight="700" text-anchor="middle" font-family="Menlo, Consolas, monospace">DSH</text></g>
+<g xmlns="http://www.w3.org/2000/svg" data-harness-for="Writer" data-harness="pi"><rect x="862" y="316" width="55" height="16" rx="4" fill="#F2ECFF" /><text x="889.5" y="327.7" fill="#8860DA" font-size="10.5" font-weight="700" text-anchor="middle" font-family="Menlo, Consolas, monospace">pi</text></g>
+</svg>

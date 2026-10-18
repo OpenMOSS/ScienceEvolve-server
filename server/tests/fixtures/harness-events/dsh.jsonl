@@ -1,0 +1,8 @@
+{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"name":"deepseek-harness-sdk-runtime","version":"0.0.1"}}}
+{"jsonrpc":"2.0","method":"session.status","params":{"sessionId":"fixture-session","status":"running"}}
+{"jsonrpc":"2.0","method":"session.event","params":{"sessionId":"fixture-session","event":{"type":"turn/start","seq":0,"time":946684800000,"data":{"turn":1}}}}
+{"jsonrpc":"2.0","method":"session.event","params":{"sessionId":"fixture-session","event":{"type":"tool/call","seq":1,"time":946684800001,"data":{"turn":1,"step":1,"callId":"tool-1","name":"read","arguments":"{\"path\":\"sentinel.txt\"}"}}}}
+{"jsonrpc":"2.0","method":"session.event","params":{"sessionId":"fixture-session","event":{"type":"tool/result","seq":2,"time":946684800002,"data":{"turn":1,"step":1,"message":{"id":"message-1","role":"user","source":{"kind":"tool","callId":"tool-1"},"content":[{"type":"tool-result","toolCallId":"tool-1","content":[{"type":"text","text":"fixture-sentinel"}]}]}},"surfaceOp":"append"}}}
+{"jsonrpc":"2.0","method":"session.event","params":{"sessionId":"fixture-session","event":{"type":"assistant/message","seq":3,"time":946684800003,"data":{"turn":1,"step":1,"message":{"role":"assistant","content":[{"type":"text","text":"Fixture complete."}]},"usage":{"inputTokens":12,"cacheReadTokens":2,"outputTokens":4}},"surfaceOp":"append"}}}
+{"jsonrpc":"2.0","method":"session.event","params":{"sessionId":"fixture-session","event":{"type":"turn/end","seq":4,"time":946684800004,"data":{"turn":1,"reason":{"kind":"completed"}}}}}
+{"jsonrpc":"2.0","method":"session.status","params":{"sessionId":"fixture-session","status":"idle"}}

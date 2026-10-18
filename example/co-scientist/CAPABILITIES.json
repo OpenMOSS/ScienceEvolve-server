@@ -1,0 +1,25 @@
+{
+  "reference": "Public scientific workflow, paper 2502.18864v1 sections 3.2–3.5",
+  "capabilities": {
+    "generation": "generation",
+    "reflection": "reflection",
+    "proximity": "proximity",
+    "ranking": "ranking",
+    "evolution": "evolution",
+    "meta_review": "meta_review",
+    "wetlab": "wetlab"
+  },
+  "substitutions": {
+    "asynchronous workers": "synchronous SCIENCEEVOLVE routing, explicitly allowed by user",
+    "persistent hypothesis service": "filesystem pool with immutable candidates and durable tournament",
+    "LLM provider": "configured SCIENCEEVOLVE models",
+    "shared/domain/lab services": "external tools, not workflow internals"
+  },
+  "implementation_parameters": {
+    "initial_elo": 1200,
+    "k_factor": 32,
+    "elo_scale": 400,
+    "top_fraction": 0.25,
+    "seed": 42
+  }
+}

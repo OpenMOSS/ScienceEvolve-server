@@ -1,0 +1,9 @@
+方法：化学 Coscientist
+此文件是设计输入模板，本次仅生成并离线校验配置，没有启动模型/训练/GitHub/物理任务。
+
+运行前填写实际 Task manifest 的绝对路径、来源/代码/数据/评分器版本、目标、输入/输出目录、允许改动、累计候选/轮次/时间/费用预算及验收策略。预算未填写则 preflight 阻断。
+模型沿用本地已有模板的 gpt-6.1-sol / Codex / mid（部署必须将 mid 映射到已验证选项）。不把这些模型选择称为原论文模型。
+用环境变量配置 SCIENCEEVOLVE_COSCIENTIST_BACKEND_URL、可选 SCIENCEEVOLVE_COSCIENTIST_BACKEND_TOKEN、全新 SCIENCEEVOLVE_COSCIENTIST_SCOPE_ID；backend 须实现 design-20261014/BACKEND-CONTRACT.md 和 workflow 中各角色的 tools.json。当前未提供真实 backend。
+Git-on v3 使用专属私有仓库与隔离 worktree。实际创建 GitHub 资源/运行任务应有该次执行的授权；本次设计请求没有执行它们。workspace 与 dataDir 均用绝对路径、互不包含。
+提供明确化学问题、实际设备/firmware/API、手册、编译/执行/真实测量服务、物理 authorizationId、实验目标及累计实验预算。没有设备时不启动完整湿实验；historical/simulation 单独标记，不算完整方法。
+每轮读取真实当前 revision/任务，保持负面/unknown 回执和累计预算；只有实际工具可用后进入研究，不以模拟返回补齐。最终保留 report.md、acceptance.json、evidence-index.json 和全部方法/交付证据。

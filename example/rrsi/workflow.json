@@ -1,0 +1,357 @@
+{
+  "schemaVersion": 2,
+  "name": "RRSI：正则化 harness 进化完整算法",
+  "agents": {
+    "main": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-rrsi"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "使用 scienceevolve-rrsi Skill 执行完整 RRSI。阅读 references/protocol.md。首次初始化 protocol.py init --profile eng；已有 .rrsi/state.json 必须恢复。调用 next，把唯一 ticket 派给其 role；模型角色写原始 JSON action 文件，由 Main submit；工具角色 execute 后回 Main。task_setup 创建真实 Task 与冻结 environment.json，并 configure。每次只按控制器票据推进，不代替 analyst/digester/proposer/critic 做判断。所有候选从同一 incumbent 出发；不修改 workflow，不运行上游 rrsi.py run、driver.drive、Run.round 或整套自治框架。paused/环境阻塞均不得 complete_project。只有 next.terminal=complete 且 report.json 实际存在才能 select_display 并 complete_project。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "task_setup": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-rrsi"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "建立用户科研需求对应的真实 Task harness、完整 evolve/heldout 分割及冻结评测器。阅读 references/environment.md。评测器是实际 Task 执行和打分工具，不能包含 RRSI 的提案、审查或选择决策。实现并用真实小规模任务验证工具合同；保留完整原始轨迹、grader证据与实际 token 成本。提供非补偿性 guards、差分组件分类规则、泄漏模式和 Task constitution。记录与论文的能力替换和所有参数；不得以随机/固定分数、模拟成绩替代实际评测。生成 environment.json 并 protocol.py configure --spec；无法建立必要能力则报告 blocked，不能缩减方法。\n\n使用 scienceevolve-rrsi Skill。只处理 next 指定的当前 ticket。模型 ticket 的完整 system/cache_prefix/prompt 是本轮输入，不得摘要截断；输出保存为独立文件的原始 JSON 文本，交 Main submit。工具 operation 只能按指定命令执行。不得调用 apply_workflow；不得改控制器状态、响应缓存、评测证据或其他候选；blocked 不是完成。",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "analyst": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-rrsi"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "你是上游 RRSI batch analyst。只阅读 ticket.payload.system、cache_prefix、prompt 中提供的任务表、历史命名和 digests；不要自行读取 raw traces。按其完整提示词返回一个原始 JSON action。可派发 failure/capability_gap/success 三种 digester 和针对冲突的跟进，最终生成报告，不提出代码修改。\n\n使用 scienceevolve-rrsi Skill。只处理 next 指定的当前 ticket。模型 ticket 的完整 system/cache_prefix/prompt 是本轮输入，不得摘要截断；输出保存为独立文件的原始 JSON 文本，交 Main submit。工具 operation 只能按指定命令执行。不得调用 apply_workflow；不得改控制器状态、响应缓存、评测证据或其他候选；blocked 不是完成。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "digester": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-rrsi"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "你是上游 RRSI 单轨迹只读 digester。只使用 ticket 提供的 lens、问题和 JSON 工具协议；返回一个原始 JSON action。不能直接运行自己的 Bash 或读取其他候选、其他未授权结果；所需读取通过原始 JSON action 由控制器执行。\n\n使用 scienceevolve-rrsi Skill。只处理 next 指定的当前 ticket。模型 ticket 的完整 system/cache_prefix/prompt 是本轮输入，不得摘要截断；输出保存为独立文件的原始 JSON 文本，交 Main submit。工具 operation 只能按指定命令执行。不得调用 apply_workflow；不得改控制器状态、响应缓存、评测证据或其他候选；blocked 不是完成。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "proposer": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-rrsi"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "你是上游 RRSI harness proposer。依据完整 ticket 的 constitution、patterns、三镜头报告、每任务 digests、历史、归因、预算、探索/剪枝指令生成一个原始 JSON action。编辑只能经 edit_file/write_file 等原始工具动作，不能自己编辑工作树。done 必须有独立编辑、组件、假设、目标模式、预测任务与事后核对字段；保留成功习惯、最小复杂度、benchmark-independent 机制。repair保留当前候选并只修复审查指出问题；不能更改评测器/模型/数据。\n\n使用 scienceevolve-rrsi Skill。只处理 next 指定的当前 ticket。模型 ticket 的完整 system/cache_prefix/prompt 是本轮输入，不得摘要截断；输出保存为独立文件的原始 JSON 文本，交 Main submit。工具 operation 只能按指定命令执行。不得调用 apply_workflow；不得改控制器状态、响应缓存、评测证据或其他候选；blocked 不是完成。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "critic": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-rrsi"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "你是上游 RRSI leakage critic。根据 ticket 的完整提示词、diff 和声明判断泄漏、grader gaming、任务特化、声明遗漏、死代码、跨 trial 记忆和无界成本。只返回上游要求的 accept/reject JSON 与理由、risk_notes；不替代真实 smoke/评测。\n\n使用 scienceevolve-rrsi Skill。只处理 next 指定的当前 ticket。模型 ticket 的完整 system/cache_prefix/prompt 是本轮输入，不得摘要截断；输出保存为独立文件的原始 JSON 文本，交 Main submit。工具 operation 只能按指定命令执行。不得调用 apply_workflow；不得改控制器状态、响应缓存、评测证据或其他候选；blocked 不是完成。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "measurement": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-rrsi"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "只处理当前 measurement operation ticket：调用 protocol.py execute --id ID。它执行固定 Task 工具，保留完整 evolve 集、k次测量、token成本、真实 smoke 以及官方缺失重试策略。读取执行日志并返回实际状态。不要手填分数、重采样已完成试验或更改研究参数。环境错误应修复同一作业后恢复。\n\n使用 scienceevolve-rrsi Skill。只处理 next 指定的当前 ticket。模型 ticket 的完整 system/cache_prefix/prompt 是本轮输入，不得摘要截断；输出保存为独立文件的原始 JSON 文本，交 Main submit。工具 operation 只能按指定命令执行。不得调用 apply_workflow；不得改控制器状态、响应缓存、评测证据或其他候选；blocked 不是完成。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "selector": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-rrsi"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "只处理 selector ticket，调用 protocol.py execute --id ID 执行官方 Algorithm 2。核对 decisions.json，报告 floor、cost/shaped、novelty、domain guards、winner或保留旧 incumbent。不能凭主观改排名、忽略失败候选、改噪声阈值或只挑最好 trial。\n\n使用 scienceevolve-rrsi Skill。只处理 next 指定的当前 ticket。模型 ticket 的完整 system/cache_prefix/prompt 是本轮输入，不得摘要截断；输出保存为独立文件的原始 JSON 文本，交 Main submit。工具 operation 只能按指定命令执行。不得调用 apply_workflow；不得改控制器状态、响应缓存、评测证据或其他候选；blocked 不是完成。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "heldout": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-rrsi"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "只处理 heldout ticket，调用 protocol.py execute --id ID。冠军冻结后，在每个冻结 heldout surface 上成对测量 H0 与冠军。所有任务留在分母内，缺失计零并单独报告。不得把 heldout 结果交回提案、调参或选择；执行与 grader 能力必须与冻结 Task 合同一致。\n\n使用 scienceevolve-rrsi Skill。只处理 next 指定的当前 ticket。模型 ticket 的完整 system/cache_prefix/prompt 是本轮输入，不得摘要截断；输出保存为独立文件的原始 JSON 文本，交 Main submit。工具 operation 只能按指定命令执行。不得调用 apply_workflow；不得改控制器状态、响应缓存、评测证据或其他候选；blocked 不是完成。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    },
+    "audit": {
+      "model": "gpt-6-sol",
+      "harness": "codex",
+      "proxy": {
+        "mode": "direct"
+      },
+      "skills": [
+        "./skills/scienceevolve-rrsi"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "只处理 export ticket，调用 protocol.py execute --id ID。核对完整 T 轮、选择历史、最终 Git commit、每个 heldout surface 的两臂、原始证据与哈希。区分已测科研结果、算法测试和论文数值复现；发现证据缺失应阻塞而不能补造。\n\n使用 scienceevolve-rrsi Skill。只处理 next 指定的当前 ticket。模型 ticket 的完整 system/cache_prefix/prompt 是本轮输入，不得摘要截断；输出保存为独立文件的原始 JSON 文本，交 Main submit。工具 operation 只能按指定命令执行。不得调用 apply_workflow；不得改控制器状态、响应缓存、评测证据或其他候选；blocked 不是完成。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high"
+    }
+  },
+  "orchestration": {
+    "agents": [
+      {
+        "name": "main",
+        "template": "main"
+      },
+      {
+        "name": "task_setup",
+        "template": "general"
+      },
+      {
+        "name": "analyst",
+        "template": "general"
+      },
+      {
+        "name": "digester",
+        "template": "general"
+      },
+      {
+        "name": "proposer",
+        "template": "general"
+      },
+      {
+        "name": "critic",
+        "template": "general"
+      },
+      {
+        "name": "measurement",
+        "template": "general"
+      },
+      {
+        "name": "selector",
+        "template": "general"
+      },
+      {
+        "name": "heldout",
+        "template": "general"
+      },
+      {
+        "name": "audit",
+        "template": "general"
+      }
+    ],
+    "input": {
+      "source": "input",
+      "target": "main"
+    },
+    "routes": {
+      "main": [
+        {
+          "target": "task_setup",
+          "kind": "weak"
+        },
+        {
+          "target": "analyst",
+          "kind": "weak"
+        },
+        {
+          "target": "digester",
+          "kind": "weak"
+        },
+        {
+          "target": "proposer",
+          "kind": "weak"
+        },
+        {
+          "target": "critic",
+          "kind": "weak"
+        },
+        {
+          "target": "measurement",
+          "kind": "weak"
+        },
+        {
+          "target": "selector",
+          "kind": "weak"
+        },
+        {
+          "target": "heldout",
+          "kind": "weak"
+        },
+        {
+          "target": "audit",
+          "kind": "weak"
+        }
+      ],
+      "task_setup": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "analyst": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "digester": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "proposer": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "critic": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "measurement": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "selector": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "heldout": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "audit": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ]
+    },
+    "decisionPlans": {
+      "main": "严格按 protocol.py next 的当前 ticket/role 推进，原始角色协议及确定性门槛均由持久控制器保留。",
+      "task_setup": "严格按 protocol.py next 的当前 ticket/role 推进，原始角色协议及确定性门槛均由持久控制器保留。",
+      "analyst": "严格按 protocol.py next 的当前 ticket/role 推进，原始角色协议及确定性门槛均由持久控制器保留。",
+      "digester": "严格按 protocol.py next 的当前 ticket/role 推进，原始角色协议及确定性门槛均由持久控制器保留。",
+      "proposer": "严格按 protocol.py next 的当前 ticket/role 推进，原始角色协议及确定性门槛均由持久控制器保留。",
+      "critic": "严格按 protocol.py next 的当前 ticket/role 推进，原始角色协议及确定性门槛均由持久控制器保留。",
+      "measurement": "严格按 protocol.py next 的当前 ticket/role 推进，原始角色协议及确定性门槛均由持久控制器保留。",
+      "selector": "严格按 protocol.py next 的当前 ticket/role 推进，原始角色协议及确定性门槛均由持久控制器保留。",
+      "heldout": "严格按 protocol.py next 的当前 ticket/role 推进，原始角色协议及确定性门槛均由持久控制器保留。",
+      "audit": "严格按 protocol.py next 的当前 ticket/role 推进，原始角色协议及确定性门槛均由持久控制器保留。"
+    },
+    "allowUserIntervention": true,
+    "allowMainReconfiguration": false,
+    "termination": {
+      "agent": "main",
+      "condition": "next.terminal=complete，全部T轮和冻结heldout两臂测量已完成，report.json证据校验通过；paused或blocked不得完成。",
+      "decisionBy": "main",
+      "automatic": false
+    },
+    "resultFormat": {
+      "presets": [
+        "可复现证据"
+      ],
+      "custom": "H0/冠军Git版本、全候选diff、三镜头诊断、审查/修复、smoke、逐trial原始结果与成本、Algorithm 2裁决、归因历史、heldout成对结果、参数/替换声明及哈希。"
+    }
+  },
+  "git": {
+    "enabled": false
+  }
+}

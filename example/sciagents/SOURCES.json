@@ -1,0 +1,5 @@
+{
+  "repository": "https://github.com/lamm-mit/SciAgentsDiscovery",
+  "commit": "c5c30451b29cba813a11b5ce078909a214dad9f2",
+  "reference": "ScienceDiscovery/{agents,utils,graph}.py and both notebooks"
+}

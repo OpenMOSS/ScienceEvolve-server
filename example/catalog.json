@@ -1,0 +1,222 @@
+{
+  "schemaVersion": 1,
+  "sdkCommit": "4160a2cf0259b2a1ed9dc4eb36bc0484d2527a42",
+  "examples": [
+    {
+      "id": "dynamic-research-workflow",
+      "name": "默认科研工作流",
+      "category": "starter",
+      "status": "template",
+      "description": "选题、执行、写作、评审，由 Main 协调。",
+      "prerequisites": [
+        "研究主题、数据与实验工具"
+      ]
+    },
+    {
+      "id": "01-ahe-evolve",
+      "name": "AHE · 代码自进化",
+      "category": "starter",
+      "status": "template",
+      "description": "执行、评分、改进循环，Main 按批次判断继续或交付。",
+      "prerequisites": [
+        "任务代码、真实评估器与固定验收目标"
+      ]
+    },
+    {
+      "id": "02-software-development",
+      "name": "软件开发与测试",
+      "category": "starter",
+      "status": "template",
+      "description": "Coding 接收需求，Testing 独立测试，失败后返回修复。",
+      "prerequisites": [
+        "软件需求、已有代码（可选）与验收测试"
+      ]
+    },
+    {
+      "id": "aris",
+      "name": "ARIS",
+      "category": "method",
+      "status": "template",
+      "description": "W1 → W1.5 → W2 → 写作与跨模型评审。",
+      "prerequisites": [
+        "不同模型家族的作者和评审网关",
+        "文献工具、实验环境；写作阶段需要 LaTeX"
+      ]
+    },
+    {
+      "id": "metaharness",
+      "name": "Meta-Harness",
+      "category": "method",
+      "status": "template",
+      "description": "基线、候选 Harness、全数据集评测与 Pareto 筛选。",
+      "prerequisites": [
+        "文本分类数据、评测依赖与测试预算"
+      ]
+    },
+    {
+      "id": "autoresearch",
+      "name": "autoresearch",
+      "category": "method",
+      "status": "template",
+      "description": "固定预算训练实验，按真实结果 keep、discard 或回退。",
+      "prerequisites": [
+        "Task Git 仓库、train.py、数据与训练资源"
+      ]
+    },
+    {
+      "id": "funsearch",
+      "name": "FunSearch",
+      "category": "method",
+      "status": "template",
+      "description": "多岛程序数据库、独立采样、真实评估与周期重置。",
+      "prerequisites": [
+        "可运行的问题规格、评估器与沙箱"
+      ]
+    },
+    {
+      "id": "agent-laboratory",
+      "name": "Agent Laboratory",
+      "category": "method",
+      "status": "template",
+      "description": "七个研究子阶段、代码与论文求解器、三位独立评审。",
+      "prerequisites": [
+        "研究任务、文献工具、数据与实验/论文依赖"
+      ]
+    },
+    {
+      "id": "sciagents",
+      "name": "SciAgents",
+      "category": "method",
+      "status": "template",
+      "description": "图推理、假设细化、科学批评和独立新颖性判断。",
+      "prerequisites": [
+        "知识图谱、embedding、GraphReasoning 与文献工具"
+      ]
+    },
+    {
+      "id": "robin",
+      "name": "Robin",
+      "category": "method",
+      "status": "template",
+      "description": "Assay 与候选筛选、实验交接、并行分析与下一轮研究。",
+      "prerequisites": [
+        "真实实验执行方、实验数据与 R 分析环境"
+      ]
+    },
+    {
+      "id": "co-scientist",
+      "name": "Google AI co-scientist",
+      "category": "method",
+      "status": "template",
+      "description": "假设生成、反思、论辩排名、进化与专家反馈。",
+      "prerequisites": [
+        "研究目标、文献工具与专家/实验反馈"
+      ]
+    },
+    {
+      "id": "biomni",
+      "name": "Biomni A1 / E1",
+      "category": "method",
+      "status": "template",
+      "description": "资源检索、真实生物工具调用与观察反馈。",
+      "prerequisites": [
+        "Biomni 工具、数据和 Python/R/CLI 环境"
+      ]
+    },
+    {
+      "id": "agentrxiv",
+      "name": "AgentRxiv",
+      "category": "method",
+      "status": "template",
+      "description": "完整研究实验室加共享预印本检索、发布和累计研究。",
+      "prerequisites": [
+        "Agent Laboratory 环境、外部共享预印本服务"
+      ]
+    },
+    {
+      "id": "rrsi",
+      "name": "RRSI",
+      "category": "method",
+      "status": "template",
+      "description": "Harness 诊断、候选测量、正则化选择和冻结泛化评测。",
+      "prerequisites": [
+        "真实 Task、冻结环境与双臂评测预算"
+      ]
+    },
+    {
+      "id": "drugevolve",
+      "name": "DrugEvolve",
+      "category": "method",
+      "status": "template",
+      "description": "采样、生成、实现、训练、调试、评分与归档。",
+      "prerequisites": [
+        "药物任务数据、训练/评测依赖与资源"
+      ]
+    },
+    {
+      "id": "scientist-two",
+      "name": "ScientistTwo",
+      "category": "method",
+      "status": "template",
+      "description": "想法进化、子集与全量实验、消融、论文写作和审稿。",
+      "prerequisites": [
+        "Task 与文献工具、实验资源、论文编译与评审工具"
+      ]
+    },
+    {
+      "id": "ai-scientist-v2",
+      "name": "AI Scientist v2",
+      "category": "draft",
+      "status": "draft",
+      "description": "科研流程设计；后半程、科学协议和最终交付待完善。",
+      "prerequisites": [
+        "GitHub 协作账号",
+        "原实验工具服务与部署参数待核对"
+      ]
+    },
+    {
+      "id": "internagent-1-5",
+      "name": "InternAgent 1.5",
+      "category": "draft",
+      "status": "draft",
+      "description": "知识、记忆、搜索和评测驱动的研究流程设计。",
+      "prerequisites": [
+        "GitHub 协作账号",
+        "知识/记忆/搜索/评测后端待接入"
+      ]
+    },
+    {
+      "id": "biomni-r0",
+      "name": "Biomni-R0",
+      "category": "draft",
+      "status": "draft",
+      "description": "生物医学训练与评测流程设计。",
+      "prerequisites": [
+        "GitHub 协作账号",
+        "训练 recipe、训练/部署/评测服务与资源待落实"
+      ]
+    },
+    {
+      "id": "chemical-coscientist",
+      "name": "化学 Coscientist",
+      "category": "draft",
+      "status": "draft",
+      "description": "化学任务规划、设备执行与湿实验反馈流程设计。",
+      "prerequisites": [
+        "GitHub 协作账号",
+        "设备适配器与真实湿实验反馈待接通"
+      ]
+    },
+    {
+      "id": "raven",
+      "name": "Raven Host",
+      "category": "draft",
+      "status": "draft",
+      "description": "双 specialist 槽位与批次判定骨架；默认 preflight 阻断。",
+      "prerequisites": [
+        "GitHub 协作账号",
+        "领域工具/记忆服务和完整 Host 调度能力待补齐"
+      ]
+    }
+  ]
+}

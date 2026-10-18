@@ -1,0 +1,54 @@
+/* The persistent launcher stays below blocking dialogs and their actions. */
+.explainer-floating-launcher { position: fixed; z-index: 90; right: 22px; bottom: 22px; display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 10px 16px; border: 1px solid #326047; border-radius: 24px; background: #326047; color: #fff; box-shadow: 0 5px 24px #203d342b; cursor: pointer; font: inherit; font-size: 12px; }
+.explainer-floating-launcher.is-active { box-shadow: 0 0 0 4px #ddece1, 0 5px 24px #203d342b; }
+.explainer-floating-panel { position: fixed; z-index: 1600; right: 22px; bottom: 22px; display: flex; flex-direction: column; width: 420px; height: min(76dvh, 720px); min-width: 320px; min-height: 360px; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow: hidden; resize: both; border: 1px solid #c9d8ce; border-radius: 14px; background: #fff; color: #24362b; box-shadow: 0 14px 56px #1e3a2f2b; font-size: 12px; }
+.explainer-floating-panel :is(button, input, textarea, select) { font: inherit; }
+.explainer-floating-panel button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 9px; border: 1px solid #dce4dd; border-radius: 6px; background: #fff; color: #365641; cursor: pointer; }
+.explainer-floating-panel button:disabled { cursor: not-allowed; opacity: .5; }
+.explainer-floating-panel :is(button, a, textarea, select):focus-visible, .explainer-floating-launcher:focus-visible { outline: 2px solid #4a8261; outline-offset: 2px; }
+.explainer-floating-head { display: flex; flex: 0 0 auto; align-items: center; gap: 9px; min-height: 60px; padding: 10px 13px; background: #f2f7f3; border-bottom: 1px solid #e1e9e2; cursor: move; touch-action: none; }
+.explainer-floating-head > svg { flex-shrink: 0; color: #38704c; }
+.explainer-floating-head > div { flex: 1; min-width: 0; }
+.explainer-floating-head strong { display: block; font-size: 13px; }
+.explainer-floating-head small { display: block; overflow: hidden; margin-top: 4px; color: #77847a; text-overflow: ellipsis; white-space: nowrap; }
+.explainer-floating-head button { flex-shrink: 0; padding: 5px; border: 0; background: transparent; }
+.explainer-floating-route { display: flex; flex: 0 0 auto; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 13px; border-bottom: 1px solid #edf1ed; font-size: 10px; color: #738078; }
+.explainer-floating-route span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.explainer-floating-route button { padding: 2px; border: 0; }
+.explainer-floating-settings { display: grid; flex: 0 0 auto; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; max-height: 36dvh; overflow: auto; padding: 12px; border-bottom: 1px solid #dce5de; background: #fbfcfb; }
+.explainer-floating-settings label { display: grid; min-width: 0; gap: 4px; color: #68776e; font-size: 11px; }
+.explainer-floating-settings select { width: 100%; min-width: 0; height: 30px; padding: 4px; border: 1px solid #d6e1d8; border-radius: 5px; background: #fff; color: #263b2e; }
+.explainer-floating-settings > button { grid-column: 1/-1; justify-self: end; }
+.explainer-floating-transcript { flex: 1 1 0; min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; padding: 13px; }
+.explainer-floating-empty { display: grid; justify-items: start; gap: 10px; margin: 18px 5px; color: #77837b; line-height: 1.7; }
+.explainer-floating-empty strong { color: #334c3b; }
+.explainer-floating-empty p { margin: 0; }
+.explainer-floating-empty button { text-align: left; line-height: 1.6; }
+.explainer-chat-message { margin: 0 0 15px; padding: 10px 11px; border: 1px solid #e6ece7; border-radius: 9px; background: #fff; line-height: 1.75; overflow-wrap: anywhere; }
+.explainer-chat-message.user { margin-left: 24px; border-color: #dce9df; background: #eff6f0; }
+.explainer-chat-message.error { border-color: #ebc5bf; background: #fff7f5; color: #9b5149; }
+.explainer-chat-message small { display: block; margin-bottom: 4px; color: #7c897f; font-size: 10px; }
+.explainer-chat-message p { margin: 5px 0; }
+.explainer-chat-message :is(pre, code) { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
+.explainer-chat-message pre { max-height: 240px; overflow: auto; }
+.explainer-action-card { display: grid; gap: 7px; margin: 0 0 14px; padding: 11px; border: 1px solid #c8dfce; border-radius: 9px; background: #f2f8f3; line-height: 1.65; overflow-wrap: anywhere; }
+.explainer-action-card p { margin: 0; color: #61786a; }
+.explainer-action-card a { justify-self: start; padding: 5px 9px; border: 1px solid #a8c7b1; border-radius: 5px; color: #306343; text-decoration: none; background: #fff; }
+.explainer-floating-warning, .explainer-floating-error, .explainer-floating-notice { flex: 0 0 auto; max-height: 90px; overflow: auto; margin: 0; padding: 8px 12px; font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.explainer-floating-warning { background: #fff9e9; color: #9b7b36; }
+.explainer-floating-error { background: #fcf0ee; color: #a24f48; }
+.explainer-floating-error button { padding: 2px 6px; margin-left: 6px; }
+.explainer-floating-notice { background: #f2f7f3; color: #64786c; }
+.explainer-pending-apply { align-self: flex-end; margin: 5px 12px; }
+.explainer-floating-compose { flex: 0 0 auto; display: grid; gap: 8px; padding: 11px 12px 13px; border-top: 1px solid #dfe8e1; background: #fff; }
+.explainer-floating-compose textarea { width: 100%; min-height: 65px; max-height: 130px; padding: 8px; box-sizing: border-box; resize: vertical; border: 1px solid #d0ddd3; border-radius: 7px; background: #fbfdfb; color: #293f31; line-height: 1.6; }
+.explainer-floating-compose .explainer-compose-hint { color: #7c8980; font-size: 10px; }
+.explainer-floating-compose > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.explainer-floating-compose .explainer-undo { padding-left: 0; border: 0; color: #7c8980; font-size: 10px; }
+.explainer-floating-compose .explainer-send { border-color: #3c7351; background: #3c7351; color: #fff; }
+@media(max-width:620px) {
+  .explainer-floating-launcher { right: 12px; bottom: 12px; padding: 10px 13px; }
+  .explainer-floating-launcher span { font-size: 11px; }
+  .explainer-floating-panel { left: 8px; right: 8px; bottom: 8px; top: auto; width: auto; height: min(78dvh, 720px); min-width: 0; min-height: 300px; resize: none; }
+  .explainer-floating-head { cursor: default; }
+}

@@ -1,0 +1,31 @@
+{
+  "repository": "https://github.com/stanford-iris-lab/meta-harness",
+  "commit": "0cbc31e97c9e6d24232d1dc754827c02e1ec415c",
+  "files": [
+    {
+      "path": "LICENSE",
+      "upstream_path": "LICENSE",
+      "sha256": "6fda8a33f4381e19a48a6a597ff8353cc9fbe97eccc1377a5fb6dd6f9ed49f76"
+    },
+    {
+      "path": "upstream/ONBOARDING.md",
+      "upstream_path": "ONBOARDING.md",
+      "sha256": "674f70ad72708171d00a8636f8770f919c17ed3c1fd3c638bb44d9717ecb6801"
+    },
+    {
+      "path": "upstream/meta_harness.py",
+      "upstream_path": "reference_examples/text_classification/meta_harness.py",
+      "sha256": "47d89e7fc48499a2d574491bcc84e35342a6c07ff29f7a25cc13dbd0a6ed853c"
+    },
+    {
+      "path": "upstream/benchmark.py",
+      "upstream_path": "reference_examples/text_classification/benchmark.py",
+      "sha256": "9f1f924c331f7aeee7f8a7d99b8e38b1773b4cf99e497a80b2c7ccd3e3cdbdb6"
+    },
+    {
+      "path": "upstream/proposer.md",
+      "upstream_path": "reference_examples/text_classification/.claude/skills/meta-harness/SKILL.md",
+      "sha256": "fce9a51d2e95d8a2d59c60b91106adc0309232a8d6b2fe0fa0785395dcb78d1c"
+    }
+  ]
+}

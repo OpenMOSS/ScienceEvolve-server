@@ -1,0 +1,17 @@
+{
+  "reference": "official implementation/funsearch.py single-threaded pipeline",
+  "capabilities": {
+    "specification_and_baseline": "runtime.py init",
+    "islands_clusters_temperature_short_code": "upstream ProgramsDatabase",
+    "four_samples_per_prompt": "sample + Main count",
+    "versioned_functions_and_ancestor_rejection": "upstream Evaluator",
+    "real_scoring_and_timeout": "Task Sandbox.run",
+    "register_reset_weak_islands": "upstream ProgramsDatabase",
+    "persistent_rng_resume": "runtime.py",
+    "unbounded_search": "main"
+  },
+  "substitutions": {
+    "abstract LLM": "SCIENCEEVOLVE sample role",
+    "abstract Sandbox": "user supplied actual isolated evaluator"
+  }
+}

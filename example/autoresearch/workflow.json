@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 2,
+  "name": "autoresearch：Git keep/discard 的完整实验循环",
+  "agents": {
+    "main": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-autoresearch"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "检查用户提供的autoresearch Task源码、Git、uv、数据缓存及单GPU环境。遵循Skill建立独立实验分支，初始设置得到确认后先交train跑未修改的基线。随后propose→train→select循环。保存控制状态与Git父版本，用户未停止时持续运行，不设10次之类自创上限，不按无提升自动结束。实验崩溃、超时、候选被淘汰后都继续搜索；严重环境故障交用户处理。收到明确停止指令后保存当前最佳版本与完整results.tsv并结束；用户指定预算时按其覆盖上游持续运行模式并注明。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "propose": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-autoresearch"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "从当前已接受Git提交提出一个机制/架构/优化器或训练参数实验；只修改train.py，提交改动并记录父commit和候选commit，然后交train。考虑复杂度与收益，阅读历史失败避免重复；不能改prepare.py、评估器、数据划分、时间窗口或依赖。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "train": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-autoresearch"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "按Skill运行基线或已提交候选的uv run train.py，重定向日志；保留5分钟训练时间窗（不含启动/编译），总墙钟超过10分钟终止该Task进程并记录timeout。保存退出码、val_bpb、peak_vram_mb和完整日志；简单崩溃可在有限几次修复后重跑，每次版本和日志可追溯，结构性失败及时判crash。没有val_bpb不能判成功；交select。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "select": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-autoresearch"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "按照Skill的指标/复杂度权衡决定keep/discard/crash，写原5列results.tsv并保留历史。正常且更优/同等更简单的候选才可保留；失败记录0是日志占位，不能作为最低val_bpb获胜。discard/crash通过Git恢复本轮parent。只在预检通过的专用干净实验分支操作，不能重置用户无关改动。返回Main继续。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    }
+  },
+  "orchestration": {
+    "agents": [
+      {
+        "name": "main",
+        "template": "main"
+      },
+      {
+        "name": "propose",
+        "template": "general"
+      },
+      {
+        "name": "train",
+        "template": "general"
+      },
+      {
+        "name": "select",
+        "template": "general"
+      }
+    ],
+    "input": {
+      "source": "input",
+      "target": "main"
+    },
+    "routes": {
+      "main": [
+        {
+          "target": "propose",
+          "kind": "weak"
+        },
+        {
+          "target": "train",
+          "kind": "weak"
+        }
+      ],
+      "propose": [
+        {
+          "target": "train",
+          "kind": "strong"
+        }
+      ],
+      "train": [
+        {
+          "target": "select",
+          "kind": "strong"
+        }
+      ],
+      "select": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ]
+    },
+    "decisionPlans": {
+      "main": "遵循完整协议、真实状态和阶段门槛调度。",
+      "propose": "按完整协议执行当前职责并交 train。",
+      "train": "按完整协议执行当前职责并交 select。",
+      "select": "按完整协议执行当前职责并交 main。"
+    },
+    "allowUserIntervention": true,
+    "allowMainReconfiguration": false,
+    "termination": {
+      "agent": "main",
+      "condition": "原流程规定的终点已达到且交付完整；持续运行方法仅在用户明确要求结束时完成。环境阻断不能当成功。",
+      "decisionBy": "main",
+      "automatic": false
+    },
+    "resultFormat": {
+      "presets": [
+        "可复现证据"
+      ],
+      "custom": "完整状态、候选/版本、原始结果、分析及终止状态，路径见Skill。"
+    }
+  },
+  "git": {
+    "enabled": false
+  }
+}

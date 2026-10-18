@@ -1,0 +1,225 @@
+{
+  "schemaVersion": 2,
+  "name": "Biomni A1 / E1：资源检索与真实工具闭环",
+  "agents": {
+    "main": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-biomni"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "按Skill完整执行Biomni A1公开流程，使用随附真实E1工具/资源，不调用A1.go或整套自治graph。准备E1及数据湖，启动持久bridge进程，通过status/prompt确定当前阶段，分别调度retrieval、researcher、execute、critic。每次只交一个原子步骤；接收真实SCIENCEEVOLVE模型回复交respond，execute交advance，再消费实际observation。保留完整上下文、原资源检索、代码反馈、自批评与配置的test-time scaling、500步递归预算、最终solution和原始报告。湿实验需要时交wetlab配合真实平台工具，完成后让执行器读取真实回执及数据。默认配置沿用上游，不能无声跳过数据、工具或失败步骤。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "retrieval": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-biomni"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "读取bridge的retrieve prompt，按原指令在全部工具、实际数据湖、软件库、know-how中选择相关资源，保留文献/数据库及适用的分子生物学工具。输出原TOOLS/DATA_LAKE/LIBRARIES/KNOW_HOW索引格式，使用对应prompt_id提交真实回复，不自行截短工具目录。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "researcher": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-biomni"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "读取bridge generate阶段的原始system prompt、完整message历史和真实observation，按原ReAct规则给出think/execute/solution。使用实际工具组合、Python/R/Bash/CLI，按错误修复与重新规划；不能把计划当执行。每次只提交本次真实响应，由Main继续调度。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "execute": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-biomni"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "在E1持久bridge解释器执行当前一个execute步骤，实际调用原工具并记录observation/plots。Python跨步骤共享namespace，R/Bash按原工具语义执行；超时600秒默认，错误作为原观察反馈。提交有唯一ID的advance，重试用同ID避免重复副作用。不能在新Python进程里模拟上一步变量。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "critic": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-biomni"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "读取bridge critic阶段的完整轨迹及原自批评提示，给出具体缺漏/错误/改善反馈，通过respond回注；按用户显式配置self_critic及test_time_scale_round执行全部轮数。不要把额外critic默认开启，也不能跳过已启用的轮数。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "wetlab": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-biomni"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "配合真实湿实验MCP/CLI/API工具，按Task协议校验、提交、监控、下载原始数据，保存真实job ID和实验状态。Biomni自带PyLabRobot Chatterbox测试只算模拟检查，不是实测。产物由下一次execute读取进入原A1 observation和研究反馈。外部服务不是workflow节点，不能用假回执代替调用。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    }
+  },
+  "orchestration": {
+    "agents": [
+      {
+        "name": "main",
+        "template": "main"
+      },
+      {
+        "name": "retrieval",
+        "template": "general"
+      },
+      {
+        "name": "researcher",
+        "template": "general"
+      },
+      {
+        "name": "execute",
+        "template": "general"
+      },
+      {
+        "name": "critic",
+        "template": "general"
+      },
+      {
+        "name": "wetlab",
+        "template": "general"
+      }
+    ],
+    "input": {
+      "source": "input",
+      "target": "main"
+    },
+    "routes": {
+      "main": [
+        {
+          "target": "retrieval",
+          "kind": "weak"
+        },
+        {
+          "target": "researcher",
+          "kind": "weak"
+        },
+        {
+          "target": "execute",
+          "kind": "weak"
+        },
+        {
+          "target": "critic",
+          "kind": "weak"
+        },
+        {
+          "target": "wetlab",
+          "kind": "weak"
+        }
+      ],
+      "retrieval": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "researcher": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "execute": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "critic": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "wetlab": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ]
+    },
+    "decisionPlans": {
+      "main": "遵循完整协议、真实状态和阶段门槛调度。",
+      "retrieval": "按完整协议执行当前职责并交 main。",
+      "researcher": "按完整协议执行当前职责并交 main。",
+      "execute": "按完整协议执行当前职责并交 main。",
+      "critic": "按完整协议执行当前职责并交 main。",
+      "wetlab": "按完整协议执行当前职责并交 main。"
+    },
+    "allowUserIntervention": true,
+    "allowMainReconfiguration": false,
+    "termination": {
+      "agent": "main",
+      "condition": "原流程规定的终点已达到且交付完整；持续运行方法仅在用户明确要求结束时完成。环境阻断不能当成功。",
+      "decisionBy": "main",
+      "automatic": false
+    },
+    "resultFormat": {
+      "presets": [
+        "可复现证据"
+      ],
+      "custom": "完整状态、候选/版本、原始结果、分析及终止状态，路径见Skill。"
+    }
+  },
+  "git": {
+    "enabled": false
+  }
+}

@@ -1,0 +1,229 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="730" viewBox="0 0 1000 730" font-family="Arial, Helvetica, sans-serif" role="img" aria-labelledby="title desc"><title id="title">ScienceEvolve · Resume the simulation workflow.</title><desc xmlns="http://www.w3.org/2000/svg" id="desc">Materials structure relaxation: System Runtime detects an interrupted Executor session, retains completed Plan and Coder steps, restores the Agent session, and continues Review and results.csv delivery. This is Agent session recovery, not an external simulation checkpoint claim. Agent cards label their Harness: Codex, DSH or pi, preserving the depicted configuration across recovery and intentional version changes.</desc>
+<defs>
+<marker id="arrow-ink" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9 Z" fill="#24304C"/></marker>
+<marker id="arrow-muted" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9 Z" fill="#62718B"/></marker>
+<marker id="arrow-line" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9 Z" fill="#DEE4EF"/></marker>
+<marker id="arrow-paper" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9 Z" fill="#FCFBF8"/></marker>
+<marker id="arrow-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9 Z" fill="#328FE6"/></marker>
+<marker id="arrow-teal" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9 Z" fill="#17A88A"/></marker>
+<marker id="arrow-purple" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9 Z" fill="#8860DA"/></marker>
+<marker id="arrow-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9 Z" fill="#E99A32"/></marker>
+<marker id="arrow-rose" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9 Z" fill="#DB647E"/></marker>
+<marker id="arrow-navy" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9 Z" fill="#26334F"/></marker>
+<marker id="arrow-white" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9 Z" fill="#FFFFFF"/></marker>
+<marker id="arrow-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9 Z" fill="#27996D"/></marker>
+<filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="4" stdDeviation="7" flood-color="#2B3C68" flood-opacity=".07"/></filter></defs>
+<rect x="0" y="0" width="1000" height="730" rx="20" fill="#FCFCFA" stroke="none" stroke-width="1.6"/>
+<text x="32" y="55" font-size="31" fill="#24304C" font-weight="700" text-anchor="start">Resume the simulation workflow.</text>
+<text x="969" y="713" font-size="13" fill="#62718B" font-weight="700" text-anchor="end">ScienceEvolve</text>
+<rect x="32" y="115" width="936" height="369" rx="12" fill="#FFFFFF" stroke="#DEE4EF" stroke-width="1.6" filter="url(#shadow)"/>
+<rect x="32" y="115" width="936" height="32" rx="12" fill="#EEF2F8" stroke="none" stroke-width="1.6"/>
+<rect x="32" y="134" width="936" height="13" rx="0" fill="#EEF2F8" stroke="none" stroke-width="1.6"/>
+<circle cx="47" cy="131" r="3" fill="#DB647E"/>
+<circle cx="59" cy="131" r="3" fill="#E99A32"/>
+<circle cx="71" cy="131" r="3" fill="#17A88A"/>
+<text x="97" y="137" font-size="15" fill="#62718B" font-weight="400" text-anchor="start" font-family="Menlo, Consolas, monospace">Materials · structure relaxation</text>
+<path d="M192 249 H220" fill="none" stroke="#328FE6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="1" marker-end="url(#arrow-blue)"/>
+<path d="M352 249 H382" fill="none" stroke="#328FE6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="1" marker-end="url(#arrow-blue)"/>
+<path d="M567 249 H614" fill="none" stroke="#62718B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="1" marker-end="url(#arrow-muted)" stroke-dasharray="6 6"/>
+<path d="M746 249 H796" fill="none" stroke="#62718B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="1" marker-end="url(#arrow-muted)" stroke-dasharray="6 6"/>
+<rect x="68" y="216" width="124" height="66" rx="10" fill="#EAF4FF" stroke="#328FE6" stroke-width="1.6"/>
+<g transform="translate(76,224) scale(1.8)" shape-rendering="crispEdges">
+<rect x="7" y="0" width="2" height="2" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6"/>
+<rect x="7.5" y="2" width="1" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="2" y="4" width="12" height="9" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="3" y="5" width="10" height="7" rx="0" fill="#328FE6" stroke="none" stroke-width="1.6"/>
+<rect x="4" y="6" width="8" height="4" rx="0" fill="#E7F8FF" stroke="none" stroke-width="1.6"/>
+<rect x="5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="9.5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="6.5" y="10.5" width="3" height="1" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6"/>
+<rect x="0" y="6" width="2" height="5" rx="0" fill="#328FE6" stroke="none" stroke-width="1.6"/>
+<rect x="14" y="6" width="2" height="5" rx="0" fill="#328FE6" stroke="none" stroke-width="1.6"/>
+<rect x="5" y="13" width="6" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="3" y="14" width="10" height="6" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="4" y="14" width="8" height="5" rx="0" fill="#328FE6" stroke="none" stroke-width="1.6"/>
+<rect x="0" y="14" width="3" height="4" rx="0" fill="#328FE6" stroke="none" stroke-width="1.6"/>
+<rect x="13" y="14" width="3" height="4" rx="0" fill="#328FE6" stroke="none" stroke-width="1.6"/>
+<rect x="0" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6"/>
+<rect x="13" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6"/>
+<rect x="4" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="9" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="3" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="9" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="6" y="15" width="1" height="2" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6"/>
+<rect x="8" y="16" width="2" height="1" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6"/>
+</g>
+<text xmlns="http://www.w3.org/2000/svg" x="112" y="249" font-size="17" fill="#328FE6" font-weight="700" text-anchor="start">Plan</text>
+<rect x="228" y="216" width="124" height="66" rx="10" fill="#EAF4FF" stroke="#328FE6" stroke-width="1.6"/>
+<g transform="translate(236,224) scale(1.8)" shape-rendering="crispEdges">
+<rect x="7" y="0" width="2" height="2" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6"/>
+<rect x="7.5" y="2" width="1" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="2" y="4" width="12" height="9" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="3" y="5" width="10" height="7" rx="0" fill="#328FE6" stroke="none" stroke-width="1.6"/>
+<rect x="4" y="6" width="8" height="4" rx="0" fill="#E7F8FF" stroke="none" stroke-width="1.6"/>
+<rect x="5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="9.5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="6.5" y="10.5" width="3" height="1" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6"/>
+<rect x="0" y="6" width="2" height="5" rx="0" fill="#328FE6" stroke="none" stroke-width="1.6"/>
+<rect x="14" y="6" width="2" height="5" rx="0" fill="#328FE6" stroke="none" stroke-width="1.6"/>
+<rect x="5" y="13" width="6" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="3" y="14" width="10" height="6" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="4" y="14" width="8" height="5" rx="0" fill="#328FE6" stroke="none" stroke-width="1.6"/>
+<rect x="0" y="14" width="3" height="4" rx="0" fill="#328FE6" stroke="none" stroke-width="1.6"/>
+<rect x="13" y="14" width="3" height="4" rx="0" fill="#328FE6" stroke="none" stroke-width="1.6"/>
+<rect x="0" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6"/>
+<rect x="13" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6"/>
+<rect x="4" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="9" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="3" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="9" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="6" y="15" width="1" height="2" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6"/>
+<rect x="8" y="16" width="2" height="1" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6"/>
+</g>
+<text xmlns="http://www.w3.org/2000/svg" x="272" y="249" font-size="17" fill="#328FE6" font-weight="700" text-anchor="start">Coder</text>
+<rect x="390" y="216" width="177" height="66" rx="10" fill="#FFF0F3" stroke="#DB647E" stroke-width="1.6"/>
+<g transform="translate(398,224) scale(1.8)" shape-rendering="crispEdges">
+<rect x="7" y="0" width="2" height="2" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6"/>
+<rect x="7.5" y="2" width="1" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="2" y="4" width="12" height="9" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="3" y="5" width="10" height="7" rx="0" fill="#DB647E" stroke="none" stroke-width="1.6"/>
+<rect x="4" y="6" width="8" height="4" rx="0" fill="#E7F8FF" stroke="none" stroke-width="1.6"/>
+<rect x="5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="9.5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="6.5" y="10.5" width="3" height="1" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6"/>
+<rect x="0" y="6" width="2" height="5" rx="0" fill="#DB647E" stroke="none" stroke-width="1.6"/>
+<rect x="14" y="6" width="2" height="5" rx="0" fill="#DB647E" stroke="none" stroke-width="1.6"/>
+<rect x="5" y="13" width="6" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="3" y="14" width="10" height="6" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="4" y="14" width="8" height="5" rx="0" fill="#DB647E" stroke="none" stroke-width="1.6"/>
+<rect x="0" y="14" width="3" height="4" rx="0" fill="#DB647E" stroke="none" stroke-width="1.6"/>
+<rect x="13" y="14" width="3" height="4" rx="0" fill="#DB647E" stroke="none" stroke-width="1.6"/>
+<rect x="0" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6"/>
+<rect x="13" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6"/>
+<rect x="4" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="9" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="3" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="9" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="6" y="15" width="1" height="2" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6"/>
+<rect x="8" y="16" width="2" height="1" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6"/>
+</g>
+<text xmlns="http://www.w3.org/2000/svg" x="434" y="249" font-size="17" fill="#DB647E" font-weight="700" text-anchor="start">Executor</text>
+<rect x="622" y="216" width="124" height="66" rx="10" fill="#EDF0F7" stroke="#26334F" stroke-width="1.6"/>
+<g transform="translate(630,224) scale(1.8)" shape-rendering="crispEdges">
+<rect x="7" y="0" width="2" height="2" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6"/>
+<rect x="7.5" y="2" width="1" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="2" y="4" width="12" height="9" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="3" y="5" width="10" height="7" rx="0" fill="#26334F" stroke="none" stroke-width="1.6"/>
+<rect x="4" y="6" width="8" height="4" rx="0" fill="#E7F8FF" stroke="none" stroke-width="1.6"/>
+<rect x="5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="9.5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="6.5" y="10.5" width="3" height="1" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6"/>
+<rect x="0" y="6" width="2" height="5" rx="0" fill="#26334F" stroke="none" stroke-width="1.6"/>
+<rect x="14" y="6" width="2" height="5" rx="0" fill="#26334F" stroke="none" stroke-width="1.6"/>
+<rect x="5" y="13" width="6" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="3" y="14" width="10" height="6" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="4" y="14" width="8" height="5" rx="0" fill="#26334F" stroke="none" stroke-width="1.6"/>
+<rect x="0" y="14" width="3" height="4" rx="0" fill="#26334F" stroke="none" stroke-width="1.6"/>
+<rect x="13" y="14" width="3" height="4" rx="0" fill="#26334F" stroke="none" stroke-width="1.6"/>
+<rect x="0" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6"/>
+<rect x="13" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6"/>
+<rect x="4" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="9" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="3" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="9" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="6" y="15" width="1" height="2" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6"/>
+<rect x="8" y="16" width="2" height="1" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6"/>
+</g>
+<text xmlns="http://www.w3.org/2000/svg" x="666" y="249" font-size="17" fill="#26334F" font-weight="700" text-anchor="start">Review</text>
+<rect x="804" y="225" width="126" height="48" rx="10" fill="#FFFFFF" stroke="#26334F" stroke-width="1.6"/>
+<text x="867.0" y="255.3" font-size="18" fill="#26334F" font-weight="700" text-anchor="middle">results.csv</text>
+<circle cx="188" cy="219" r="10" fill="#27996D"/>
+<g transform="translate(181,212) scale(0.5833333333333334)"><path d="M5 12 L10 17 L20 6" fill="none" stroke="#FFFFFF" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></g>
+<circle cx="348" cy="219" r="10" fill="#27996D"/>
+<g transform="translate(341,212) scale(0.5833333333333334)"><path d="M5 12 L10 17 L20 6" fill="none" stroke="#FFFFFF" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></g>
+<rect x="411" y="296" width="143" height="25" rx="7" fill="#FFF0F3" stroke="none" stroke-width="1.6"/>
+<circle cx="422" cy="308" r="3" fill="#DB647E"/>
+<text x="432" y="314" font-size="14" fill="#DB647E" font-weight="700" text-anchor="start">Session lost</text>
+<path d="M479 282 V289 H566 V333 H949 V515 H855 V535" fill="none" stroke="#DB647E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity="1" marker-end="url(#arrow-rose)" stroke-dasharray="6 6"/>
+<rect x="66" y="373" width="302" height="38" rx="9" fill="#E6F8F1" stroke="none" stroke-width="1.6"/>
+<text x="217.0" y="397.95" font-size="17" fill="#17A88A" font-weight="700" text-anchor="middle">Completed steps retained</text>
+<path d="M372 392 H382" fill="none" stroke="#17A88A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="1" marker-end="url(#arrow-teal)"/>
+<path d="M567 392 H614" fill="none" stroke="#17A88A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="1" marker-end="url(#arrow-teal)"/>
+<path d="M746 392 H796" fill="none" stroke="#27996D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="1" marker-end="url(#arrow-green)"/>
+<rect x="390" y="359" width="177" height="66" rx="10" fill="#E6F8F1" stroke="#17A88A" stroke-width="1.6"/>
+<g transform="translate(398,367) scale(1.8)" shape-rendering="crispEdges">
+<rect x="7" y="0" width="2" height="2" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6"/>
+<rect x="7.5" y="2" width="1" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="2" y="4" width="12" height="9" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="3" y="5" width="10" height="7" rx="0" fill="#17A88A" stroke="none" stroke-width="1.6"/>
+<rect x="4" y="6" width="8" height="4" rx="0" fill="#E7F8FF" stroke="none" stroke-width="1.6"/>
+<rect x="5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="9.5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="6.5" y="10.5" width="3" height="1" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6"/>
+<rect x="0" y="6" width="2" height="5" rx="0" fill="#17A88A" stroke="none" stroke-width="1.6"/>
+<rect x="14" y="6" width="2" height="5" rx="0" fill="#17A88A" stroke="none" stroke-width="1.6"/>
+<rect x="5" y="13" width="6" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="3" y="14" width="10" height="6" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="4" y="14" width="8" height="5" rx="0" fill="#17A88A" stroke="none" stroke-width="1.6"/>
+<rect x="0" y="14" width="3" height="4" rx="0" fill="#17A88A" stroke="none" stroke-width="1.6"/>
+<rect x="13" y="14" width="3" height="4" rx="0" fill="#17A88A" stroke="none" stroke-width="1.6"/>
+<rect x="0" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6"/>
+<rect x="13" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6"/>
+<rect x="4" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="9" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="3" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="9" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="6" y="15" width="1" height="2" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6"/>
+<rect x="8" y="16" width="2" height="1" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6"/>
+</g>
+<text xmlns="http://www.w3.org/2000/svg" x="434" y="392" font-size="17" fill="#17A88A" font-weight="700" text-anchor="start">Executor</text>
+<rect x="419" y="436" width="118" height="25" rx="7" fill="#E6F8F1" stroke="none" stroke-width="1.6"/>
+<circle cx="430" cy="448" r="3" fill="#17A88A"/>
+<text x="440" y="454" font-size="14" fill="#17A88A" font-weight="700" text-anchor="start">Resumed</text>
+<rect x="622" y="359" width="124" height="66" rx="10" fill="#FFF3DF" stroke="#E99A32" stroke-width="1.6"/>
+<g transform="translate(630,367) scale(1.8)" shape-rendering="crispEdges">
+<rect x="7" y="0" width="2" height="2" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6"/>
+<rect x="7.5" y="2" width="1" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="2" y="4" width="12" height="9" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="3" y="5" width="10" height="7" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6"/>
+<rect x="4" y="6" width="8" height="4" rx="0" fill="#E7F8FF" stroke="none" stroke-width="1.6"/>
+<rect x="5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="9.5" y="7" width="1.4" height="1.4" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="6.5" y="10.5" width="3" height="1" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1.6"/>
+<rect x="0" y="6" width="2" height="5" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6"/>
+<rect x="14" y="6" width="2" height="5" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6"/>
+<rect x="5" y="13" width="6" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="3" y="14" width="10" height="6" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="4" y="14" width="8" height="5" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6"/>
+<rect x="0" y="14" width="3" height="4" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6"/>
+<rect x="13" y="14" width="3" height="4" rx="0" fill="#E99A32" stroke="none" stroke-width="1.6"/>
+<rect x="0" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6"/>
+<rect x="13" y="18" width="3" height="1" rx="0" fill="#AFC6DC" stroke="none" stroke-width="1.6"/>
+<rect x="4" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="9" y="20" width="3" height="2" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="3" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<rect x="9" y="22" width="4" height="1" rx="0" fill="#24304C" stroke="none" stroke-width="1.6"/>
+<path d="M6 16 L7.5 17.5 L10 15" fill="none" stroke="#FFFFFF" stroke-width="0.7" stroke-linecap="round" stroke-linejoin="round" opacity="1"/>
+</g>
+<text xmlns="http://www.w3.org/2000/svg" x="666" y="392" font-size="17" fill="#E99A32" font-weight="700" text-anchor="start">Review</text>
+<rect x="804" y="368" width="126" height="48" rx="10" fill="#FFFFFF" stroke="#27996D" stroke-width="1.6"/>
+<text x="867.0" y="398.3" font-size="18" fill="#27996D" font-weight="700" text-anchor="middle">results.csv</text>
+<g transform="translate(900,380) scale(0.875)"><path d="M5 12 L10 17 L20 6" fill="none" stroke="#27996D" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></g>
+<rect x="32" y="542" width="936" height="155" rx="15" fill="#26334F" stroke="none" stroke-width="1.6"/>
+<g transform="translate(57,573) scale(1.7916666666666667)"><path d="M12 2 L21 6 V12 Q21 18 12 23 Q3 18 3 12 V6 Z M7 12 L11 16 L17 9" fill="none" stroke="#8FE0C3" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></g>
+<text x="115" y="594" font-size="27" fill="#FFFFFF" font-weight="700" text-anchor="start">System Runtime</text>
+<text x="115" y="631" font-size="20" fill="#8FE0C3" font-weight="700" text-anchor="start">Stable execution</text>
+<g transform="translate(460,567) scale(1.5833333333333333)"><path d="M20 9 A9 9 0 0 0 4 6 L2 9 M2 3 V9 H8 M4 15 A9 9 0 0 0 16 21 L22 16 M16 16 H22 V22" fill="none" stroke="#8FE0C3" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></g>
+<text x="479" y="650" font-size="21" fill="#8FE0C3" font-weight="700" text-anchor="middle">Resume</text>
+<g transform="translate(645,567) scale(1.5833333333333333)"><path d="M6 2 H15 L21 8 V22 H4 V2 Z M15 2 V8 H21 M8 13 H17 M8 17 H17" fill="none" stroke="#CEB6FF" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></g>
+<text x="664" y="650" font-size="21" fill="#CEB6FF" font-weight="700" text-anchor="middle">Checkpoint</text>
+<g transform="translate(838,567) scale(1.5833333333333333)"><path d="M10 2 A8 8 0 1 1 9.9 2 M16 16 L23 23" fill="none" stroke="#F2B8C6" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></g>
+<text x="857" y="650" font-size="21" fill="#F2B8C6" font-weight="700" text-anchor="middle">Detect</text>
+<path d="M479 542 V468" fill="none" stroke="#17A88A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="1" marker-end="url(#arrow-teal)"/>
+<g xmlns="http://www.w3.org/2000/svg" data-harness-for="Plan" data-harness="Codex"><rect x="112" y="257" width="55" height="16" rx="4" fill="#EAF4FF" /><text x="139.5" y="268.7" fill="#328FE6" font-size="10.5" font-weight="700" text-anchor="middle" font-family="Menlo, Consolas, monospace">Codex</text></g>
+<g xmlns="http://www.w3.org/2000/svg" data-harness-for="Coder" data-harness="Codex"><rect x="272" y="257" width="55" height="16" rx="4" fill="#EAF4FF" /><text x="299.5" y="268.7" fill="#328FE6" font-size="10.5" font-weight="700" text-anchor="middle" font-family="Menlo, Consolas, monospace">Codex</text></g>
+<g xmlns="http://www.w3.org/2000/svg" data-harness-for="Executor" data-harness="DSH"><rect x="434" y="257" width="55" height="16" rx="4" fill="#FFF3DF" /><text x="461.5" y="268.7" fill="#B77522" font-size="10.5" font-weight="700" text-anchor="middle" font-family="Menlo, Consolas, monospace">DSH</text></g>
+<g xmlns="http://www.w3.org/2000/svg" data-harness-for="Review" data-harness="DSH"><rect x="666" y="257" width="55" height="16" rx="4" fill="#FFF3DF" /><text x="693.5" y="268.7" fill="#B77522" font-size="10.5" font-weight="700" text-anchor="middle" font-family="Menlo, Consolas, monospace">DSH</text></g>
+<g xmlns="http://www.w3.org/2000/svg" data-harness-for="Executor" data-harness="DSH"><rect x="434" y="400" width="55" height="16" rx="4" fill="#FFF3DF" /><text x="461.5" y="411.7" fill="#B77522" font-size="10.5" font-weight="700" text-anchor="middle" font-family="Menlo, Consolas, monospace">DSH</text></g>
+<g xmlns="http://www.w3.org/2000/svg" data-harness-for="Review" data-harness="DSH"><rect x="666" y="400" width="55" height="16" rx="4" fill="#FFF3DF" /><text x="693.5" y="411.7" fill="#B77522" font-size="10.5" font-weight="700" text-anchor="middle" font-family="Menlo, Consolas, monospace">DSH</text></g>
+</svg>

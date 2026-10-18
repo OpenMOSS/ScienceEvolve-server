@@ -1,0 +1,93 @@
+[
+  {
+    "id": "aris",
+    "name": "ARIS",
+    "paper": "https://arxiv.org/abs/2605.03042",
+    "title": "ARIS: Autonomous Research via Adversarial Multi-Agent Collaboration",
+    "officialRepository": "https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep"
+  },
+  {
+    "id": "metaharness",
+    "name": "Meta-Harness",
+    "paper": "https://arxiv.org/abs/2603.28052",
+    "title": "Meta-Harness: End-to-End Optimization of Model Harnesses",
+    "officialRepository": "https://github.com/stanford-iris-lab/meta-harness"
+  },
+  {
+    "id": "autoresearch",
+    "name": "autoresearch",
+    "paper": null,
+    "title": null,
+    "officialRepository": "https://github.com/karpathy/autoresearch"
+  },
+  {
+    "id": "funsearch",
+    "name": "FunSearch",
+    "paper": "https://www.nature.com/articles/s41586-023-06924-6",
+    "title": "Mathematical discoveries from program search with large language models",
+    "officialRepository": "https://github.com/google-deepmind/funsearch"
+  },
+  {
+    "id": "agent-laboratory",
+    "name": "Agent Laboratory",
+    "paper": "https://arxiv.org/abs/2501.04227",
+    "title": "Agent Laboratory: Using LLM Agents as Research Assistants",
+    "officialRepository": "https://github.com/SamuelSchmidgall/AgentLaboratory"
+  },
+  {
+    "id": "sciagents",
+    "name": "SciAgents",
+    "paper": "https://arxiv.org/abs/2409.05556",
+    "title": "SciAgents: Automating scientific discovery through multi-agent intelligent graph reasoning",
+    "officialRepository": "https://github.com/lamm-mit/SciAgentsDiscovery"
+  },
+  {
+    "id": "robin",
+    "name": "Robin",
+    "paper": "https://arxiv.org/abs/2505.13400v1",
+    "title": "Robin: A multi-agent system for automating scientific discovery",
+    "officialRepository": "https://github.com/Future-House/robin"
+  },
+  {
+    "id": "co-scientist",
+    "name": "Google AI co-scientist",
+    "paper": "https://arxiv.org/abs/2502.18864v1",
+    "title": "Towards an AI co-scientist",
+    "officialRepository": null
+  },
+  {
+    "id": "biomni",
+    "name": "Biomni A1 / E1",
+    "paper": "https://www.biorxiv.org/content/10.1101/2025.05.30.656746v1",
+    "title": "Biomni: A General-Purpose Biomedical AI Agent",
+    "officialRepository": "https://github.com/snap-stanford/Biomni"
+  },
+  {
+    "id": "agentrxiv",
+    "name": "AgentRxiv",
+    "paper": "https://arxiv.org/abs/2503.18102",
+    "title": "AgentRxiv: Towards Collaborative Autonomous Research",
+    "officialRepository": "https://github.com/SamuelSchmidgall/AgentLaboratory"
+  },
+  {
+    "id": "rrsi",
+    "name": "RRSI",
+    "paper": "https://arxiv.org/abs/2609.24972",
+    "title": "RRSI: Regularized Recursive Self-Improvement of Agent Harnesses",
+    "officialRepository": "https://github.com/google-research/rrsi"
+  },
+  {
+    "id": "drugevolve",
+    "name": "DrugEvolve",
+    "paper": "https://www.biorxiv.org/content/10.64898/2026.08.16.745117v1",
+    "title": "An AI System for Autonomous Algorithm Evolution in Drug Development",
+    "officialRepository": "https://github.com/GAIR-NLP/DrugEvolve"
+  },
+  {
+    "id": "scientist-two",
+    "name": "ScientistTwo",
+    "paper": "https://arxiv.org/abs/2609.19644v1",
+    "title": "ScientistTwo: Pioneering the Human Knowledge Frontier with Autonomous AI",
+    "officialRepository": null
+  }
+]

@@ -1,0 +1,588 @@
+{
+  "schemaVersion": 2,
+  "name": "AgentRxiv：完整实验室与跨实验室累计研究",
+  "agents": {
+    "main": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-agentrxiv"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "按Skill和上游LaboratoryWorkflow完整执行七个子阶段：literature review→plan formulation→data preparation→running experiments→results interpretation→report writing→report refinement。每阶段使用原角色轮转、命令与终止条件，默认max_steps=100，超限为失败；原human_in_loop的各阶段反馈可重复当前阶段。阶段结束保存共享产物并清空该阶段角色局部对话，不能跨阶段混入废弃上下文。\n实验阶段执行完整MLESolver：initial_solve后默认mlesolver_max_steps=3中的其余2次solve；每solve按原试验数/score筛选/严格改善/best_codes容量1/反思流程通过code_*角色完成。写作执行完整PaperSolver：initial_solve后默认5次solve；每solve原候选数、历史、best_report容量1、编译及加权reward均保留。调用某个底层原子工具可以，禁止调用LaboratoryWorkflow.perform_research或外部ai_lab_repo CLI整管线。\n最终三位reviewer按原不同persona各审一次，按原review_override/review_total_steps或PhD/y-n/人工反馈决定终止或回plan；回退时保存prev_report/prev_exp_results/prev_results_code/prev_interpretation，重置plan起全部phase_status，保留文献。默认review_override=true且review_total_steps=0按原完成，不擅加2轮评审；用户配置时按原分支执行。human分支确实读取用户回答，不复制上游丢弃input返回值的实现bug。完整产物、原始代码/指标、PDF、README及状态交付后完成。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。\n本例启用agentRxiv=true。必须阅读Skill的跨实验室/跨论文扩展，在文献检索纳入其他实验室预印本、读取全文并综合，终稿发布后开始配置的下一篇研究。\n每个项目代表一个独立实验室，共享Task指定archive URL。archive角色处理真实检索/全文/5句摘要/发布与回读；其他实验室可独立并发运行，本workflow不承载服务。每轮保留完整单lab科研流程、paper索引/前序证据及成功终稿。完成配置num_papers的所有研究才结束；必须把前序/其他lab资料真正传入本轮lit_review/planning。",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "phd": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-agentrxiv"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "按上游PhDStudentAgent的当前phase_prompt与原共享状态执行：文献搜索/阅读/纳入、计划对话、结果解释或是否回到实验的决策。保留原命令输出与DIALOGUE/PLAN/INTERPRETATION等完成标记。不得提前代替另一角色完成其回合。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。\n本例启用agentRxiv=true。必须阅读Skill的跨实验室/跨论文扩展，在文献检索纳入其他实验室预印本、读取全文并综合，终稿发布后开始配置的下一篇研究。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "postdoc": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-agentrxiv"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "按上游PostdocAgent在plan formulation/results interpretation阶段发言，读取本阶段完整有序dialogue与共享研究状态，提出具体计划或解释反馈，交Main安排PhD回应。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。\n本例启用agentRxiv=true。必须阅读Skill的跨实验室/跨论文扩展，在文献检索纳入其他实验室预印本、读取全文并综合，终稿发布后开始配置的下一篇研究。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "ml_engineer": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-agentrxiv"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "按原MLEngineerAgent完成数据准备对话、代码/数据协议与任务实验输入，保存dataset_code、文献摘要和计划；使用真实数据与环境，交Main安排SW工程师/执行反馈。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。\n本例启用agentRxiv=true。必须阅读Skill的跨实验室/跨论文扩展，在文献检索纳入其他实验室预印本、读取全文并综合，终稿发布后开始配置的下一篇研究。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "sw_engineer": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-agentrxiv"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "按原SWEngineerAgent的数据准备职责检查/执行所需代码、工具和依赖，原反馈交ML工程师；数据成功准备才产生本阶段终止标记，不用伪数据填充。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。\n本例启用agentRxiv=true。必须阅读Skill的跨实验室/跨论文扩展，在文献检索纳入其他实验室预印本、读取全文并综合，终稿发布后开始配置的下一篇研究。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "professor": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-agentrxiv"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "按原ProfessorAgent生成基于实际代码、结果和论文的项目README与最终整理文件。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。\n本例启用agentRxiv=true。必须阅读Skill的跨实验室/跨论文扩展，在文献检索纳入其他实验室预印本、读取全文并综合，终稿发布后开始配置的下一篇研究。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "code_propose": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-agentrxiv"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "执行MLESolver原system_prompt、phase_prompt、history_str及commands协议。初始化用REPLACE直到合法可评分；solve从best_codes随机选父本，产生EDIT/REPLACE，保持原历史窗口2、min_gen_trials=1（从0计数，至少2次尝试且存在有效score才结束本solve）。代码原文与命令落盘交Main调度执行，不自行伪造score。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。\n本例启用agentRxiv=true。必须阅读Skill的跨实验室/跨论文扩展，在文献检索纳入其他实验室预印本、读取全文并综合，终稿发布后开始配置的下一篇研究。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "code_execute": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-agentrxiv"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "按原Replace/Edit解析及process_command执行实际Python候选；出错按GLOBAL_REPAIR_ATTEMPTS和code_repair流程修复/再执行，保留每次错误、修复版本、结果。无效操作不能修改best_codes；真实成功才请求code_reward。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。\n本例启用agentRxiv=true。必须阅读Skill的跨实验室/跨论文扩展，在文献检索纳入其他实验室预印本、读取全文并综合，终稿发布后开始配置的下一篇研究。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "code_reward": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-agentrxiv"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "使用上游mlesolver.get_score原提示审查计划、代码与真实输出，最多3次结构化评分解析尝试；输出SCORE 0–1与原文。该分数是计划遵循度模型评价，不能标为任务准确率。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。\n本例启用agentRxiv=true。必须阅读Skill的跨实验室/跨论文扩展，在文献检索纳入其他实验室预印本、读取全文并综合，终稿发布后开始配置的下一篇研究。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "code_reflect": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-agentrxiv"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "使用原reflect_code/reflection机制比较被替换的代码与真实输出并总结反思，保留到code_reflect供后续生成使用，不能跳过best替换时的反思调用。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。\n本例启用agentRxiv=true。必须阅读Skill的跨实验室/跨论文扩展，在文献检索纳入其他实验室预印本、读取全文并综合，终稿发布后开始配置的下一篇研究。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "paper_propose": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-agentrxiv"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "执行PaperSolver完整初稿scaffold及逐节填充，再按原Arxiv/PaperEdit/PaperReplace操作搜索稿件；初稿含scaffold、abstract、introduction、related work、background、methods、experimental setup、results、discussion，遵循原placeholder/package限制。优化每solve至少3次尝试（min_gen_trials=2从0计），保留历史10。生成实际LaTeX和引用操作交执行，不能用普通报告替代。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。\n本例启用agentRxiv=true。必须阅读Skill的跨实验室/跨论文扩展，在文献检索纳入其他实验室预印本、读取全文并综合，终稿发布后开始配置的下一篇研究。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "paper_execute": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-agentrxiv"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "执行原PaperSolver命令：真实文献工具、编辑/替换、LaTeX编译。失败回原稿并输出错误；成功根据scoring标志交paper_reward或初稿scoring=false的原0分占位。compile_pdf=false是用户明确可选分支，默认true不可自动跳过编译。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。\n本例启用agentRxiv=true。必须阅读Skill的跨实验室/跨论文扩展，在文献检索纳入其他实验室预印本、读取全文并综合，终稿发布后开始配置的下一篇研究。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "paper_reward": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-agentrxiv"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "按agents.get_score原完整review JSON维度实际评价稿件/计划，保留原解析重试和加权归一化公式（从原函数读取，执行计算脚本），不能改成凭感觉一个总分。输出完整原文、各项值、最终score与有效性。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。\n本例启用agentRxiv=true。必须阅读Skill的跨实验室/跨论文扩展，在文献检索纳入其他实验室预印本、读取全文并综合，终稿发布后开始配置的下一篇研究。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "review_1": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-agentrxiv"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "按ReviewersAgent的第1种原persona独立评审：严格公平，关注实验和研究insight；使用agents.get_score完整维度与公式。只读当前稿件/计划，不读其他两位的本轮意见。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。\n本例启用agentRxiv=true。必须阅读Skill的跨实验室/跨论文扩展，在文献检索纳入其他实验室预印本、读取全文并综合，终稿发布后开始配置的下一篇研究。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "review_2": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-agentrxiv"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "按ReviewersAgent的第2种原persona独立评审：严格批判但公平，关注领域影响；使用agents.get_score完整维度与公式。只读当前稿件/计划，不读其他两位本轮意见。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。\n本例启用agentRxiv=true。必须阅读Skill的跨实验室/跨论文扩展，在文献检索纳入其他实验室预印本、读取全文并综合，终稿发布后开始配置的下一篇研究。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "review_3": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-agentrxiv"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "按ReviewersAgent的第3种原persona独立评审：严格公平且开放，关注新颖想法；使用agents.get_score完整维度与公式。只读当前稿件/计划，不读其他两位本轮意见。\n\n读取所配Skill中的完整执行协议。Task与research workflow分开；本方法没有Evolver，不调用apply_workflow。缺少数据、工具或权限时交Main明确阻断，不省略阶段或编造结果。产物、原始日志、失败状态必须落盘，恢复时核对已有状态防止重复执行。具体模型/工具可按需求等价替换，不能删除能力、减少上游默认步骤/候选数或擅自改停止规则。\n本例启用agentRxiv=true。必须阅读Skill的跨实验室/跨论文扩展，在文献检索纳入其他实验室预印本、读取全文并综合，终稿发布后开始配置的下一篇研究。",
+      "permission": "workspace",
+      "webSearch": false,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "archive": {
+      "model": "nex-agi/Nex-N2-Pro",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-agentrxiv"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "instructions": "阅读Skill扩展，使用archive.py实际查询共享archive top5、下载PDF提取全文，模型生成每篇5句摘要、保存AgentRxiv:ID来源及缓存；按文献角色要求提供全文。完整终稿经验证后发布共享uploads，再触发update并回读确认哈希；把回执交Main。不得编造其他实验室结果或把本地写文件等同上传成功。",
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    }
+  },
+  "orchestration": {
+    "agents": [
+      {
+        "name": "main",
+        "template": "main"
+      },
+      {
+        "name": "phd",
+        "template": "general"
+      },
+      {
+        "name": "postdoc",
+        "template": "general"
+      },
+      {
+        "name": "ml_engineer",
+        "template": "general"
+      },
+      {
+        "name": "sw_engineer",
+        "template": "general"
+      },
+      {
+        "name": "professor",
+        "template": "general"
+      },
+      {
+        "name": "code_propose",
+        "template": "general"
+      },
+      {
+        "name": "code_execute",
+        "template": "general"
+      },
+      {
+        "name": "code_reward",
+        "template": "general"
+      },
+      {
+        "name": "code_reflect",
+        "template": "general"
+      },
+      {
+        "name": "paper_propose",
+        "template": "general"
+      },
+      {
+        "name": "paper_execute",
+        "template": "general"
+      },
+      {
+        "name": "paper_reward",
+        "template": "general"
+      },
+      {
+        "name": "review_1",
+        "template": "general"
+      },
+      {
+        "name": "review_2",
+        "template": "general"
+      },
+      {
+        "name": "review_3",
+        "template": "general"
+      },
+      {
+        "name": "archive",
+        "template": "general"
+      }
+    ],
+    "input": {
+      "source": "input",
+      "target": "main"
+    },
+    "routes": {
+      "main": [
+        {
+          "target": "phd",
+          "kind": "weak"
+        },
+        {
+          "target": "postdoc",
+          "kind": "weak"
+        },
+        {
+          "target": "ml_engineer",
+          "kind": "weak"
+        },
+        {
+          "target": "sw_engineer",
+          "kind": "weak"
+        },
+        {
+          "target": "professor",
+          "kind": "weak"
+        },
+        {
+          "target": "code_propose",
+          "kind": "weak"
+        },
+        {
+          "target": "code_execute",
+          "kind": "weak"
+        },
+        {
+          "target": "code_reward",
+          "kind": "weak"
+        },
+        {
+          "target": "code_reflect",
+          "kind": "weak"
+        },
+        {
+          "target": "paper_propose",
+          "kind": "weak"
+        },
+        {
+          "target": "paper_execute",
+          "kind": "weak"
+        },
+        {
+          "target": "paper_reward",
+          "kind": "weak"
+        },
+        {
+          "target": "review_1",
+          "kind": "weak"
+        },
+        {
+          "target": "review_2",
+          "kind": "weak"
+        },
+        {
+          "target": "review_3",
+          "kind": "weak"
+        },
+        {
+          "target": "archive",
+          "kind": "weak"
+        }
+      ],
+      "phd": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "postdoc": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "ml_engineer": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "sw_engineer": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "professor": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "code_propose": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "code_execute": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "code_reward": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "code_reflect": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "paper_propose": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "paper_execute": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "paper_reward": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "review_1": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "review_2": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "review_3": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "archive": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ]
+    },
+    "decisionPlans": {
+      "main": "遵循完整协议、真实状态和阶段门槛调度。",
+      "phd": "按完整协议执行当前职责并交 main。",
+      "postdoc": "按完整协议执行当前职责并交 main。",
+      "ml_engineer": "按完整协议执行当前职责并交 main。",
+      "sw_engineer": "按完整协议执行当前职责并交 main。",
+      "professor": "按完整协议执行当前职责并交 main。",
+      "code_propose": "按完整协议执行当前职责并交 main。",
+      "code_execute": "按完整协议执行当前职责并交 main。",
+      "code_reward": "按完整协议执行当前职责并交 main。",
+      "code_reflect": "按完整协议执行当前职责并交 main。",
+      "paper_propose": "按完整协议执行当前职责并交 main。",
+      "paper_execute": "按完整协议执行当前职责并交 main。",
+      "paper_reward": "按完整协议执行当前职责并交 main。",
+      "review_1": "按完整协议执行当前职责并交 main。",
+      "review_2": "按完整协议执行当前职责并交 main。",
+      "review_3": "按完整协议执行当前职责并交 main。",
+      "archive": "完成真实共享archive读写后返回main。"
+    },
+    "allowUserIntervention": true,
+    "allowMainReconfiguration": false,
+    "termination": {
+      "agent": "main",
+      "condition": "原流程规定的终点已达到且交付完整；持续运行方法仅在用户明确要求结束时完成。环境阻断不能当成功。",
+      "decisionBy": "main",
+      "automatic": false
+    },
+    "resultFormat": {
+      "presets": [
+        "可复现证据"
+      ],
+      "custom": "完整状态、候选/版本、原始结果、分析及终止状态，路径见Skill。"
+    }
+  },
+  "git": {
+    "enabled": false
+  }
+}

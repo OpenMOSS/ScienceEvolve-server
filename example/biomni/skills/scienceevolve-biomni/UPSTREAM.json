@@ -1,0 +1,1131 @@
+{
+  "repository": "https://github.com/snap-stanford/Biomni",
+  "commit": "400c1f366b96a35ca253e13c9b06c5076af41d65",
+  "files": [
+    {
+      "path": "upstream/.env.example",
+      "upstream_path": ".env.example",
+      "sha256": "7bde92c9c0719cfafe2ee6e596b1e420758c557653dc984d8bca412f0bd4843d"
+    },
+    {
+      "path": "upstream/DETAILS.md",
+      "upstream_path": "DETAILS.md",
+      "sha256": "344597b04e67c5aa2fc5fa902ea7d7051e76b3124822dcee010032dc0e6be49b"
+    },
+    {
+      "path": "upstream/LICENSE",
+      "upstream_path": "LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "path": "upstream/MANIFEST.in",
+      "upstream_path": "MANIFEST.in",
+      "sha256": "50054a786aaf58c593f24c0f0e4267bdbf3d0f43464dc4a7df28cf8706e6a7b2"
+    },
+    {
+      "path": "upstream/README.md",
+      "upstream_path": "README.md",
+      "sha256": "22be688843a08a1f7f0b243b6bb72e452f9aad82a8602e19716a84aec4863281"
+    },
+    {
+      "path": "upstream/biomni/__init__.py",
+      "upstream_path": "biomni/__init__.py",
+      "sha256": "bf7c79a01931c0a24464bbfad90a9298fde2a8d28bb5982b5997c7f1e1739508"
+    },
+    {
+      "path": "upstream/biomni/agent/__init__.py",
+      "upstream_path": "biomni/agent/__init__.py",
+      "sha256": "68858e830e5b46b3cd33d35461659490da5b584c9743df955d51f01bdf248139"
+    },
+    {
+      "path": "upstream/biomni/agent/a1.py",
+      "upstream_path": "biomni/agent/a1.py",
+      "sha256": "ffb67055ebc0ec645128026d797a29223232567c1d75f87f75947bf720da92bf"
+    },
+    {
+      "path": "upstream/biomni/agent/env_collection.py",
+      "upstream_path": "biomni/agent/env_collection.py",
+      "sha256": "2c02fca7b8c0f18f752aebab547e5138877792aa96a67b2f6355f089156f7d73"
+    },
+    {
+      "path": "upstream/biomni/agent/function_generator.py",
+      "upstream_path": "biomni/agent/function_generator.py",
+      "sha256": "0968026f58848d2510ceb587c0f1522612eaed927f22c689570bfff37779c5d9"
+    },
+    {
+      "path": "upstream/biomni/agent/qa_llm.py",
+      "upstream_path": "biomni/agent/qa_llm.py",
+      "sha256": "d127ffc4ce5e013df31d165aa2a3a22549bca5fec0179a39077854594a1accfd"
+    },
+    {
+      "path": "upstream/biomni/agent/react.py",
+      "upstream_path": "biomni/agent/react.py",
+      "sha256": "bc6f1202e9c65419642d71093bffd7362a976c3b5ceddba770568ba8f0029ae5"
+    },
+    {
+      "path": "upstream/biomni/biorxiv_scripts/extract_biorxiv_tasks.py",
+      "upstream_path": "biomni/biorxiv_scripts/extract_biorxiv_tasks.py",
+      "sha256": "7223defdc0d5a2a1afb001f665b118606597f62abdd2932b99972baee2df2e24"
+    },
+    {
+      "path": "upstream/biomni/biorxiv_scripts/generate_function.py",
+      "upstream_path": "biomni/biorxiv_scripts/generate_function.py",
+      "sha256": "f2a12a5587894f2a02466ab24542c49dd6705e900058d9e0ee18b5caa1e1c000"
+    },
+    {
+      "path": "upstream/biomni/biorxiv_scripts/process_all_subjects.py",
+      "upstream_path": "biomni/biorxiv_scripts/process_all_subjects.py",
+      "sha256": "b1e492987107738b6a89b180c7ec340df319954846737e7755fce6c6aea69163"
+    },
+    {
+      "path": "upstream/biomni/config.py",
+      "upstream_path": "biomni/config.py",
+      "sha256": "cca67e90a8167ab4bfc3307f8b08a50da11e1a87b5d2c5ae6597f740cc4dac39"
+    },
+    {
+      "path": "upstream/biomni/env_desc.py",
+      "upstream_path": "biomni/env_desc.py",
+      "sha256": "5e1ff01780eaa936088d4c149fa9eba4df5206aec9183f8c974127c0cbefa6b2"
+    },
+    {
+      "path": "upstream/biomni/env_desc_cm.py",
+      "upstream_path": "biomni/env_desc_cm.py",
+      "sha256": "3d64e48e5c164ff1c634d3255018993f570fc92c62928233d87edc5cc3333f71"
+    },
+    {
+      "path": "upstream/biomni/eval/__init__.py",
+      "upstream_path": "biomni/eval/__init__.py",
+      "sha256": "c331df4462fc4bda6174cf068ae510000e8c3b1c74b92246da093bc0b25d049b"
+    },
+    {
+      "path": "upstream/biomni/eval/biomni_eval1.py",
+      "upstream_path": "biomni/eval/biomni_eval1.py",
+      "sha256": "440dae783ed875fe9d39aa1d9a35ac041929af9f387b760229309f47477869f8"
+    },
+    {
+      "path": "upstream/biomni/know_how/__init__.py",
+      "upstream_path": "biomni/know_how/__init__.py",
+      "sha256": "894e37f78b0d6bf2ca0c24b2b70c8828dc744656e8d157c2e4a66270963429fc"
+    },
+    {
+      "path": "upstream/biomni/know_how/loader.py",
+      "upstream_path": "biomni/know_how/loader.py",
+      "sha256": "32a224d2756af41370a56516e40a574047a5e2c3e4a2deb8d9e2a41262bebc0c"
+    },
+    {
+      "path": "upstream/biomni/know_how/resource/CRISPick_download_links.txt",
+      "upstream_path": "biomni/know_how/resource/CRISPick_download_links.txt",
+      "sha256": "5843d3e94b90fdefc5c392930ae7ede659e53016a389de9f57e1da1660796eff"
+    },
+    {
+      "path": "upstream/biomni/know_how/resource/addgene_grna_sequences.csv",
+      "upstream_path": "biomni/know_how/resource/addgene_grna_sequences.csv",
+      "sha256": "937773efb95ee781c63e99c7de44c4db23490bf568270a8c6170f4b28c89d11b"
+    },
+    {
+      "path": "upstream/biomni/know_how/sgRNA_design_guide.md",
+      "upstream_path": "biomni/know_how/sgRNA_design_guide.md",
+      "sha256": "adad89c9d251edb686cdc40bd322cf63823fff6653858755efae3d469017064c"
+    },
+    {
+      "path": "upstream/biomni/know_how/single_cell_annotation.md",
+      "upstream_path": "biomni/know_how/single_cell_annotation.md",
+      "sha256": "28bcba41294ef46522644e23bcf4cedb9c232cf257ddab76c72e8b577d7fdca4"
+    },
+    {
+      "path": "upstream/biomni/llm.py",
+      "upstream_path": "biomni/llm.py",
+      "sha256": "f4405c78e8a138cb41460a161026439b4be8d78a12e2d34db20db9555f67c875"
+    },
+    {
+      "path": "upstream/biomni/model/__init__.py",
+      "upstream_path": "biomni/model/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "upstream/biomni/model/retriever.py",
+      "upstream_path": "biomni/model/retriever.py",
+      "sha256": "bcec2ed858530f25360840f007c858e4515ae129c260c40d4cbcc70344c754ec"
+    },
+    {
+      "path": "upstream/biomni/task/__init__.py",
+      "upstream_path": "biomni/task/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "upstream/biomni/task/base_task.py",
+      "upstream_path": "biomni/task/base_task.py",
+      "sha256": "8d1b07694d5bb4deb9b81877beecc35e4e3a7394156322c2b180f107c7a2dc6c"
+    },
+    {
+      "path": "upstream/biomni/task/hle.py",
+      "upstream_path": "biomni/task/hle.py",
+      "sha256": "0bf3ff834c438276719dbebf08a02a90554618bc8f16e2135e544cf0d1dd164c"
+    },
+    {
+      "path": "upstream/biomni/task/lab_bench.py",
+      "upstream_path": "biomni/task/lab_bench.py",
+      "sha256": "bab41cecce76e3edd418da037deceb36570308f7ac0b8108e531c8c4c6ca2d2c"
+    },
+    {
+      "path": "upstream/biomni/tool/__init__.py",
+      "upstream_path": "biomni/tool/__init__.py",
+      "sha256": "b7d836eeabb0e4259ff2823f89751fd778ecf3ea2e70d9e0ba2b7dce1013814d"
+    },
+    {
+      "path": "upstream/biomni/tool/biochemistry.py",
+      "upstream_path": "biomni/tool/biochemistry.py",
+      "sha256": "9b8ea7ea1f712553025bdaf16f981d8bec62df6004efd0954ed90f33a394e018"
+    },
+    {
+      "path": "upstream/biomni/tool/bioengineering.py",
+      "upstream_path": "biomni/tool/bioengineering.py",
+      "sha256": "809899ddf7ac1d2b9c7ac1df2955d93818f64ea9609609e78376992234d9d65f"
+    },
+    {
+      "path": "upstream/biomni/tool/bioimaging.py",
+      "upstream_path": "biomni/tool/bioimaging.py",
+      "sha256": "371cd2ce9297b22de1465e7b80105ea90fc4b1b227dd53bf61e9ac0f99086a4c"
+    },
+    {
+      "path": "upstream/biomni/tool/biophysics.py",
+      "upstream_path": "biomni/tool/biophysics.py",
+      "sha256": "7eb57d570d516ab22c089f0ff22141d3bb4f0fa73875208f32bcf375a0cb4127"
+    },
+    {
+      "path": "upstream/biomni/tool/cancer_biology.py",
+      "upstream_path": "biomni/tool/cancer_biology.py",
+      "sha256": "f0b7551bf8dccbe0310558a960c724c0ffaf39ea54785664089a7d3b43d69a36"
+    },
+    {
+      "path": "upstream/biomni/tool/cell_biology.py",
+      "upstream_path": "biomni/tool/cell_biology.py",
+      "sha256": "45f8edb43c079cab4727211ae6cecbf603577b4d886cd05295fabdd561a763af"
+    },
+    {
+      "path": "upstream/biomni/tool/database.py",
+      "upstream_path": "biomni/tool/database.py",
+      "sha256": "7c0f8f000176e0d6f8b9ec956b01f8e8012a6079077e793eff6543106517f8e8"
+    },
+    {
+      "path": "upstream/biomni/tool/example_mcp_tools/pubmed_mcp.py",
+      "upstream_path": "biomni/tool/example_mcp_tools/pubmed_mcp.py",
+      "sha256": "8468f76c812da89f793758732f3e5182ca00b74740a4b99f5485659677bdf5f7"
+    },
+    {
+      "path": "upstream/biomni/tool/genetics.py",
+      "upstream_path": "biomni/tool/genetics.py",
+      "sha256": "e8afb4cd575c54b6277cc5a704fc060e9cdf8d0e6a6d72ea9c28d15267ec1e44"
+    },
+    {
+      "path": "upstream/biomni/tool/genomics.py",
+      "upstream_path": "biomni/tool/genomics.py",
+      "sha256": "74714f05594d4655e946107628114339452cab8eecbb4005feccea49be2906c5"
+    },
+    {
+      "path": "upstream/biomni/tool/glycoengineering.py",
+      "upstream_path": "biomni/tool/glycoengineering.py",
+      "sha256": "ed3726d318f239e98183a359f18bcd341f4159ef2e400322c6141f77dcd2aff2"
+    },
+    {
+      "path": "upstream/biomni/tool/immunology.py",
+      "upstream_path": "biomni/tool/immunology.py",
+      "sha256": "ef97b6bfdd52a935078e0ea4cdd8641edb2d4c1ff7f77f206b551a293fb6bdb4"
+    },
+    {
+      "path": "upstream/biomni/tool/lab_automation.py",
+      "upstream_path": "biomni/tool/lab_automation.py",
+      "sha256": "cd93f22b8227d22438109a522881a7b0ae3d7fe14844819afecfb4fc8a4ecc7c"
+    },
+    {
+      "path": "upstream/biomni/tool/literature.py",
+      "upstream_path": "biomni/tool/literature.py",
+      "sha256": "c1371a87943f64d4b74d7ba02b51d06cdc370509fda8d06584af7f10c84b0e12"
+    },
+    {
+      "path": "upstream/biomni/tool/microbiology.py",
+      "upstream_path": "biomni/tool/microbiology.py",
+      "sha256": "97ee7972ad15a54aa5f5960797069bfb698e4127269bf091c513ce0cc8a814c3"
+    },
+    {
+      "path": "upstream/biomni/tool/molecular_biology.py",
+      "upstream_path": "biomni/tool/molecular_biology.py",
+      "sha256": "de47e1dc0013cd6e8d2941d8945835d585f938e486a69bb2ba3333403a3efba4"
+    },
+    {
+      "path": "upstream/biomni/tool/pathology.py",
+      "upstream_path": "biomni/tool/pathology.py",
+      "sha256": "311595e67205a2f7d6e9a5b49c3eca7c33f028c5d6205b91170d3c0e5b2131c8"
+    },
+    {
+      "path": "upstream/biomni/tool/pharmacology.py",
+      "upstream_path": "biomni/tool/pharmacology.py",
+      "sha256": "2fcbb502dbcb62f03fb0e70877836abe48645c8439cf89af7131b6c684fe6993"
+    },
+    {
+      "path": "upstream/biomni/tool/physiology.py",
+      "upstream_path": "biomni/tool/physiology.py",
+      "sha256": "18a864d4b3c68e3290b105ac686cf2536d890c5d122779926c62dcce1ff30d55"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols.py",
+      "upstream_path": "biomni/tool/protocols.py",
+      "sha256": "8c00f1e538262a26e474aad2fbbb92766bbd81b34c693075708ccd8404fe01a0"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ AAV Production.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ AAV Production.txt",
+      "sha256": "4fe0e1d3f11b9015b092c9955759a2b751af96cbc8d3f7e437f40a83eda88323"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ AAV Purification.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ AAV Purification.txt",
+      "sha256": "e00b91e618a8d0bfe4f828b5d2626fefe42fd9396e06300685f8ebcc636fe1cf"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ AAV Titration by qPCR.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ AAV Titration by qPCR.txt",
+      "sha256": "5ad7de5fd61a5c17492319ba15a04b436c06814435c45750451c65b5126db4b7"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ AAV ddPCR Titration.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ AAV ddPCR Titration.txt",
+      "sha256": "724e4b1be7d779bfee0e2b834a32226be19b4ba14001168d94b24dff61500773"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Affinity Purification of Recombinant Antibodies with Protein A or Protein G.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Affinity Purification of Recombinant Antibodies with Protein A or Protein G.txt",
+      "sha256": "af9cdac493df82107566c01eace8e7348ab929d6c3ce702b586338fb73bf38a0"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Antibody Validation Using the Indirect ELISA Method.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Antibody Validation Using the Indirect ELISA Method.txt",
+      "sha256": "0e965dbe69bed7a4fa603c468f35f310ea2ca531782825851986867429a0bafa"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ CRISPR Library Amplification.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ CRISPR Library Amplification.txt",
+      "sha256": "93332535d422ebedb478e437575896266ac9a73d1389c338b8fad58983d4af20"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Centrifugation.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Centrifugation.txt",
+      "sha256": "4a8fe20ac8687242e7c65d79bd38ad4cd39aaca9a6b3c53c52ce16e5adba7c44"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Colony Formation Titering Assay.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Colony Formation Titering Assay.txt",
+      "sha256": "454ade27f019a8f2c291e106da76e82410eb7f68d2bc0219e92290b08a01bb83"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Coomassie Purity Stain of Recombinant Antibodies.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Coomassie Purity Stain of Recombinant Antibodies.txt",
+      "sha256": "d051ece97ed04cb28d2465e98643aba919a6a291a2524e7b58cf46eee1e372c2"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ DNA Quantification.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ DNA Quantification.txt",
+      "sha256": "a1a6d01b891b61d70b9aaf53811a1527f68f7a8d2fb876a53768419908bd5ff0"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Fluorescence Titering Assay.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Fluorescence Titering Assay.txt",
+      "sha256": "6210f03b826ab3da7b49e284020158f5eb73e3e80ea24cb342d18f01c1e66c4e"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ General Transfection.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ General Transfection.txt",
+      "sha256": "43a2df3c043e8f611ab4db67ddbb0da5a50b8cc37d7c5abf65d61edd6593b929"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Gibson Assembly Protocol.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Gibson Assembly Protocol.txt",
+      "sha256": "8d3d3b35efb458aaf3cf74051bd72aa79fbc5f0696779675158135b63005f9ab"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Handling Plasmids from Addgene - Purifying Plasmid DNA.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Handling Plasmids from Addgene - Purifying Plasmid DNA.txt",
+      "sha256": "8ea82ef9a7c7e8586170f002d789c18e358fb1ad43d0518b69d485df3f68881a"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Immunocytochemistry.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Immunocytochemistry.txt",
+      "sha256": "5a3fee517d967c09b7dee88cc5afac222c9ff5f3ea8fe0c3b3bf67141d5266e5"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Isolating a Monoclonal Cell Population by Limiting Dilution.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Isolating a Monoclonal Cell Population by Limiting Dilution.txt",
+      "sha256": "5cedb8d995f03ae8a33170a93c99c4f75b5fdfa2e490f3e319c78429efec5a0f"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Kit Free RNA Extraction.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Kit Free RNA Extraction.txt",
+      "sha256": "39728c384300128487c4cea2ce82d824e77da2c8e840e2a1beea267a1c2be5b4"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Lab Safety for Biosafety Levels One and Two.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Lab Safety for Biosafety Levels One and Two.txt",
+      "sha256": "5e0fbb8d1f6f5f5f6571f2762661c13c03b5760ce65e51c9b18458254f44f6fd"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Lentivirus Production Protocol.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Lentivirus Production Protocol.txt",
+      "sha256": "ed7aa04a782b9a1072e30432ccd3b374b2b3339de220c94f9750a20100372455"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Lentivirus ddPCR Titration.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Lentivirus ddPCR Titration.txt",
+      "sha256": "f72fdc75123c42dbcbb77ae43f2179dea6f1435a0ad8df8919b5f4eb14aa8938"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Ligation Independent Cloning.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Ligation Independent Cloning.txt",
+      "sha256": "65c328a778b3c1c436074265d875b932ed8b2dddc03fc82eaed5072818bfb320"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Molecular Biology Protocol - Restriction Digest of Plasmid DNA.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Molecular Biology Protocol - Restriction Digest of Plasmid DNA.txt",
+      "sha256": "2a45b3ae91e168cd7fd64258f75f854f5ae4ec386282a4b4a38c7c273e48dbbe"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Personal Protective Equipment (PPE) for BSL-1 and BSL-2 Labs.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Personal Protective Equipment (PPE) for BSL-1 and BSL-2 Labs.txt",
+      "sha256": "2405d9d9ccf31bd66e3f6fb4dbddbd00b361ae86247b6a93e99ec9eab536a840"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Pipetting Protocol.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Pipetting Protocol.txt",
+      "sha256": "212b940526b707f8869f2bb3053984623843aec11688e2f0425494e0a78a84ad"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Plasmid Cloning by PCR (with Protocols).txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Plasmid Cloning by PCR (with Protocols).txt",
+      "sha256": "5f9f823a1acaa1dbe73a45b4af4712157966cf0661fb142e2f11244f88c2b2d7"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Plasmid Cloning by Restriction Enzyme Digest (with Protocols).txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Plasmid Cloning by Restriction Enzyme Digest (with Protocols).txt",
+      "sha256": "65e24ad9958ba97f347e244dbaf8941c66f2369277e94af68ac77170433e18b8"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Plasmid modification by Annealed Oligo Cloning by.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Plasmid modification by Annealed Oligo Cloning by.txt",
+      "sha256": "2c3a0a7a5feabb65004f9bc38d1497b58114b5f3d60ec4dd4bb2d92859078aa6"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Pouring LB Agar Plates.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Pouring LB Agar Plates.txt",
+      "sha256": "f300cc697f7cc38efc0f7b0c870bb1cac74fe5a4d81ff65ab5834a9f3cb77468"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Protocol - Bacterial Transformation.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Protocol - Bacterial Transformation.txt",
+      "sha256": "a7ee414f990cb806f99c8b2f7366363a00b96a926fb7715b6c6642771f27f78e"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Protocol - How to Create a Bacterial Glycerol Stock.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Protocol - How to Create a Bacterial Glycerol Stock.txt",
+      "sha256": "782c4529595b75c60f528f574edd118cbb42454e65c7c54bd8b84cb7d43d5186"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Protocol - How to Design Primers.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Protocol - How to Design Primers.txt",
+      "sha256": "dc1ad6713e9ba3297e51b01d8c71d918a9e8ba4f512db5bc970ccb81fb3fc70c"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Protocol - How to Inoculate a Bacterial Culture.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Protocol - How to Inoculate a Bacterial Culture.txt",
+      "sha256": "b92d12f6bf4e8a44159d616127b8be7b244c094000f3845aceab08e6272d63c3"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Protocol - How to Ligate Plasmid DNA.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Protocol - How to Ligate Plasmid DNA.txt",
+      "sha256": "ce6d6858409666a18125a79f524a72a10fe18ccfc587fa27f9b50aff30205b70"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Protocol - How to Perform Sequence Analysis.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Protocol - How to Perform Sequence Analysis.txt",
+      "sha256": "4a335ff96fb6bf20a75eeedb521dba724e671a39af9842086d2ee35e4bbdebf7"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Protocol - How to Perform a Diagnostic Digest.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Protocol - How to Perform a Diagnostic Digest.txt",
+      "sha256": "d8af6ad66978968cb4b8669a38b5890edd17f1c4925eb50ee02e5b04b0eb5d8b"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Protocol - How to Purify DNA from an Agarose Gel.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Protocol - How to Purify DNA from an Agarose Gel.txt",
+      "sha256": "1a3740b52f34b4f35aee17530d9727e25030c28da5bc66cc7fbe2dab14175c2a"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Protocol - How to Run an Agarose Gel.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Protocol - How to Run an Agarose Gel.txt",
+      "sha256": "1b6a5a6843c7426817aabbb180cd45ea60c01c7b1d24857666518dbdfd6ec82f"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Protocol - How to Streak a Plate.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Protocol - How to Streak a Plate.txt",
+      "sha256": "98eb178e1d8daad6f7ba13fae6fcedad1b6b9dd03fb6527544588910644bbfc5"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Protocol - Over-Agar Antibiotic Plating.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Protocol - Over-Agar Antibiotic Plating.txt",
+      "sha256": "1e25cd00d50db3b3afa9ca91c60bfff5ee0d6dcd378f0570b22682e461c5946f"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Transfection for Recombinant Antibodies.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Transfection for Recombinant Antibodies.txt",
+      "sha256": "cf1f731b07cb9c1dcdcd3df8e8b4d5900abc56734759dd8fc873de18a9a3d0c3"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Using a Light Microscope Protocol.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Using a Light Microscope Protocol.txt",
+      "sha256": "2baa446f7b399401b0504aadb71d1c0c449f8588524b4b6b8dbaf9e2a75e6f79"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Virus Protocol - Generating Stable Cell Lines.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Virus Protocol - Generating Stable Cell Lines.txt",
+      "sha256": "8a2f9c3bacdd80da7ed46a836b147d901df851dc5d14d5be050e406b20c12b31"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Water Bath Protocol.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Water Bath Protocol.txt",
+      "sha256": "f20ff0f8be2c4ba42f6d9c77ff76503d84e15b1543dd80627481d91445be183a"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Weighing Reagents Protocol.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Weighing Reagents Protocol.txt",
+      "sha256": "1785e62ffd72a7c47e9108b3d53ecb42fee55607b52ea879026a3ae79ec14b3c"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ Western Blot.txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ Western Blot.txt",
+      "sha256": "c89986f3921356ea752b6cfc30fec3a586ccbabf5a3903fca2d270c961dfa9b7"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/addgene/Addgene_ What is Polymerase Chain Reaction (PCR).txt",
+      "upstream_path": "biomni/tool/protocols/addgene/Addgene_ What is Polymerase Chain Reaction (PCR).txt",
+      "sha256": "5d8304b4d42593fafad11d50a906e62578a5a5fc5cef51d100b29ba4b25914e0"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/Actin Staining Protocol _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/Actin Staining Protocol _ Thermo Fisher Scientific - US.txt",
+      "sha256": "5808ca033e5b7660b8726e1827304f660754e79ab505d6a0d641261cbba56c8c"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/ActinGreen 488 ReadyProbes Reagent Protocol _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/ActinGreen 488 ReadyProbes Reagent Protocol _ Thermo Fisher Scientific - US.txt",
+      "sha256": "274eb869bebd791e6200c4d50d9cc7ee3960dfab85afbf2116e8d8b74af621e2"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/ActinRed 555 ReadyProbes Reagent Protocol _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/ActinRed 555 ReadyProbes Reagent Protocol _ Thermo Fisher Scientific - US.txt",
+      "sha256": "997adc44aab1fdc3f7eab657e7cdb17fa84b1aab8a3b285e208546848909018f"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/Adherent Cell Culture Protocol _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/Adherent Cell Culture Protocol _ Thermo Fisher Scientific - US.txt",
+      "sha256": "b15fe2f9c2ffbb66824d555cb9feb84644d627b1c5b79e8cce3db0e3c34587df"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/Basic Sandwich ELISA Protocol _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/Basic Sandwich ELISA Protocol _ Thermo Fisher Scientific - US.txt",
+      "sha256": "e11583c6337950c88dd2a4dd7514bb85d5dcab4ae347adf77966b7503508fa68"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/BestProtocols_ Annexin V Staining Protocol for Flow Cytometry _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/BestProtocols_ Annexin V Staining Protocol for Flow Cytometry _ Thermo Fisher Scientific - US.txt",
+      "sha256": "4079678bd29d19ec35d660dfc2be97a7c7ac5c1feceb8b5383fa2caacc185b44"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/BestProtocols_ Cell Preparation for Flow Cytometry Protocols _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/BestProtocols_ Cell Preparation for Flow Cytometry Protocols _ Thermo Fisher Scientific - US.txt",
+      "sha256": "6ab419c85e19d378842183b35ac1c2631d3b0a7e4ed25706a79ddbf3cb97a415"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/BrdU Labeling & Detection Protocol _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/BrdU Labeling & Detection Protocol _ Thermo Fisher Scientific - US.txt",
+      "sha256": "009fbb242513f264fb3a3a37df8a62b0340edf7dbc57ff3a998812ab6d0da193"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/BrdU Staining Protocol for Flow Cytometry _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/BrdU Staining Protocol for Flow Cytometry _ Thermo Fisher Scientific - US.txt",
+      "sha256": "8f009f1341ba4d7c22e297f208bece6cfbcd0d42b6d44d3d6497deaed6b4f91f"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/BrdU and EdU Double Staining Protocol _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/BrdU and EdU Double Staining Protocol _ Thermo Fisher Scientific - US.txt",
+      "sha256": "d13d9c8d2810cab13ff15fcc46101d15d688d61437433744d2fd7d63e3ad3245"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/Caspase Activity Assay Protocol _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/Caspase Activity Assay Protocol _ Thermo Fisher Scientific - US.txt",
+      "sha256": "71cf1a0990a9f1a9e9df3ef09d4eb3ed8a2ffa7def48834c5d338690156a9458"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/Cell Freezing Protocols _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/Cell Freezing Protocols _ Thermo Fisher Scientific - US.txt",
+      "sha256": "ac6f059fb1d8f635f675343e9171ac15798cd00965d9d87d60e6fccb2485c7fd"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/CellTrace CFSE Cell Proliferation Kit Protocol _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/CellTrace CFSE Cell Proliferation Kit Protocol _ Thermo Fisher Scientific - US.txt",
+      "sha256": "e92942970ab1eaa062c1266d823d253623e50db98be73399b1146a7b43939bdc"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/CellTrace Far Red Cell Proliferation Kit Protocol _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/CellTrace Far Red Cell Proliferation Kit Protocol _ Thermo Fisher Scientific - US.txt",
+      "sha256": "d0d968e8d06cc17862f5dce50a04df7df468acf502dfe846714d1aa93bb759b8"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/CellTrace Violet Cell Proliferation Kit Protocol _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/CellTrace Violet Cell Proliferation Kit Protocol _ Thermo Fisher Scientific - US.txt",
+      "sha256": "3552f96fb62833bd05cd5918ae1066b36d17c0fb8ba53975c2f50798fcfcea62"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/Click-iT EdU Protocol for Flow Cytometry _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/Click-iT EdU Protocol for Flow Cytometry _ Thermo Fisher Scientific - US.txt",
+      "sha256": "b478731bd655882863a3934fba72e9d8902fab27ba3c5facd389ea40aba8b985"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/DAPI Protocol for Fluorescence Imaging _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/DAPI Protocol for Fluorescence Imaging _ Thermo Fisher Scientific - US.txt",
+      "sha256": "c7e6332e8a7914ddd067df11af4110a31460825cfd0ddb9eb8d4683ce738a958"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/ELISA Sample Preparation - Adherent and Suspension Cells _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/ELISA Sample Preparation - Adherent and Suspension Cells _ Thermo Fisher Scientific - US.txt",
+      "sha256": "9f28dcab4e8b68baf2f4a4e3c8793ffe0988f646d92b58ad73a1d0fd3f75dac0"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/Enzymatic and Non-Enzymatic Cell Dissociation Protocols _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/Enzymatic and Non-Enzymatic Cell Dissociation Protocols _ Thermo Fisher Scientific - US.txt",
+      "sha256": "05260e614a6aca355372c8c80dc9cd9f45f60079a8190e409091ae3d68895353"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/F-Actin Staining _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/F-Actin Staining _ Thermo Fisher Scientific - US.txt",
+      "sha256": "c3eb780a30f539d2de9d2d1573be608288ff3dcb4c359aba22b36fb4102006b2"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/Functional Mitochondrial Staining _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/Functional Mitochondrial Staining _ Thermo Fisher Scientific - US.txt",
+      "sha256": "2359d0a6995237054874bfb4ce54388dabf8efb499831b67f49e5d3841f17f9a"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/Hoechst 33342 Protocol for Imaging _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/Hoechst 33342 Protocol for Imaging _ Thermo Fisher Scientific - US.txt",
+      "sha256": "6098cf8d6a36313651a924782acac38cace2e346356fe07bce1153c6b2899599"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/Immunolabeling Using Secondary Antibodies _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/Immunolabeling Using Secondary Antibodies _ Thermo Fisher Scientific - US.txt",
+      "sha256": "5343897538352a3e7496795878b70bf3404a007a0190745c583fcaafd3aa314e"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/Mitochondrial Membrane Potential Assay Protocol _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/Mitochondrial Membrane Potential Assay Protocol _ Thermo Fisher Scientific - US.txt",
+      "sha256": "92b37d3d0962d7871a053a60eabf1f7a014b2490baeaf6c508c78d82971becad"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/Mounting Coverslips _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/Mounting Coverslips _ Thermo Fisher Scientific - US.txt",
+      "sha256": "5ae154d1602811f26fa83982afcb3754503a4bf244d1d386beaac2df93d44baa"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/Staining 3D Cell Cultures for Imaging _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/Staining 3D Cell Cultures for Imaging _ Thermo Fisher Scientific - US.txt",
+      "sha256": "ee4e650c7b7f3fd4f8a6aa4da79cdf6d6a62cc49dff774bb6514482d367fe0eb"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/Suspension Cell Culture Protocol _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/Suspension Cell Culture Protocol _ Thermo Fisher Scientific - US.txt",
+      "sha256": "cc4f627eee2a5a1696f97f06d4850ab079f20f83185f8127c88c943816ca6b7e"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/TrypLE Protocol & Counting with an Automated Cell Counter _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/TrypLE Protocol & Counting with an Automated Cell Counter _ Thermo Fisher Scientific - US.txt",
+      "sha256": "d349b543cfed698b85f174c57ee12601aed1b99040a743a671b7e04dc54ced0e"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/Trypan Blue Exclusion _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/Trypan Blue Exclusion _ Thermo Fisher Scientific - US.txt",
+      "sha256": "5dd3654fe965b3c6ee024c8317974c0cea8026c676fe5b1128b812b23aa0c0c0"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/Vybrant DyeCycle Green and Orange Stains _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/Vybrant DyeCycle Green and Orange Stains _ Thermo Fisher Scientific - US.txt",
+      "sha256": "a80684ab88ae6078f6a71c662f2a2f124280754dd788782494b51d9a518c854b"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/Vybrant DyeCycle Ruby stain _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/Vybrant DyeCycle Ruby stain _ Thermo Fisher Scientific - US.txt",
+      "sha256": "634bedcb6b722235502398abaad2ca9cfd9615d5f45f2ad9726719fc53cb8baf"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/Vybrant DyeCycle Violet Stain _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/Vybrant DyeCycle Violet Stain _ Thermo Fisher Scientific - US.txt",
+      "sha256": "5179136bd0c649a14f24a409042c691269973c8353309dc23511b79e19d30783"
+    },
+    {
+      "path": "upstream/biomni/tool/protocols/thermofisher/alamarBlue Assays for Cell Viability Protocol, for Microplates _ Thermo Fisher Scientific - US.txt",
+      "upstream_path": "biomni/tool/protocols/thermofisher/alamarBlue Assays for Cell Viability Protocol, for Microplates _ Thermo Fisher Scientific - US.txt",
+      "sha256": "ca50c741cab17696f3920099b764b665ff01a59329d2102425da27da7339241b"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/cbioportal.pkl",
+      "upstream_path": "biomni/tool/schema_db/cbioportal.pkl",
+      "sha256": "05e71595da284510d503eaf4c647fae0c453ba4782c4d100d3105ec46c014b5a"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/chembl.pkl",
+      "upstream_path": "biomni/tool/schema_db/chembl.pkl",
+      "sha256": "202f5cb04e527e04411288226cdb9f559f98bb183a464031924b02045d48514b"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/clinicaltrials.pkl",
+      "upstream_path": "biomni/tool/schema_db/clinicaltrials.pkl",
+      "sha256": "8ca574bd6e5e637f0f56b60a3bbf42512f77d8e95996eb7c495d78f29352d570"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/clinvar.pkl",
+      "upstream_path": "biomni/tool/schema_db/clinvar.pkl",
+      "sha256": "e3c3b918acd066fedd0b73869bdd74414f399d307bed7dedc266384f3b88cb6f"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/dailymed.pkl",
+      "upstream_path": "biomni/tool/schema_db/dailymed.pkl",
+      "sha256": "ce83974f67d30ace179ce36636291ffa39ce7a47904f4f0efb73592ec4f36418"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/dbsnp.pkl",
+      "upstream_path": "biomni/tool/schema_db/dbsnp.pkl",
+      "sha256": "9cdfd93084882ed8c3b415a968c81604a8641361fadb78bd06f1095783d6706b"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/emdb.pkl",
+      "upstream_path": "biomni/tool/schema_db/emdb.pkl",
+      "sha256": "0c3d262f5eaaacade9915585facd9219d63f4167c685922dae5c41847f5a20e2"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/encode.pkl",
+      "upstream_path": "biomni/tool/schema_db/encode.pkl",
+      "sha256": "0b60dbb6b4af89c54e2ae6562e004fb94f057df92b4e3084816c7583040bbb4c"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/ensembl.pkl",
+      "upstream_path": "biomni/tool/schema_db/ensembl.pkl",
+      "sha256": "6c5e9f39940ff59ac858533b2db594b96b03c27037f3922a1f579120605186ca"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/geo.pkl",
+      "upstream_path": "biomni/tool/schema_db/geo.pkl",
+      "sha256": "f03e83b4ee218b2dfab6cf0c29c07b6f47a9c221ffc776cdd3f2f041f7dae132"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/gnomad.pkl",
+      "upstream_path": "biomni/tool/schema_db/gnomad.pkl",
+      "sha256": "ddfb761e9d21699b0358fd01d33455e9133f94b18f3d6b6682f991d621b509fb"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/gtopdb.pkl",
+      "upstream_path": "biomni/tool/schema_db/gtopdb.pkl",
+      "sha256": "3c6cfb6600d0a79b8b2099f3543a68ac97baaad1f973781b36402a0e7e423292"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/gwas_catalog.pkl",
+      "upstream_path": "biomni/tool/schema_db/gwas_catalog.pkl",
+      "sha256": "9028da5291b0c0f9b2fe7326d1f1a15bbe1a9f74f2a932735147f903dd22f81f"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/interpro.pkl",
+      "upstream_path": "biomni/tool/schema_db/interpro.pkl",
+      "sha256": "dac1cd4394b9718dfa491c127a292fd694d5960edbb31de2ddeeeb572ba02ea2"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/iucn.pkl",
+      "upstream_path": "biomni/tool/schema_db/iucn.pkl",
+      "sha256": "ce46bd8180ed39f74aacd18484e6974a69ad0af5473e085e81e135d52dd72255"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/jaspar.pkl",
+      "upstream_path": "biomni/tool/schema_db/jaspar.pkl",
+      "sha256": "17a2076cf0033ef0af04aad40a2d5fef12d216982789372e717247d4ee5fadf3"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/kegg.pkl",
+      "upstream_path": "biomni/tool/schema_db/kegg.pkl",
+      "sha256": "cf1a438cd0798c8fd1f1f09a46a6ce90ba4a2ff278f0874e8f59c8c106d81c0a"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/monarch.pkl",
+      "upstream_path": "biomni/tool/schema_db/monarch.pkl",
+      "sha256": "88f65c156ee7aed106c306ed9cfbc482be763d343c5d6fee6b06c2a2412684e9"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/mpd.pkl",
+      "upstream_path": "biomni/tool/schema_db/mpd.pkl",
+      "sha256": "fe1d11a8d1ca90241053a89f0fdb434e3275f230dcf46121ae147c0cd7e690f0"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/openfda.pkl",
+      "upstream_path": "biomni/tool/schema_db/openfda.pkl",
+      "sha256": "9220a2104e6088a71b7b5f89e6c162a3261e8a461147fd59b4b3a989bf8f36f6"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/opentarget.pkl",
+      "upstream_path": "biomni/tool/schema_db/opentarget.pkl",
+      "sha256": "88a14dfd471600cd854c1ec8323392155cf647c8db6a37812ffd733fa0787e61"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/paleobiology.pkl",
+      "upstream_path": "biomni/tool/schema_db/paleobiology.pkl",
+      "sha256": "ad32eaac20b64e5eb131de13ecb20e055f037d094d19d7b038990f3f078b77da"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/pdb.pkl",
+      "upstream_path": "biomni/tool/schema_db/pdb.pkl",
+      "sha256": "5c3f8eb8ad61172e0f7936bf0343aae958b7b5c03825bd11220ca003081ac35e"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/pride.pkl",
+      "upstream_path": "biomni/tool/schema_db/pride.pkl",
+      "sha256": "2f7387abf4429b9dae055549a3e953ba95ad72514f17ebe9c9da2fa92c4d1ced"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/pubchem.pkl",
+      "upstream_path": "biomni/tool/schema_db/pubchem.pkl",
+      "sha256": "39ba41379e1966815857b1339d040400c60906c5aa6ea9ef037b0bb86371473e"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/quickgo.pkl",
+      "upstream_path": "biomni/tool/schema_db/quickgo.pkl",
+      "sha256": "77ba934bddb6af7b4c11d5a7b782559c9da738b8268d09d2071a0f293e69678e"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/reactome.pkl",
+      "upstream_path": "biomni/tool/schema_db/reactome.pkl",
+      "sha256": "ab9664147737530ede0b212f29e7a9d0c23646a81886ff34febd2cd5a2f2939b"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/remap.pkl",
+      "upstream_path": "biomni/tool/schema_db/remap.pkl",
+      "sha256": "6817b49c4ae84f97814b488a4b8f7d86c84970b8a3b517f4be54a6bac32bad64"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/stringdb.pkl",
+      "upstream_path": "biomni/tool/schema_db/stringdb.pkl",
+      "sha256": "caccddb5eb81f7e4f0b5e92d50c2d1a2d50d5161903f4fbbdddc66c28b6d9de8"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/ucsc.pkl",
+      "upstream_path": "biomni/tool/schema_db/ucsc.pkl",
+      "sha256": "af792884bcaacf02d8c42813f98bbfcf0ce87e17a212a3f51ca8478a65efc7b1"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/unichem.pkl",
+      "upstream_path": "biomni/tool/schema_db/unichem.pkl",
+      "sha256": "30ff7a6bc97522b725c2c3cfef9bff8de242fdf7cfd5e659e1dc0dd6c5489cd3"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/uniprot.pkl",
+      "upstream_path": "biomni/tool/schema_db/uniprot.pkl",
+      "sha256": "3f16c1616c2b89067b15ec1b64bb6867dc4c0afc9851566f9da8ea2cf165729a"
+    },
+    {
+      "path": "upstream/biomni/tool/schema_db/worms.pkl",
+      "upstream_path": "biomni/tool/schema_db/worms.pkl",
+      "sha256": "0b518c6236c48f227943bba7b89af4de58390beaa0de26fbc51c6e2d3425f6b0"
+    },
+    {
+      "path": "upstream/biomni/tool/support_tools.py",
+      "upstream_path": "biomni/tool/support_tools.py",
+      "sha256": "4410194c730283431280ed1db05d662358f869e5ac02ed287c65597ad2d39618"
+    },
+    {
+      "path": "upstream/biomni/tool/synthetic_biology.py",
+      "upstream_path": "biomni/tool/synthetic_biology.py",
+      "sha256": "f21d456a16a0c4c69e1158ad06f5516f4ab990035e91b7eedd0aa38ed5ff5782"
+    },
+    {
+      "path": "upstream/biomni/tool/systems_biology.py",
+      "upstream_path": "biomni/tool/systems_biology.py",
+      "sha256": "9ac7daa2c5257347e041a1c68eb59dbc98a77eac62402b8f67e7ee3d288b0c40"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/biochemistry.py",
+      "upstream_path": "biomni/tool/tool_description/biochemistry.py",
+      "sha256": "5271e41b31dc7082b110a895ff2b5d3ecfabf12e1dcb543a9d72e9c462af55ac"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/bioengineering.py",
+      "upstream_path": "biomni/tool/tool_description/bioengineering.py",
+      "sha256": "cec0897cbd7fd600f8e244c248558306ee44173750a97f5a4baf3edfc3b8fa4e"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/bioimaging.py",
+      "upstream_path": "biomni/tool/tool_description/bioimaging.py",
+      "sha256": "c1537b55e719f7f67814fb164a235cc3be13273ec9c9569fe969aac2e64be884"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/biophysics.py",
+      "upstream_path": "biomni/tool/tool_description/biophysics.py",
+      "sha256": "ef84502c6c50aa89d073a8995faa96647e17dd28a359b55ebad1fd981342977b"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/cancer_biology.py",
+      "upstream_path": "biomni/tool/tool_description/cancer_biology.py",
+      "sha256": "77346ff5c19b6257c20b01c35c2e5c0d431f26779e9a0d800d68a74bbf6de08a"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/cell_biology.py",
+      "upstream_path": "biomni/tool/tool_description/cell_biology.py",
+      "sha256": "3936a386890f821f9627072c3854311eaefd07143463fb6c53e02d3b328ec38b"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/database.py",
+      "upstream_path": "biomni/tool/tool_description/database.py",
+      "sha256": "875473dc5473cf4f7615c2b4fd886f543ca8a295f7c58eca00fdceb22d2883b6"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/genetics.py",
+      "upstream_path": "biomni/tool/tool_description/genetics.py",
+      "sha256": "b865016784981732dae8540d23f541ac2de78192bdd739a94a2b2117bb143a42"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/genomics.py",
+      "upstream_path": "biomni/tool/tool_description/genomics.py",
+      "sha256": "f8c615b4dc338a0bd16abf80cbd0bed55e566d33aa26c1b48e55bf3fbed230a6"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/glycoengineering.py",
+      "upstream_path": "biomni/tool/tool_description/glycoengineering.py",
+      "sha256": "3ef917e046a233a63204f40fb437d276a24c92fb1160f558d980e0eae533761d"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/immunology.py",
+      "upstream_path": "biomni/tool/tool_description/immunology.py",
+      "sha256": "a69580b2aac1585e8efede1ddd51639007cb84bca38ba141edc10f5198b157b4"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/lab_automation.py",
+      "upstream_path": "biomni/tool/tool_description/lab_automation.py",
+      "sha256": "68877e35d4dbf18fb61e0251efdcf9460690e756fb4aa8a961cc38fad6541537"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/literature.py",
+      "upstream_path": "biomni/tool/tool_description/literature.py",
+      "sha256": "6cbd22da18b1e7ff71083c3125da9ecaed63607d4023d7b36844eb1065c90962"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/microbiology.py",
+      "upstream_path": "biomni/tool/tool_description/microbiology.py",
+      "sha256": "3cb3d8705a4fee0140173af21d1824e3479920aba523e09f8e7dad77b3a4bbaf"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/molecular_biology.py",
+      "upstream_path": "biomni/tool/tool_description/molecular_biology.py",
+      "sha256": "ded767b440df8efa8777e824f74263c072a921835bf1023c147b21211ea0ddc4"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/pathology.py",
+      "upstream_path": "biomni/tool/tool_description/pathology.py",
+      "sha256": "f3ada0bb1688071ff5cb1710cc298ff5f64e0259ea6876d0a4af887853472809"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/pharmacology.py",
+      "upstream_path": "biomni/tool/tool_description/pharmacology.py",
+      "sha256": "9beb6b7e6abfb776dadf6311759850bfb3bf6fb8c760aebde64d12bd2f44fec1"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/physiology.py",
+      "upstream_path": "biomni/tool/tool_description/physiology.py",
+      "sha256": "ed80ea06a6bd79dba4f1e912b46c865d2d35b4d329cdb8ac8b376ed326da02c2"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/protocols.py",
+      "upstream_path": "biomni/tool/tool_description/protocols.py",
+      "sha256": "8eaa6544c61abb11d3ab9e2bedc24b9373265ebc2e2ee20080b2f5c4bf56d598"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/support_tools.py",
+      "upstream_path": "biomni/tool/tool_description/support_tools.py",
+      "sha256": "341ed96c03eca300deabf50f3be65ba3687195ff53a97cf9a10aaaee65dd9903"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/synthetic_biology.py",
+      "upstream_path": "biomni/tool/tool_description/synthetic_biology.py",
+      "sha256": "28c2b8a265692bd141986293e1c74024449d8552a32ad8a945dd3a5c07c0d67f"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_description/systems_biology.py",
+      "upstream_path": "biomni/tool/tool_description/systems_biology.py",
+      "sha256": "a8e2c0e651a078fcfae18a4938400a80efca7db5096102731ec5f9eae6d668b9"
+    },
+    {
+      "path": "upstream/biomni/tool/tool_registry.py",
+      "upstream_path": "biomni/tool/tool_registry.py",
+      "sha256": "b112264b172b9f526a12fda649a6e09cbcdb40b8b0fd7385a8116a418a893d9b"
+    },
+    {
+      "path": "upstream/biomni/utils.py",
+      "upstream_path": "biomni/utils.py",
+      "sha256": "62a69f8168a30030b3e78a2556e748b7b5f24ac09e6dcde1139ff9d701dcd22c"
+    },
+    {
+      "path": "upstream/biomni/version.py",
+      "upstream_path": "biomni/version.py",
+      "sha256": "9a1ad7d5c8238ccf0aedd2cd34862eded4b700109d2b9f582e01f9cef93aec12"
+    },
+    {
+      "path": "upstream/biomni_env/README.md",
+      "upstream_path": "biomni_env/README.md",
+      "sha256": "98f66fbf4b67dc05d8d1822f3edfc49bb9eebafa02099c1786e991668b30b163"
+    },
+    {
+      "path": "upstream/biomni_env/bio_env.yml",
+      "upstream_path": "biomni_env/bio_env.yml",
+      "sha256": "a1a4065c4c44d864de29930d2a4d6de53cbfb2860a147a0c9e93b88006adbd89"
+    },
+    {
+      "path": "upstream/biomni_env/bio_env_py310.yml",
+      "upstream_path": "biomni_env/bio_env_py310.yml",
+      "sha256": "63dcc3c758432f85dbbf947acace5a1beb672126b5dcadd3fa7635bb9253ed0d"
+    },
+    {
+      "path": "upstream/biomni_env/cli_tools_config.json",
+      "upstream_path": "biomni_env/cli_tools_config.json",
+      "sha256": "a9194aacdb4b824ca7d32e7a06a02f48262259ebde57cd0da8cbf6ffbeccb880"
+    },
+    {
+      "path": "upstream/biomni_env/environment.yml",
+      "upstream_path": "biomni_env/environment.yml",
+      "sha256": "90350fa5b148203d1ec5c9fac5690c51be92e7d4650e86619a3b82e7673a8b38"
+    },
+    {
+      "path": "upstream/biomni_env/fixed_env.yml",
+      "upstream_path": "biomni_env/fixed_env.yml",
+      "sha256": "117f8b2a3f0fca2b491689f745dc46bc3a3f20a332a21546671d760c7edd8994"
+    },
+    {
+      "path": "upstream/biomni_env/install_cli_tools.sh",
+      "upstream_path": "biomni_env/install_cli_tools.sh",
+      "sha256": "35989df66e43d6fc9b1166cc74bbd57c81609e2c72ccd65f149427778e6a15fa"
+    },
+    {
+      "path": "upstream/biomni_env/install_r_packages.R",
+      "upstream_path": "biomni_env/install_r_packages.R",
+      "sha256": "4571a08ebad421a6001a53f812ed1f1ff0e5a356edb21e38cd321e2e443fad69"
+    },
+    {
+      "path": "upstream/biomni_env/new_software_v008.sh",
+      "upstream_path": "biomni_env/new_software_v008.sh",
+      "sha256": "426a0ddbed411954b645818a294b2c1bb2b597877e09e39e40aa9ae406701d3b"
+    },
+    {
+      "path": "upstream/biomni_env/r_packages.yml",
+      "upstream_path": "biomni_env/r_packages.yml",
+      "sha256": "aba14e549c7b94d0afe9b9c5765c090ac5830f57e47c4bd8a1169a2b112e7deb"
+    },
+    {
+      "path": "upstream/biomni_env/setup.sh",
+      "upstream_path": "biomni_env/setup.sh",
+      "sha256": "173927b84ad9af524876ef44048137d20a0bf86c281e02a06e71244e15a86f9f"
+    },
+    {
+      "path": "upstream/docs/Makefile",
+      "upstream_path": "docs/Makefile",
+      "sha256": "d0babd0070faf169e342bf3bcaaaf296a50aff7300cee59977587f6e28c913c7"
+    },
+    {
+      "path": "upstream/docs/building_documentation.md",
+      "upstream_path": "docs/building_documentation.md",
+      "sha256": "2c8a72dbba8545fe00db595015a03830916adefd32ab18934800dd1aca40fbc7"
+    },
+    {
+      "path": "upstream/docs/configuration.md",
+      "upstream_path": "docs/configuration.md",
+      "sha256": "893572e823e16e51d5c61951c457f6fc21bf93f731b5bbc29a31a81e93e22b07"
+    },
+    {
+      "path": "upstream/docs/generate_api_docs.py",
+      "upstream_path": "docs/generate_api_docs.py",
+      "sha256": "1215869396db9ae82dd8a2515d769b4081cd9661a402112f0dc59e27cbdc869b"
+    },
+    {
+      "path": "upstream/docs/known_conflicts.md",
+      "upstream_path": "docs/known_conflicts.md",
+      "sha256": "2b7ff214a08da25bbddcdca0b3a1b1a117b1382420038a21680272b21564a8aa"
+    },
+    {
+      "path": "upstream/docs/make.bat",
+      "upstream_path": "docs/make.bat",
+      "sha256": "d2a8ebcce0de81abca77b2cbc26afd00385a61fb624e7060a8e5402fd900a72a"
+    },
+    {
+      "path": "upstream/docs/mcp_integration.md",
+      "upstream_path": "docs/mcp_integration.md",
+      "sha256": "0929de3d6a494e21e82a78c8d46646e1853cb4edd286902b7de41ecaea33e23b"
+    },
+    {
+      "path": "upstream/docs/source/conf.py",
+      "upstream_path": "docs/source/conf.py",
+      "sha256": "8e29317e0c83bb00badb7bee740c6a0acf643ed7eaeff88041d0643df7558320"
+    },
+    {
+      "path": "upstream/docs/source/index.rst",
+      "upstream_path": "docs/source/index.rst",
+      "sha256": "022847f5941970c7188db7654ee02122ef883c9623159ab13beef106a379d2be"
+    },
+    {
+      "path": "upstream/license_info.md",
+      "upstream_path": "license_info.md",
+      "sha256": "30b01936b02b768a6e58dd95ad11ad227b32c5e72f86ebc26cf3733cbf698948"
+    },
+    {
+      "path": "upstream/pyproject.toml",
+      "upstream_path": "pyproject.toml",
+      "sha256": "f47f8e97cf0e7cd3d10ede2e0ef207e4a0dad70746923beaeaf4e3e7b644b1f5"
+    },
+    {
+      "path": "upstream/tutorials/biomni_101.ipynb",
+      "upstream_path": "tutorials/biomni_101.ipynb",
+      "sha256": "8e2a924b8d92584a4277cc1f0552e3ad6a1faf0857813425735d79924121c33a"
+    },
+    {
+      "path": "upstream/tutorials/examples/add_mcp_server/mcp_config.yaml",
+      "upstream_path": "tutorials/examples/add_mcp_server/mcp_config.yaml",
+      "sha256": "d385b99f087fce0335965422c41bd27c76c72d765991d62722c293398f393c52"
+    },
+    {
+      "path": "upstream/tutorials/examples/add_mcp_server/mcp_example.ipynb",
+      "upstream_path": "tutorials/examples/add_mcp_server/mcp_example.ipynb",
+      "sha256": "a20d2f6637190a4c97b599d0778cb2abeb884b1ae7c6acd17f36f547befda3cf"
+    },
+    {
+      "path": "upstream/tutorials/examples/cloning.ipynb",
+      "upstream_path": "tutorials/examples/cloning.ipynb",
+      "sha256": "5d0cfcd8e61096ae0d253ac0b3d0c6d70de2a269d164f8d189610d8da2ef0963"
+    },
+    {
+      "path": "upstream/tutorials/examples/expose_biomni_server/run_mcp_server.py",
+      "upstream_path": "tutorials/examples/expose_biomni_server/run_mcp_server.py",
+      "sha256": "6219f30217ffa4f26d432b4aa8b649a4f11be795fd118d6d428f95b7bf90896b"
+    },
+    {
+      "path": "upstream/tutorials/examples/expose_biomni_server/test_mcp_server.py",
+      "upstream_path": "tutorials/examples/expose_biomni_server/test_mcp_server.py",
+      "sha256": "0a8a133a0892d918c5ff957d94fc9166263052d2bcf9b1cf22683df4fa6919a6"
+    },
+    {
+      "path": "upstream/tutorials/examples/plentiCRISPR.txt",
+      "upstream_path": "tutorials/examples/plentiCRISPR.txt",
+      "sha256": "4a5b699311fd01cfd90da18b193f104af6da4b125bcd78f07e08e08c1cbc3046"
+    },
+    {
+      "path": "upstream/tutorials/examples/pylabrobot.ipynb",
+      "upstream_path": "tutorials/examples/pylabrobot.ipynb",
+      "sha256": "4faf063e7b4106c819c5857051f90c70fa677c90c6412e5ba4e6f762d7cfafc9"
+    }
+  ]
+}

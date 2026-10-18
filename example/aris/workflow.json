@@ -1,0 +1,572 @@
+{
+  "schemaVersion": 2,
+  "name": "ARIS 完整研究管线：W1 → W1.5 → W2 → W3",
+  "agents": {
+    "main": {
+      "model": "claude-opus-5",
+      "harness": "claude-code",
+      "skills": [
+        "./skills/scienceevolve-aris"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "permission": "compute",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "instructions": "完整执行ARIS主线research-pipeline。先读取Skill的upstream/skills/research-pipeline/SKILL.md和idea-discovery/SKILL.md，解析原参数及阶段恢复状态，创建.aris/runs/<id>.json；done不等于accepted，恢复时从首个未accepted阶段重验。默认作者Anthropic/reviewer OpenAI，不允许same-family/provisional顶替跨模型。先确认两个Harness/模型、文献工具、Python、用户Task环境与写作依赖可用；缺能力request_user并保持blocked，不缩减流程。\nW1顺序literature→ideas→novelty→外部research-review→refine，覆盖idea-discovery的所有阶段与checkpoint；refine后形成idea报告/合同/实验计划，Gate1选择遵循AUTO_PROCEED。W1.5交bridge，待真实结果返回。W2交research_loop直至原停止条件或4轮失败。summary生成叙事与研究报告。AUTO_WRITE=true且venue/必要图条件满足时执行paper_plan→figures→paper_write→paper_compile→paper_improve→paper_assurance；所有paper-writing中间审查、独立audit和分支由所属阶段及review请求承接，不跳过。写作延后记录pending，AUTO_WRITE=false记录skipped；不把未完成写作说成已完成。\n每个worker交回后，先处理pending_review或pending_user；review按用途分配reviewer或paper_reviewer，保存完整响应，再交回原worker从continuation继续。用于research-review的多轮对话保留完整线程记录，paper/zero-context audit每次新上下文。不得把worker尚待review的交接视为阶段结束。hard/nightmare保留reviewer memory及辩论裁决，nightmare允许reviewer直接读原代码和复核。\n以原run_state、review_gate、verify_paper_audits等工具结果作为验收依据；含未解决阻断的阶段不能accepted。终止报告准确区分accepted、exhausted、deferred、blocked和skipped；到上游规定失败终点可交付失败报告，不编造通过。只在完整执行所选原流程分支且无待处理交接时complete_project。\n先读取 scienceevolve-aris Skill，遵循完整上游流程和本地调度协议，不删减能力。所有上游文档/工具在该Skill的upstream/；将其绝对路径作为ARIS_REPO提供给需要的命令。遇到/skill引用，读取upstream/skills/<name>/SKILL.md执行，不要求宿主有slash命令。不得启动外部ARIS完整pipeline或另写通用简化算法。仅替换能力提供者；顺序、预算、判断、产物与失败处理遵循原文件。Task是科学对象和实验执行环境，不能凭其内部Agent新建workflow角色。禁止修改workflow或调用apply_workflow。需要reviewer时，保存完整prompt、材料哈希、用途、continuation和期望响应，交Main调度；读到真实response才能继续。需要用户输入时交Main request_user，沉默不是批准。所有临床/实验结论只基于真实数据，模型评语与事实分开。",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "literature": {
+      "model": "claude-opus-5",
+      "harness": "claude-code",
+      "skills": [
+        "./skills/scienceevolve-aris"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "permission": "compute",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "instructions": "完整执行主线文献检索：研究 brief/参考论文、可用本地库和远程来源、逐篇验证、分析综合、文献表与可选 wiki；明确未验证证据，不能跳过核验。\n本阶段主规范：upstream/skills/research-lit/SKILL.md。以Main给出的阶段、参数和continuation执行，完成或需要外部能力时返回Main。\n先读取 scienceevolve-aris Skill，遵循完整上游流程和本地调度协议，不删减能力。所有上游文档/工具在该Skill的upstream/；将其绝对路径作为ARIS_REPO提供给需要的命令。遇到/skill引用，读取upstream/skills/<name>/SKILL.md执行，不要求宿主有slash命令。不得启动外部ARIS完整pipeline或另写通用简化算法。仅替换能力提供者；顺序、预算、判断、产物与失败处理遵循原文件。Task是科学对象和实验执行环境，不能凭其内部Agent新建workflow角色。禁止修改workflow或调用apply_workflow。需要reviewer时，保存完整prompt、材料哈希、用途、continuation和期望响应，交Main调度；读到真实response才能继续。需要用户输入时交Main request_user，沉默不是批准。所有临床/实验结论只基于真实数据，模型评语与事实分开。",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "ideas": {
+      "model": "claude-opus-5",
+      "harness": "claude-code",
+      "skills": [
+        "./skills/scienceevolve-aris"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "permission": "compute",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "instructions": "完成视角扩展、跨模型头脑风暴、机械归并、客观可行性检查、跨模型深度验证，以及最多3个pilot。保留正/负/跳过的真实状态。无原生spawn时使用上游Tier3顺序lens分支；pilot作业仍可由已有Task执行器并发。预算、超时和源文件规则按上游，不自定义缩小。\n本阶段主规范：upstream/skills/idea-creator/SKILL.md。以Main给出的阶段、参数和continuation执行，完成或需要外部能力时返回Main。\n先读取 scienceevolve-aris Skill，遵循完整上游流程和本地调度协议，不删减能力。所有上游文档/工具在该Skill的upstream/；将其绝对路径作为ARIS_REPO提供给需要的命令。遇到/skill引用，读取upstream/skills/<name>/SKILL.md执行，不要求宿主有slash命令。不得启动外部ARIS完整pipeline或另写通用简化算法。仅替换能力提供者；顺序、预算、判断、产物与失败处理遵循原文件。Task是科学对象和实验执行环境，不能凭其内部Agent新建workflow角色。禁止修改workflow或调用apply_workflow。需要reviewer时，保存完整prompt、材料哈希、用途、continuation和期望响应，交Main调度；读到真实response才能继续。需要用户输入时交Main request_user，沉默不是批准。所有临床/实验结论只基于真实数据，模型评语与事实分开。",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "novelty": {
+      "model": "claude-opus-5",
+      "harness": "claude-code",
+      "skills": [
+        "./skills/scienceevolve-aris"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "permission": "compute",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "instructions": "完成主张提取、多源检索、文献核验、跨模型新颖性验证和报告。提出审稿请求时交Main调度reviewer；自己不能写外部裁决。\n本阶段主规范：upstream/skills/novelty-check/SKILL.md。以Main给出的阶段、参数和continuation执行，完成或需要外部能力时返回Main。\n先读取 scienceevolve-aris Skill，遵循完整上游流程和本地调度协议，不删减能力。所有上游文档/工具在该Skill的upstream/；将其绝对路径作为ARIS_REPO提供给需要的命令。遇到/skill引用，读取upstream/skills/<name>/SKILL.md执行，不要求宿主有slash命令。不得启动外部ARIS完整pipeline或另写通用简化算法。仅替换能力提供者；顺序、预算、判断、产物与失败处理遵循原文件。Task是科学对象和实验执行环境，不能凭其内部Agent新建workflow角色。禁止修改workflow或调用apply_workflow。需要reviewer时，保存完整prompt、材料哈希、用途、continuation和期望响应，交Main调度；读到真实response才能继续。需要用户输入时交Main request_user，沉默不是批准。所有临床/实验结论只基于真实数据，模型评语与事实分开。",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "refine": {
+      "model": "claude-opus-5",
+      "harness": "claude-code",
+      "skills": [
+        "./skills/scienceevolve-aris"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "permission": "compute",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "instructions": "承接上游idea-discovery的外部critical review和Phase4.5 refine，执行完整研究细化、experiment-plan，形成单份IDEA_REPORT、research_contract及输出manifest；保留淘汰证据，落实阶段acceptance。\n本阶段主规范：upstream/skills/research-refine/SKILL.md。以Main给出的阶段、参数和continuation执行，完成或需要外部能力时返回Main。\n先读取 scienceevolve-aris Skill，遵循完整上游流程和本地调度协议，不删减能力。所有上游文档/工具在该Skill的upstream/；将其绝对路径作为ARIS_REPO提供给需要的命令。遇到/skill引用，读取upstream/skills/<name>/SKILL.md执行，不要求宿主有slash命令。不得启动外部ARIS完整pipeline或另写通用简化算法。仅替换能力提供者；顺序、预算、判断、产物与失败处理遵循原文件。Task是科学对象和实验执行环境，不能凭其内部Agent新建workflow角色。禁止修改workflow或调用apply_workflow。需要reviewer时，保存完整prompt、材料哈希、用途、continuation和期望响应，交Main调度；读到真实response才能继续。需要用户输入时交Main request_user，沉默不是批准。所有临床/实验结论只基于真实数据，模型评语与事实分开。",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "bridge": {
+      "model": "claude-opus-5",
+      "harness": "claude-code",
+      "skills": [
+        "./skills/scienceevolve-aris"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "permission": "compute",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "instructions": "完整实施W1.5：解析里程碑、base repo、实现、跨模型代码审查及最多2次修复、sanity和最多3次debug/救援、作业数/依赖自动选run-experiment或experiment-queue、部署监测、收集、training-check、自动消融规划和handoff。不得仅保存计划后标记实际运行完成。\n本阶段主规范：upstream/skills/experiment-bridge/SKILL.md。以Main给出的阶段、参数和continuation执行，完成或需要外部能力时返回Main。\n先读取 scienceevolve-aris Skill，遵循完整上游流程和本地调度协议，不删减能力。所有上游文档/工具在该Skill的upstream/；将其绝对路径作为ARIS_REPO提供给需要的命令。遇到/skill引用，读取upstream/skills/<name>/SKILL.md执行，不要求宿主有slash命令。不得启动外部ARIS完整pipeline或另写通用简化算法。仅替换能力提供者；顺序、预算、判断、产物与失败处理遵循原文件。Task是科学对象和实验执行环境，不能凭其内部Agent新建workflow角色。禁止修改workflow或调用apply_workflow。需要reviewer时，保存完整prompt、材料哈希、用途、continuation和期望响应，交Main调度；读到真实response才能继续。需要用户输入时交Main request_user，沉默不是批准。所有临床/实验结论只基于真实数据，模型评语与事实分开。",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "research_loop": {
+      "model": "claude-opus-5",
+      "harness": "claude-code",
+      "skills": [
+        "./skills/scienceevolve-aris"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "permission": "compute",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "instructions": "完整执行W2。每轮review→可选hard/nightmare辩论与裁决→人工checkpoint→修复/实验→监测→记全原文。最多4轮；只有跨模型有效裁决score>=6且verdict为ready/almost才positive STOP。高分not ready不能停止；第4轮未通过明确失败，不虚构accepted。\n本阶段主规范：upstream/skills/auto-review-loop/SKILL.md。以Main给出的阶段、参数和continuation执行，完成或需要外部能力时返回Main。\n先读取 scienceevolve-aris Skill，遵循完整上游流程和本地调度协议，不删减能力。所有上游文档/工具在该Skill的upstream/；将其绝对路径作为ARIS_REPO提供给需要的命令。遇到/skill引用，读取upstream/skills/<name>/SKILL.md执行，不要求宿主有slash命令。不得启动外部ARIS完整pipeline或另写通用简化算法。仅替换能力提供者；顺序、预算、判断、产物与失败处理遵循原文件。Task是科学对象和实验执行环境，不能凭其内部Agent新建workflow角色。禁止修改workflow或调用apply_workflow。需要reviewer时，保存完整prompt、材料哈希、用途、continuation和期望响应，交Main调度；读到真实response才能继续。需要用户输入时交Main request_user，沉默不是批准。所有临床/实验结论只基于真实数据，模型评语与事实分开。",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "summary": {
+      "model": "claude-opus-5",
+      "harness": "claude-code",
+      "skills": [
+        "./skills/scienceevolve-aris"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "permission": "compute",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "instructions": "只执行主线Stage4叙事交接：从实际idea、代码、实验、评审生成NARRATIVE_REPORT和pipeline report；按参数render-html，不丢失失败和未解决问题。AUTO_WRITE=false按原协议跳过写作；true时检查venue和手工图条件，按上游延后语义记录pending而非假完成。\n本阶段主规范：upstream/skills/research-pipeline/SKILL.md。以Main给出的阶段、参数和continuation执行，完成或需要外部能力时返回Main。\n先读取 scienceevolve-aris Skill，遵循完整上游流程和本地调度协议，不删减能力。所有上游文档/工具在该Skill的upstream/；将其绝对路径作为ARIS_REPO提供给需要的命令。遇到/skill引用，读取upstream/skills/<name>/SKILL.md执行，不要求宿主有slash命令。不得启动外部ARIS完整pipeline或另写通用简化算法。仅替换能力提供者；顺序、预算、判断、产物与失败处理遵循原文件。Task是科学对象和实验执行环境，不能凭其内部Agent新建workflow角色。禁止修改workflow或调用apply_workflow。需要reviewer时，保存完整prompt、材料哈希、用途、continuation和期望响应，交Main调度；读到真实response才能继续。需要用户输入时交Main request_user，沉默不是批准。所有临床/实验结论只基于真实数据，模型评语与事实分开。",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "paper_plan": {
+      "model": "claude-opus-5",
+      "harness": "claude-code",
+      "skills": [
+        "./skills/scienceevolve-aris"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "permission": "compute",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "instructions": "完整规划主张证据矩阵、结构、图表、引用并跨模型审查；随后执行paper-writing Phase1.5最多3轮接受合同谈判。合同争议按上游显式标记contested并触发用户处理，不能改成accepted；记录冻结合同，不能通过静默缩小验收条件过关。\n本阶段主规范：upstream/skills/paper-plan/SKILL.md。以Main给出的阶段、参数和continuation执行，完成或需要外部能力时返回Main。\n先读取 scienceevolve-aris Skill，遵循完整上游流程和本地调度协议，不删减能力。所有上游文档/工具在该Skill的upstream/；将其绝对路径作为ARIS_REPO提供给需要的命令。遇到/skill引用，读取upstream/skills/<name>/SKILL.md执行，不要求宿主有slash命令。不得启动外部ARIS完整pipeline或另写通用简化算法。仅替换能力提供者；顺序、预算、判断、产物与失败处理遵循原文件。Task是科学对象和实验执行环境，不能凭其内部Agent新建workflow角色。禁止修改workflow或调用apply_workflow。需要reviewer时，保存完整prompt、材料哈希、用途、continuation和期望响应，交Main调度；读到真实response才能继续。需要用户输入时交Main request_user，沉默不是批准。所有临床/实验结论只基于真实数据，模型评语与事实分开。",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "figures": {
+      "model": "claude-opus-5",
+      "harness": "claude-code",
+      "skills": [
+        "./skills/scienceevolve-aris"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "permission": "compute",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "instructions": "按paper-writing Phase2/2b完成真实数据图表和所选illustration后端；支持figurespec本地矢量、mermaid或用户配置的图像后端。执行质量审查，保存生成脚本/数据出处/LaTeX includes。能力替换仍须生成和检查实际图，不用文字描述代替。\n本阶段主规范：upstream/skills/paper-figure/SKILL.md。以Main给出的阶段、参数和continuation执行，完成或需要外部能力时返回Main。\n先读取 scienceevolve-aris Skill，遵循完整上游流程和本地调度协议，不删减能力。所有上游文档/工具在该Skill的upstream/；将其绝对路径作为ARIS_REPO提供给需要的命令。遇到/skill引用，读取upstream/skills/<name>/SKILL.md执行，不要求宿主有slash命令。不得启动外部ARIS完整pipeline或另写通用简化算法。仅替换能力提供者；顺序、预算、判断、产物与失败处理遵循原文件。Task是科学对象和实验执行环境，不能凭其内部Agent新建workflow角色。禁止修改workflow或调用apply_workflow。需要reviewer时，保存完整prompt、材料哈希、用途、continuation和期望响应，交Main调度；读到真实response才能继续。需要用户输入时交Main request_user，沉默不是批准。所有临床/实验结论只基于真实数据，模型评语与事实分开。",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "paper_write": {
+      "model": "claude-opus-5",
+      "harness": "claude-code",
+      "skills": [
+        "./skills/scienceevolve-aris"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "permission": "compute",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "instructions": "按主线方法完成全部章节、公式、引用和主张一致性，遵守冻结合同；按参数执行writing-systems-papers等分支，不能只写摘要或研究报告代替稿件。\n本阶段主规范：upstream/skills/paper-write/SKILL.md。以Main给出的阶段、参数和continuation执行，完成或需要外部能力时返回Main。\n先读取 scienceevolve-aris Skill，遵循完整上游流程和本地调度协议，不删减能力。所有上游文档/工具在该Skill的upstream/；将其绝对路径作为ARIS_REPO提供给需要的命令。遇到/skill引用，读取upstream/skills/<name>/SKILL.md执行，不要求宿主有slash命令。不得启动外部ARIS完整pipeline或另写通用简化算法。仅替换能力提供者；顺序、预算、判断、产物与失败处理遵循原文件。Task是科学对象和实验执行环境，不能凭其内部Agent新建workflow角色。禁止修改workflow或调用apply_workflow。需要reviewer时，保存完整prompt、材料哈希、用途、continuation和期望响应，交Main调度；读到真实response才能继续。需要用户输入时交Main request_user，沉默不是批准。所有临床/实验结论只基于真实数据，模型评语与事实分开。",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "paper_compile": {
+      "model": "claude-opus-5",
+      "harness": "claude-code",
+      "skills": [
+        "./skills/scienceevolve-aris"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "permission": "compute",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "instructions": "实际执行LaTeX编译、处理错误、检查引用/图表/页数，保存PDF与日志；随后按paper-writing对应阶段执行visual检查、claim-audit。需要外部review时交Main，不能由作者自审冒充独立审计。\n本阶段主规范：upstream/skills/paper-compile/SKILL.md。以Main给出的阶段、参数和continuation执行，完成或需要外部能力时返回Main。\n先读取 scienceevolve-aris Skill，遵循完整上游流程和本地调度协议，不删减能力。所有上游文档/工具在该Skill的upstream/；将其绝对路径作为ARIS_REPO提供给需要的命令。遇到/skill引用，读取upstream/skills/<name>/SKILL.md执行，不要求宿主有slash命令。不得启动外部ARIS完整pipeline或另写通用简化算法。仅替换能力提供者；顺序、预算、判断、产物与失败处理遵循原文件。Task是科学对象和实验执行环境，不能凭其内部Agent新建workflow角色。禁止修改workflow或调用apply_workflow。需要reviewer时，保存完整prompt、材料哈希、用途、continuation和期望响应，交Main调度；读到真实response才能继续。需要用户输入时交Main request_user，沉默不是批准。所有临床/实验结论只基于真实数据，模型评语与事实分开。\nproof-checker要求的ultra调用使用Skill scripts/readonly_review.py --mode proof；完整义务提取、修复、原线程复审及JSON审计均保留。仅真实能力错误才按上游fallback降至xhigh，必须保留错误证据。",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "paper_improve": {
+      "model": "claude-opus-5",
+      "harness": "claude-code",
+      "skills": [
+        "./skills/scienceevolve-aris"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "permission": "compute",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "instructions": "完整2轮review→修稿→重新编译，默认每轮新reviewer上下文。保留所有PDF与原文review；偏置保护下不向reviewer传历史分数/修复叙述/style-ref。遵循edit-whitelist并记录被拒绝修改。\n本阶段主规范：upstream/skills/auto-paper-improvement-loop/SKILL.md。以Main给出的阶段、参数和continuation执行，完成或需要外部能力时返回Main。\n先读取 scienceevolve-aris Skill，遵循完整上游流程和本地调度协议，不删减能力。所有上游文档/工具在该Skill的upstream/；将其绝对路径作为ARIS_REPO提供给需要的命令。遇到/skill引用，读取upstream/skills/<name>/SKILL.md执行，不要求宿主有slash命令。不得启动外部ARIS完整pipeline或另写通用简化算法。仅替换能力提供者；顺序、预算、判断、产物与失败处理遵循原文件。Task是科学对象和实验执行环境，不能凭其内部Agent新建workflow角色。禁止修改workflow或调用apply_workflow。需要reviewer时，保存完整prompt、材料哈希、用途、continuation和期望响应，交Main调度；读到真实response才能继续。需要用户输入时交Main request_user，沉默不是批准。所有临床/实验结论只基于真实数据，模型评语与事实分开。",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "paper_assurance": {
+      "model": "claude-opus-5",
+      "harness": "claude-code",
+      "skills": [
+        "./skills/scienceevolve-aris"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "permission": "compute",
+      "webSearch": true,
+      "sessionPersistence": true,
+      "decisionBy": "main",
+      "instructions": "执行W3收尾全部适用审计和Phase6合同/assurance验收，包含claim、logic、integrity、citation及visual等由上游effort/assurance控制的项目。实际运行verify_paper_audits.sh，非零必须阻止submission-ready。每个子审计输出规定JSON，不把缺helper/缺工具写成PASS；交最终报告、PDF、improvement log与未决事项。\n本阶段主规范：upstream/skills/paper-writing/SKILL.md。以Main给出的阶段、参数和continuation执行，完成或需要外部能力时返回Main。\n先读取 scienceevolve-aris Skill，遵循完整上游流程和本地调度协议，不删减能力。所有上游文档/工具在该Skill的upstream/；将其绝对路径作为ARIS_REPO提供给需要的命令。遇到/skill引用，读取upstream/skills/<name>/SKILL.md执行，不要求宿主有slash命令。不得启动外部ARIS完整pipeline或另写通用简化算法。仅替换能力提供者；顺序、预算、判断、产物与失败处理遵循原文件。Task是科学对象和实验执行环境，不能凭其内部Agent新建workflow角色。禁止修改workflow或调用apply_workflow。需要reviewer时，保存完整prompt、材料哈希、用途、continuation和期望响应，交Main调度；读到真实response才能继续。需要用户输入时交Main request_user，沉默不是批准。所有临床/实验结论只基于真实数据，模型评语与事实分开。\n完整性审计执行integrity-upstream中的原协议：ledger、各独立auditor、advisory/refutation、coverage、确定性adjudicator与ARIS forensics_gate。每个只读auditor使用scripts/readonly_review.py --mode integrity，以实际固定源版本模型/effort为准；不能用paper_reviewer泛化一次审查替代。",
+      "gatewayReasoningOption": "high",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "reviewer": {
+      "model": "gpt-6-astra",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-aris"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "instructions": "你是实际跨模型reviewer，亲自执行待审请求，不能代作者捏造原文。读取Skill调度协议和pending_review.json，按purpose读取对应上游review/novelty/audit规范，逐项审查保存完整原文、score/verdict、证据路径和材料哈希。需要复核代码、检索或数学检查时实际执行。研究辩论根据原transcript逐条裁决SUSTAINED/OVERRULED/PARTIALLY SUSTAINED；hard/nightmare更新REVIEWER_MEMORY。不能修改被审材料或替作者修稿。返回Main，由Main交回requester继续。\n先读取 scienceevolve-aris Skill，遵循完整上游流程和本地调度协议，不删减能力。所有上游文档/工具在该Skill的upstream/；将其绝对路径作为ARIS_REPO提供给需要的命令。遇到/skill引用，读取upstream/skills/<name>/SKILL.md执行，不要求宿主有slash命令。不得启动外部ARIS完整pipeline或另写通用简化算法。仅替换能力提供者；顺序、预算、判断、产物与失败处理遵循原文件。Task是科学对象和实验执行环境，不能凭其内部Agent新建workflow角色。禁止修改workflow或调用apply_workflow。需要reviewer时，保存完整prompt、材料哈希、用途、continuation和期望响应，交Main调度；读到真实response才能继续。需要用户输入时交Main request_user，沉默不是批准。所有临床/实验结论只基于真实数据，模型评语与事实分开。\n每次新SCIENCEEVOLVE会话。只加载此上游逻辑thread的完整原文消息/工具输出/REVIEWER_MEMORY以等价续接，不载入其他阶段或候选的review记录；新jury/独立审查没有历史输入。不得把跨阶段常驻会话当原thread。",
+      "gatewayReasoningOption": "xhigh",
+      "proxy": {
+        "mode": "direct"
+      }
+    },
+    "paper_reviewer": {
+      "model": "gpt-6-astra",
+      "harness": "codex",
+      "skills": [
+        "./skills/scienceevolve-aris"
+      ],
+      "autoSkills": [],
+      "mcpServers": [],
+      "permission": "workspace",
+      "webSearch": true,
+      "sessionPersistence": false,
+      "decisionBy": "main",
+      "instructions": "你是实际跨模型reviewer，亲自执行待审请求，不能代作者捏造原文。读取Skill调度协议和pending_review.json，按purpose读取对应上游review/novelty/audit规范，逐项审查保存完整原文、score/verdict、证据路径和材料哈希。需要复核代码、检索或数学检查时实际执行。研究辩论根据原transcript逐条裁决SUSTAINED/OVERRULED/PARTIALLY SUSTAINED；hard/nightmare更新REVIEWER_MEMORY。不能修改被审材料或替作者修稿。返回Main，由Main交回requester继续。\n独立paper-review/claim/logic/integrity/citation audit每次新上下文；只读取本次材料白名单及必要一手证据，禁止读取作者style-ref、接受合同、过去分数和修复叙述，除非该上游特定审计明确要求。\n先读取 scienceevolve-aris Skill，遵循完整上游流程和本地调度协议，不删减能力。所有上游文档/工具在该Skill的upstream/；将其绝对路径作为ARIS_REPO提供给需要的命令。遇到/skill引用，读取upstream/skills/<name>/SKILL.md执行，不要求宿主有slash命令。不得启动外部ARIS完整pipeline或另写通用简化算法。仅替换能力提供者；顺序、预算、判断、产物与失败处理遵循原文件。Task是科学对象和实验执行环境，不能凭其内部Agent新建workflow角色。禁止修改workflow或调用apply_workflow。需要reviewer时，保存完整prompt、材料哈希、用途、continuation和期望响应，交Main调度；读到真实response才能继续。需要用户输入时交Main request_user，沉默不是批准。所有临床/实验结论只基于真实数据，模型评语与事实分开。",
+      "gatewayReasoningOption": "xhigh",
+      "proxy": {
+        "mode": "direct"
+      }
+    }
+  },
+  "orchestration": {
+    "agents": [
+      {
+        "name": "main",
+        "template": "main",
+        "description": "研究流程协调"
+      },
+      {
+        "name": "literature",
+        "template": "general",
+        "description": "完整执行主线文献检索：研究 brief/参考论文、可用本地库和远程来源、逐篇验证、分析综合、文献表与可选 wiki；明确未验证证据，不能跳过核验。"
+      },
+      {
+        "name": "ideas",
+        "template": "general",
+        "description": "完成视角扩展、跨模型头脑风暴、机械归并、客观可行性检查、跨模型深度验证，以及最多3个pilot。保留正/负/跳过的真实状态。无原生spawn时使用上游Tier3顺序lens分支；pilot作业仍可由已有Task执行器并发。预算、超时和源文件规则按上游，不自定义缩小。"
+      },
+      {
+        "name": "novelty",
+        "template": "general",
+        "description": "完成主张提取、多源检索、文献核验、跨模型新颖性验证和报告。提出审稿请求时交Main调度reviewer；自己不能写外部裁决。"
+      },
+      {
+        "name": "refine",
+        "template": "general",
+        "description": "承接上游idea-discovery的外部critical review和Phase4.5 refine，执行完整研究细化、experiment-plan，形成单份IDEA_REPORT、research_contract及输出manifest；保留淘汰证据，落实阶段acceptance。"
+      },
+      {
+        "name": "bridge",
+        "template": "general",
+        "description": "完整实施W1.5：解析里程碑、base repo、实现、跨模型代码审查及最多2次修复、sanity和最多3次debug/救援、作业数/依赖自动选run-experiment或experiment-queue、部署监测、收集、training-check、自动消融规划和handoff。不得仅保存计划后标记实际运行完成。"
+      },
+      {
+        "name": "research_loop",
+        "template": "general",
+        "description": "完整执行W2。每轮review→可选hard/nightmare辩论与裁决→人工checkpoint→修复/实验→监测→记全原文。最多4轮；只有跨模型有效裁决score>=6且verdict为ready/almost才positive STOP。高分not ready不能停止；第4轮未通过明确失败，不虚构accepted。"
+      },
+      {
+        "name": "summary",
+        "template": "general",
+        "description": "只执行主线Stage4叙事交接：从实际idea、代码、实验、评审生成NARRATIVE_REPORT和pipeline report；按参数render-html，不丢失失败和未解决问题。AUTO_WRITE=false按原协议跳过写作；true时检查venue和手工图条件，按上游延后语义记录pending而非假完成。"
+      },
+      {
+        "name": "paper_plan",
+        "template": "general",
+        "description": "完整规划主张证据矩阵、结构、图表、引用并跨模型审查；随后执行paper-writing Phase1.5最多3轮接受合同谈判。合同争议按上游显式标记contested并触发用户处理，不能改成accepted；记录冻结合同，不能通过静默缩小验收条件过关。"
+      },
+      {
+        "name": "figures",
+        "template": "general",
+        "description": "按paper-writing Phase2/2b完成真实数据图表和所选illustration后端；支持figurespec本地矢量、mermaid或用户配置的图像后端。执行质量审查，保存生成脚本/数据出处/LaTeX includes。能力替换仍须生成和检查实际图，不用文字描述代替。"
+      },
+      {
+        "name": "paper_write",
+        "template": "general",
+        "description": "按主线方法完成全部章节、公式、引用和主张一致性，遵守冻结合同；按参数执行writing-systems-papers等分支，不能只写摘要或研究报告代替稿件。"
+      },
+      {
+        "name": "paper_compile",
+        "template": "general",
+        "description": "实际执行LaTeX编译、处理错误、检查引用/图表/页数，保存PDF与日志；随后按paper-writing对应阶段执行visual检查、claim-audit。需要外部review时交Main，不能由作者自审冒充独立审计。"
+      },
+      {
+        "name": "paper_improve",
+        "template": "general",
+        "description": "完整2轮review→修稿→重新编译，默认每轮新reviewer上下文。保留所有PDF与原文review；偏置保护下不向reviewer传历史分数/修复叙述/style-ref。遵循edit-whitelist并记录被拒绝修改。"
+      },
+      {
+        "name": "paper_assurance",
+        "template": "general",
+        "description": "执行W3收尾全部适用审计和Phase6合同/assurance验收，包含claim、logic、integrity、citation及visual等由上游effort/assurance控制的项目。实际运行verify_paper_audits.sh，非零必须阻止submission-ready。每个子审计输出规定JSON，不把缺help"
+      },
+      {
+        "name": "reviewer",
+        "template": "general",
+        "description": "跨模型外部审查"
+      },
+      {
+        "name": "paper_reviewer",
+        "template": "general",
+        "description": "跨模型外部审查"
+      }
+    ],
+    "input": {
+      "source": "input",
+      "target": "main"
+    },
+    "routes": {
+      "main": [
+        {
+          "target": "literature",
+          "kind": "weak"
+        },
+        {
+          "target": "ideas",
+          "kind": "weak"
+        },
+        {
+          "target": "novelty",
+          "kind": "weak"
+        },
+        {
+          "target": "refine",
+          "kind": "weak"
+        },
+        {
+          "target": "bridge",
+          "kind": "weak"
+        },
+        {
+          "target": "research_loop",
+          "kind": "weak"
+        },
+        {
+          "target": "summary",
+          "kind": "weak"
+        },
+        {
+          "target": "paper_plan",
+          "kind": "weak"
+        },
+        {
+          "target": "figures",
+          "kind": "weak"
+        },
+        {
+          "target": "paper_write",
+          "kind": "weak"
+        },
+        {
+          "target": "paper_compile",
+          "kind": "weak"
+        },
+        {
+          "target": "paper_improve",
+          "kind": "weak"
+        },
+        {
+          "target": "paper_assurance",
+          "kind": "weak"
+        },
+        {
+          "target": "reviewer",
+          "kind": "weak"
+        },
+        {
+          "target": "paper_reviewer",
+          "kind": "weak"
+        }
+      ],
+      "literature": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "ideas": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "novelty": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "refine": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "bridge": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "research_loop": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "summary": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "paper_plan": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "figures": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "paper_write": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "paper_compile": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "paper_improve": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "paper_assurance": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "reviewer": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ],
+      "paper_reviewer": [
+        {
+          "target": "main",
+          "kind": "strong"
+        }
+      ]
+    },
+    "decisionPlans": {
+      "main": "依据上游阶段/continuation与真实验收证据调度；评审请求优先处理。",
+      "literature": "完整执行当前阶段或保存外部review/user请求后交Main；未拿到响应不能伪称阶段完成。",
+      "ideas": "完整执行当前阶段或保存外部review/user请求后交Main；未拿到响应不能伪称阶段完成。",
+      "novelty": "完整执行当前阶段或保存外部review/user请求后交Main；未拿到响应不能伪称阶段完成。",
+      "refine": "完整执行当前阶段或保存外部review/user请求后交Main；未拿到响应不能伪称阶段完成。",
+      "bridge": "完整执行当前阶段或保存外部review/user请求后交Main；未拿到响应不能伪称阶段完成。",
+      "research_loop": "完整执行当前阶段或保存外部review/user请求后交Main；未拿到响应不能伪称阶段完成。",
+      "summary": "完整执行当前阶段或保存外部review/user请求后交Main；未拿到响应不能伪称阶段完成。",
+      "paper_plan": "完整执行当前阶段或保存外部review/user请求后交Main；未拿到响应不能伪称阶段完成。",
+      "figures": "完整执行当前阶段或保存外部review/user请求后交Main；未拿到响应不能伪称阶段完成。",
+      "paper_write": "完整执行当前阶段或保存外部review/user请求后交Main；未拿到响应不能伪称阶段完成。",
+      "paper_compile": "完整执行当前阶段或保存外部review/user请求后交Main；未拿到响应不能伪称阶段完成。",
+      "paper_improve": "完整执行当前阶段或保存外部review/user请求后交Main；未拿到响应不能伪称阶段完成。",
+      "paper_assurance": "完整执行当前阶段或保存外部review/user请求后交Main；未拿到响应不能伪称阶段完成。",
+      "reviewer": "完整执行当前阶段或保存外部review/user请求后交Main；未拿到响应不能伪称阶段完成。",
+      "paper_reviewer": "完整执行当前阶段或保存外部review/user请求后交Main；未拿到响应不能伪称阶段完成。"
+    },
+    "allowUserIntervention": true,
+    "allowMainReconfiguration": false,
+    "termination": {
+      "agent": "main",
+      "condition": "完整执行原流程所选分支，所有阶段的accepted/skipped/deferred/exhausted状态与原门槛一致，待处理review/user/实验交接为空，准确交付结果而不伪造成功。",
+      "decisionBy": "main",
+      "automatic": false
+    },
+    "resultFormat": {
+      "presets": [
+        "研究报告",
+        "可复现证据"
+      ],
+      "custom": "idea-stage/、refine-logs/、review-stage/、.aris/runs/、NARRATIVE_REPORT.md、所选W3的paper/PDF与全部审计证据。"
+    }
+  },
+  "git": {
+    "enabled": false
+  }
+}
