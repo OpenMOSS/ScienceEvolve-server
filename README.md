@@ -292,7 +292,7 @@ Use the Server's accepted configuration and actual traces as the runtime source 
 
 We implement or adapt workflow structures from published papers and open-source projects as ScienceEvolve configurations, including Agent roles, routing, and feedback loops. Credit belongs to the original authors; the table links the **original work, official project, and our implementation**.
 
-This page presents **21 workflow examples: three starters and 18 workflows from papers or open-source projects**. Their files are indexed under [example/](example/README_en.md). They are provided as JSON configurations, reference assets, and documentation. Web users copy, export, and import them manually. The application has no dedicated template gallery, automatic loading, or Server packaging for these examples.
+This page presents **21 workflow examples, including three introductory workflows**. Their files are indexed under [example/](example/README_en.md). They are provided as JSON configurations, reference assets, and documentation. Web users copy, export, and import them manually. The application has no dedicated template gallery, automatic loading, or Server packaging for these examples.
 
 ### Start with three introductory workflows
 
@@ -304,7 +304,8 @@ This page presents **21 workflow examples: three starters and 18 workflows from 
 <thead>
 <tr><th align="left">Method</th><th align="left">Original paper</th><th align="left">Official code / project</th><th align="left">Our workflow</th></tr>
 </thead>
-<tbody><tr><td align="left"><a href="example/aris/README.md">ARIS</a></td><td align="left"><a href="https://arxiv.org/abs/2605.03042" title="ARIS: Autonomous Research via Adversarial Multi-Agent Collaboration">arXiv:2605.03042</a></td><td align="left"><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep" title="wanshuiyin/Auto-claude-code-research-in-sleep">ARIS</a></td><td align="left"><a href="example/aris/workflow.json">JSON</a> · <a href="docs/readme/workflows/aris.jpg">Canvas</a></td></tr>
+<tbody><tr><td align="left"><a href="example/01-ahe-evolve/README.md">AHE code evolution</a></td><td align="left"><a href="https://arxiv.org/abs/2604.25850" title="Agentic Harness Engineering: Observability-Driven Automatic Evolution of Coding-Agent Harnesses">arXiv:2604.25850</a></td><td align="left"><a href="https://github.com/china-qijizhifeng/agentic-harness-engineering">agentic-harness-engineering</a></td><td align="left"><a href="example/01-ahe-evolve/workflow.json">JSON</a> · <a href="docs/readme/workflows/01-ahe-evolve.jpg">Canvas</a></td></tr>
+<tr><td align="left"><a href="example/aris/README.md">ARIS</a></td><td align="left"><a href="https://arxiv.org/abs/2605.03042" title="ARIS: Autonomous Research via Adversarial Multi-Agent Collaboration">arXiv:2605.03042</a></td><td align="left"><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep" title="wanshuiyin/Auto-claude-code-research-in-sleep">ARIS</a></td><td align="left"><a href="example/aris/workflow.json">JSON</a> · <a href="docs/readme/workflows/aris.jpg">Canvas</a></td></tr>
 <tr><td align="left"><a href="example/metaharness/README.md">Meta-Harness</a></td><td align="left"><a href="https://arxiv.org/abs/2603.28052" title="Meta-Harness: End-to-End Optimization of Model Harnesses">arXiv:2603.28052</a></td><td align="left"><a href="https://github.com/stanford-iris-lab/meta-harness">meta-harness</a></td><td align="left"><a href="example/metaharness/workflow.json">JSON</a> · <a href="docs/readme/workflows/metaharness.jpg">Canvas</a></td></tr>
 <tr><td align="left"><a href="example/autoresearch/README.md">autoresearch</a></td><td align="left">— (project source)</td><td align="left"><a href="https://github.com/karpathy/autoresearch">autoresearch</a></td><td align="left"><a href="example/autoresearch/workflow.json">JSON</a> · <a href="docs/readme/workflows/autoresearch.jpg">Canvas</a></td></tr>
 <tr><td align="left"><a href="example/funsearch/README.md">FunSearch</a></td><td align="left"><a href="https://www.nature.com/articles/s41586-023-06924-6" title="Mathematical discoveries from program search with large language models">Nature 2023</a></td><td align="left"><a href="https://github.com/google-deepmind/funsearch">funsearch</a></td><td align="left"><a href="example/funsearch/workflow.json">JSON</a> · <a href="docs/readme/workflows/funsearch.jpg">Canvas</a></td></tr>
@@ -389,12 +390,6 @@ The CCFA and Nature copies do not record import commits; their repository attrib
 <tr><td align="left">Configure GitHub OAuth and nested parallel workflows</td><td align="left"><a href="docs/configuration.md#github-accounts-and-git-collaboration">Git accounts</a> · <a href="docs/openfars-collaboration/scoped-workflow-v3-en.md">Collaboration workflows</a></td></tr>
 <tr><td align="left">Understand orchestration, permissions, recovery, and host differences</td><td align="left"><a href="docs/configuration.md#workflow">Workflow</a> · <a href="docs/architecture.md">Architecture</a> · <a href="docs/main-sdk-parity.md">Web / SDK boundaries</a></td></tr>
 </tbody></table>
-
-<a id="references"></a>
-
-## References
-
-- [Agentic Harness Engineering: Observability-Driven Automatic Evolution of Coding-Agent Harnesses](https://arxiv.org/abs/2604.25850). arXiv:2604.25850, 2026.
 
 <a id="resources"></a>
 

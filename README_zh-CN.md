@@ -292,7 +292,7 @@ Main：协调异常恢复与用户补充输入
 
 我们参考公开论文与开源项目，将其中的 Agent 分工、任务路径与反馈循环编排为 ScienceEvolve Workflow。感谢原作者开放方法和代码；下面的表格同时提供**原始来源、官方项目与我们的实现**。
 
-本页展示 **21 个工作流示例：3 个入门流程、18 个论文或开源项目工作流**，对应文件见 [example/](example/README.md)。它们以 JSON 配置、参考资源与说明文档的形式提供；Web 端由用户自行复制、导出和导入，不设置专门的模板展示区，也不自动加载或随 Server 打包。
+本页展示 **21 个工作流示例，其中 3 个适合入门**，对应文件见 [example/](example/README.md)。它们以 JSON 配置、参考资源与说明文档的形式提供；Web 端由用户自行复制、导出和导入，不设置专门的模板展示区，也不自动加载或随 Server 打包。
 
 ### 先从三个入门流程开始
 
@@ -304,7 +304,8 @@ Main：协调异常恢复与用户补充输入
 <thead>
 <tr><th align="left">方法</th><th align="left">原始论文</th><th align="left">官方代码 / 项目</th><th align="left">本项目 Workflow</th></tr>
 </thead>
-<tbody><tr><td align="left"><a href="example/aris/README.md">ARIS</a></td><td align="left"><a href="https://arxiv.org/abs/2605.03042" title="ARIS: Autonomous Research via Adversarial Multi-Agent Collaboration">arXiv:2605.03042</a></td><td align="left"><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep" title="wanshuiyin/Auto-claude-code-research-in-sleep">ARIS</a></td><td align="left"><a href="example/aris/workflow.json">JSON</a> · <a href="docs/readme/workflows/aris.jpg">画布</a></td></tr>
+<tbody><tr><td align="left"><a href="example/01-ahe-evolve/README.md">AHE · 代码自进化</a></td><td align="left"><a href="https://arxiv.org/abs/2604.25850" title="Agentic Harness Engineering: Observability-Driven Automatic Evolution of Coding-Agent Harnesses">arXiv:2604.25850</a></td><td align="left"><a href="https://github.com/china-qijizhifeng/agentic-harness-engineering">agentic-harness-engineering</a></td><td align="left"><a href="example/01-ahe-evolve/workflow.json">JSON</a> · <a href="docs/readme/workflows/01-ahe-evolve.jpg">画布</a></td></tr>
+<tr><td align="left"><a href="example/aris/README.md">ARIS</a></td><td align="left"><a href="https://arxiv.org/abs/2605.03042" title="ARIS: Autonomous Research via Adversarial Multi-Agent Collaboration">arXiv:2605.03042</a></td><td align="left"><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep" title="wanshuiyin/Auto-claude-code-research-in-sleep">ARIS</a></td><td align="left"><a href="example/aris/workflow.json">JSON</a> · <a href="docs/readme/workflows/aris.jpg">画布</a></td></tr>
 <tr><td align="left"><a href="example/metaharness/README.md">Meta-Harness</a></td><td align="left"><a href="https://arxiv.org/abs/2603.28052" title="Meta-Harness: End-to-End Optimization of Model Harnesses">arXiv:2603.28052</a></td><td align="left"><a href="https://github.com/stanford-iris-lab/meta-harness">meta-harness</a></td><td align="left"><a href="example/metaharness/workflow.json">JSON</a> · <a href="docs/readme/workflows/metaharness.jpg">画布</a></td></tr>
 <tr><td align="left"><a href="example/autoresearch/README.md">autoresearch</a></td><td align="left">—（以项目为来源）</td><td align="left"><a href="https://github.com/karpathy/autoresearch">autoresearch</a></td><td align="left"><a href="example/autoresearch/workflow.json">JSON</a> · <a href="docs/readme/workflows/autoresearch.jpg">画布</a></td></tr>
 <tr><td align="left"><a href="example/funsearch/README.md">FunSearch</a></td><td align="left"><a href="https://www.nature.com/articles/s41586-023-06924-6" title="Mathematical discoveries from program search with large language models">Nature 2023</a></td><td align="left"><a href="https://github.com/google-deepmind/funsearch">funsearch</a></td><td align="left"><a href="example/funsearch/workflow.json">JSON</a> · <a href="docs/readme/workflows/funsearch.jpg">画布</a></td></tr>
@@ -389,12 +390,6 @@ CCFA 与 Nature 的内置副本未记录导入时的提交版本；上游仓库�
 <tr><td align="left">设置 GitHub OAuth、并行与嵌套协作</td><td align="left"><a href="docs/configuration_zh-CN.md#github-%E8%B4%A6%E5%8F%B7%E5%BA%93%E4%B8%8E-git-%E5%8D%8F%E4%BD%9C">Git 账号配置</a> · <a href="docs/openfars-collaboration/scoped-workflow-v3.md">协作组内 Workflow</a></td></tr>
 <tr><td align="left">查看编排、权限、恢复与宿主差异</td><td align="left"><a href="docs/configuration_zh-CN.md#workflow">Workflow</a> · <a href="docs/architecture.md">系统架构</a> · <a href="docs/main-sdk-parity-zh.md">Web / SDK 边界</a></td></tr>
 </tbody></table>
-
-<a id="references"></a>
-
-## 参考文献
-
-- [Agentic Harness Engineering: Observability-Driven Automatic Evolution of Coding-Agent Harnesses](https://arxiv.org/abs/2604.25850). arXiv:2604.25850, 2026.
 
 <a id="resources"></a>
 

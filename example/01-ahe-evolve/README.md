@@ -2,6 +2,8 @@
 
 [← 返回中文 README](../../README_zh-CN.md#examples) · [Back to English README](../../README.md#examples) · [示例目录](../README.md)
 
+原始工作：[Agentic Harness Engineering: Observability-Driven Automatic Evolution of Coding-Agent Harnesses](https://arxiv.org/abs/2604.25850) · [官方代码](https://github.com/china-qijizhifeng/agentic-harness-engineering)。本例提供工作流结构与编排的适配，具体范围见下文“与原框架的范围差异”。
+
 本目录仅提供静态流程文件与资源。Web 用户按[手动使用说明](../README.md#在-web-中手动查看和使用)导出副本，再通过主页通用 JSON 导入入口查看和使用；补全需求与真实网关后自行启动。SDK 运行见 [SDK 分支指南](/../feat/sdk-only-v0.1.1/sdk/README_zh-CN.md)。
 
 通过自然语言需求启动 四 Agent workflow，路由与循环由 `workflow.json` 配置：
