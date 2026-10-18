@@ -115,6 +115,7 @@ import { ClaudeCodeAdapter } from "./adapters/claude-code-adapter.js";
 import { DshAdapter } from "./adapters/dsh-adapter.js";
 import {
   agentEnvironment,
+  natureFigureWorkspaceConfigPath,
   prepareComputeRuntime,
   type HarnessHostOptions
 } from "./runtime-support.js";
@@ -481,7 +482,7 @@ function selectedNatureFigureConfig(
   if (request.permission !== "compute") return undefined;
   const selected = [...spec.policy.skillPaths, ...spec.policy.autoSkillPaths];
   return selected.some((skillPath) => path.basename(path.dirname(skillPath)) === "nature-figure")
-    ? path.join(spec.inputs.runtimePath, "nature-figure.json")
+    ? natureFigureWorkspaceConfigPath(spec.inputs.workspacePath)
     : undefined;
 }
 

@@ -42,6 +42,7 @@ import {
 } from "./harness-runtime/process-host.js";
 import {
   agentEnvironment,
+  natureFigureWorkspaceConfigPath,
   readControlActions,
   resolveOrchestrationControlMcpCommand,
   resolveWorkspaceMcpCommand,
@@ -894,11 +895,7 @@ async function hasSelectedSkillDirectory(
 async function prepareNatureFigureWorkspace(
   workspacePath: string
 ): Promise<string> {
-  const configPath = path.join(
-    workspacePath,
-    ".scienceevolve",
-    "nature-figure.json"
-  );
+  const configPath = natureFigureWorkspaceConfigPath(workspacePath);
   await fs.mkdir(path.dirname(configPath), { recursive: true });
   await fs.writeFile(configPath, '{\n  "backend": "python"\n}\n', {
     encoding: "utf8",

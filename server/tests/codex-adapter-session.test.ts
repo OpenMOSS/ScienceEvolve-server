@@ -46,14 +46,15 @@ const lineValue = (prefix, suffix) => {
     ? value.slice(0, -suffix.length)
     : value;
 };
-const inboxPath = lineValue("Read the invocation Inbox at ", ".");
+const inboxPath = lineValue("Read the invocation Inbox at ", ".") ||
+  lineValue("Current task Inbox: ").split(". Open it")[0].split(". Its exact")[0];
 const memoryPath = lineValue(
   "Read persistent project memory at ",
   " before acting."
 ) || lineValue(
   "Read persistent Agent memory at ",
   " before acting."
-);
+) || lineValue("Persistent project memory: ").split(". Consult relevant portions")[0];
 fs.appendFileSync(${JSON.stringify(capture)}, JSON.stringify({
   args,
   resumed,
@@ -65,6 +66,11 @@ fs.appendFileSync(${JSON.stringify(capture)}, JSON.stringify({
   inbox: fs.readFileSync(inboxPath, "utf8"),
   memory: fs.readFileSync(memoryPath, "utf8"),
   codexHome: process.env.CODEX_HOME ?? null,
+  natureFigureConfigPath: process.env.NATURE_FIGURE_CONFIG ?? null,
+  natureFigureConfig: process.env.NATURE_FIGURE_CONFIG
+    ? JSON.parse(fs.readFileSync(process.env.NATURE_FIGURE_CONFIG, "utf8"))
+    : null,
+  matplotlibBackend: process.env.MPLBACKEND ?? null,
   pid: process.pid
 }) + "\\n");
 if (mode !== "missing") {
@@ -180,6 +186,46 @@ async function durableRequest(
 }
 
 describe("Codex Adapter durable session identity", () => {
+  it.each([
+    { selection: "fixed", permission: "compute" },
+    { selection: "automatic", permission: "compute" },
+    { selection: "none", permission: "compute" },
+    { selection: "fixed", permission: "workspace" }
+  ] as const)("launches with the authorized Nature figure config (selection: $selection, permission: $permission)", async ({ selection, permission }) => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-codex-nature-"));
+    roots.push(root);
+    const fake = await fakeCodex(root, "valid");
+    const runtime = new HarnessRuntimeFacade({
+      harnessExecutables: { codex: fake.executable },
+      protocolProxyFactory: vi.fn(async () => ({
+        baseUrl: "http://127.0.0.1:43193/v1",
+        token: "invocation-token",
+        close: async () => undefined
+      }))
+    });
+    const request = await durableRequest(root, "inv_codex_nature", "worker", "execution");
+    const skillPath = path.join(root, "skill-library", "nature-figure", "SKILL.md");
+    await fs.mkdir(path.dirname(skillPath), { recursive: true });
+    await fs.writeFile(skillPath, "# Nature figure fixture\n", "utf8");
+    request.permission = permission;
+    request.project.agents.execution!.permission = permission;
+    request.skillPaths = selection === "fixed" ? [skillPath] : [];
+    request.autoSkillPaths = selection === "automatic" ? [skillPath] : [];
+    request.availableSkillPaths = [skillPath];
+
+    const result = await runtime.run(request, () => undefined, new AbortController().signal);
+
+    expect(result.handoff).toBe("Codex fixture complete.");
+    const captures = (await fs.readFile(fake.capture, "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    expect(captures).toHaveLength(1);
+    const selected = permission === "compute" && selection !== "none";
+    expect(captures[0]).toMatchObject({
+      natureFigureConfigPath: selected ? path.join(request.workspacePath, ".scienceevolve", "nature-figure.json") : null,
+      natureFigureConfig: selected ? { backend: "python" } : null,
+      matplotlibBackend: selected ? "Agg" : null
+    });
+  });
+
   it("makes Codex Main and Worker actually read their staged Inbox and Memory", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-codex-inputs-"));
     roots.push(root);
