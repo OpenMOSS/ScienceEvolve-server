@@ -75,7 +75,17 @@ ScienceEvolve 是论文 [Rethinking Scientific Discovery in the Agentic Era](htt
 
 <a id="features"></a>
 
-## 运行、迭代与交付科研任务
+## 核心功能
+
+### 让 Main 调整工作流
+
+获得授权后，Main 可以增删 Agent、调整职责和路径、切换 Harness，并提交新的工作流。Server 校验通过后再应用；团队可根据当前任务重新分工。[查看配置范围](docs/configuration_zh-CN.md#workflow)。
+
+<div align="center">
+
+<img src="docs/readme/03-main-revises-the-workflow-zh.svg" alt="原流程反馈边界失败与误差偏大，Main 切换 Harness、增加协作组并修改连接，复验通过后示意评分从 62 提升到 91" width="96%">
+
+</div>
 
 ### 设置 Loop 轮次与退出 Agent
 
@@ -94,16 +104,6 @@ Idea 将增大仿真时间步长的方案交给 Execution。候选变更集成�
 <div align="center">
 
 <img src="docs/readme/07-git-rollback-zh.svg" alt="Idea → Execution → Review 工作流：评分下降后，Review 直接回滚候选 PR，代码从 m42 恢复为 a41，新增 r43 提交并复验到 78" width="96%">
-
-</div>
-
-### 让 Main 调整工作流
-
-获得授权后，Main 可以增删 Agent、调整职责和路径、切换 Harness，并提交新的工作流。Server 校验通过后再应用；团队可根据当前任务重新分工。[查看配置范围](docs/configuration_zh-CN.md#workflow)。
-
-<div align="center">
-
-<img src="docs/readme/03-main-revises-the-workflow-zh.svg" alt="原流程反馈边界失败与误差偏大，Main 切换 Harness、增加协作组并修改连接，复验通过后示意评分从 62 提升到 91" width="96%">
 
 </div>
 
