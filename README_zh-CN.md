@@ -20,11 +20,11 @@
 </p>
 
 <p align="center">
-  <a href="docs/readme/screenshots/home.png"><img src="docs/readme/screenshots/home.png" alt="ScienceEvolve 主页：发起和管理研究课题" title="主页 · 点击查看大图" width="32%"></a>
+  <a href="docs/readme/screenshots/project-overview.png"><img src="docs/readme/screenshots/project-overview.png" alt="项目总览：查看研究课题、任务状态、进度和 Token 消耗" title="项目总览 · 点击查看大图" width="32%"></a>
   <a href="docs/readme/screenshots/project-execution.png"><img src="docs/readme/screenshots/project-execution.png" alt="运行监控：查看 Agent 活动、执行轨迹、运行工作流与性能" title="运行监控 · 点击查看大图" width="32%"></a>
   <a href="docs/readme/screenshots/workflow-editor.png"><img src="docs/readme/screenshots/workflow-editor.png" alt="Workflow 编排界面：连接 Agent，配置 Harness、模型和工具" title="Workflow 编排 · 点击查看大图" width="32%"></a>
   <br>
-  <sub>主页 &nbsp; · &nbsp; 运行监控 &nbsp; · &nbsp; Workflow 编排</sub>
+  <sub>项目总览 &nbsp; · &nbsp; 运行监控 &nbsp; · &nbsp; Workflow 编排</sub>
 </p>
 
 ---

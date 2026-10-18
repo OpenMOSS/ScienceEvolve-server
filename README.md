@@ -20,11 +20,11 @@
 </p>
 
 <p align="center">
-  <a href="docs/readme/screenshots/home.png"><img src="docs/readme/screenshots/home.png" alt="ScienceEvolve home: launch and manage research projects" title="Home — click to enlarge" width="32%"></a>
+  <a href="docs/readme/screenshots/project-overview.png"><img src="docs/readme/screenshots/project-overview.png" alt="Project overview: research projects, task status, progress, and token usage" title="Project overview — click to enlarge" width="32%"></a>
   <a href="docs/readme/screenshots/project-execution.png"><img src="docs/readme/screenshots/project-execution.png" alt="Runtime Monitoring: Agent activity, traces, runtime workflow, and performance" title="Runtime Monitoring — click to enlarge" width="32%"></a>
   <a href="docs/readme/screenshots/workflow-editor.png"><img src="docs/readme/screenshots/workflow-editor.png" alt="Workflow editor: connect Agents and configure their Harness, model, and tools" title="Workflow editor — click to enlarge" width="32%"></a>
   <br>
-  <sub>Home &nbsp; · &nbsp; Runtime Monitoring &nbsp; · &nbsp; Workflow editor</sub>
+  <sub>Project overview &nbsp; · &nbsp; Runtime Monitoring &nbsp; · &nbsp; Workflow editor</sub>
 </p>
 
 ---
