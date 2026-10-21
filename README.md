@@ -12,6 +12,7 @@
 <a href="#sdk"><img src="docs/readme/badges/sdk-en.svg" alt="📦 SDK / CLI · TypeScript · API" height="26"></a>
 <a href="#quick-start"><img src="docs/readme/badges/quick-start-en.svg" alt="🚀 Quick start · Install · connect · import" height="26"></a>
 <a href="#features"><img src="docs/readme/badges/features-en.svg" alt="✨ Features · Collaborate · iterate" height="26"></a>
+<a href="#scientific-skills"><img src="docs/readme/badges/skills-en.svg" alt="🧠 Scientific Skills · 875 Skills · 12 areas" height="26"></a>
 <a href="#dual-loops"><img src="docs/readme/badges/dual-loops-en.svg" alt="🔄 Dual loops · Task · process" height="26"></a>
 <a href="#tutorial"><img src="docs/readme/badges/tutorial-en.svg" alt="📖 Web tutorial · Projects · workflows" height="26"></a>
 <a href="#examples"><img src="docs/readme/badges/examples-en.svg" alt="🧪 Examples · 21 workflows" height="26"></a>
@@ -136,6 +137,49 @@ Use **Project Explainer** to understand the current workflow, edit Agent setting
 <img src="docs/readme/06-switch-tools-change-the-flow.svg" alt="In a turbulence closure-model comparison, the user switches Harnesses, adds Verifier, and adds parallel theory and data checks" width="96%">
 
 </div>
+
+<a id="scientific-skills"></a>
+
+## Scientific Skills: research methods for your Agents
+
+**875 Skills · 12 research areas · Distilled from 70,000+ published papers.**
+
+ScienceEvolve includes a scientific method library for hypothesis generation, research design, experimental validation, evidence analysis, and iteration. Give each Agent the methods relevant to its task alongside its role, model, and tools.
+
+Each Skill describes **when to use it, required inputs, research steps, expected outputs, validation gates, claim boundaries, and failure handling**. The workflow organizes the team; Skills guide how each member approaches a scientific problem.
+
+| Research area | Skills |
+| :--- | :--- |
+| [Antibody and immune recognition](.agents/skills/README.md#antibody-and-immune-recognition) | 111 |
+| [Aqueous battery interfaces](.agents/skills/README.md#aqueous-battery-interfaces) | 92 |
+| [Asymmetric catalysis](.agents/skills/README.md#asymmetric-catalysis) | 38 |
+| [Chromatin and epigenomic regulation](.agents/skills/README.md#chromatin-and-epigenomic-regulation) | 39 |
+| [Quantum materials and condensed matter](.agents/skills/README.md#quantum-materials-and-condensed-matter) | 232 |
+| [Fiber composites and battery materials](.agents/skills/README.md#fiber-composites-and-battery-materials) | 121 |
+| [Galaxy, cosmology, and simulations](.agents/skills/README.md#galaxy-cosmology-and-simulations) | 57 |
+| [Magnetic confinement fusion](.agents/skills/README.md#magnetic-confinement-fusion) | 28 |
+| [Neuromorphic computing and Ising optimization](.agents/skills/README.md#neuromorphic-computing-and-ising-optimization) | 41 |
+| [Organometallic catalysis and DFT](.agents/skills/README.md#organometallic-catalysis-and-dft) | 25 |
+| [Polymer composites and vitrimers](.agents/skills/README.md#polymer-composites-and-vitrimers) | 60 |
+| [Urban hazard resilience](.agents/skills/README.md#urban-hazard-resilience) | 31 |
+| **Total** | **875** |
+
+<details>
+<summary><strong>Inside a Skill: asymmetric catalysis research design</strong></summary>
+
+The [chiral catalyst research-design Skill](.agents/skills/sci-catalysis-asymmetric-catalysis-chiral-catalyst-rese-1571cd89/SKILL.md) guides an Agent through:
+
+> Frame the problem → generate competing hypotheses → design minimal validation → analyze evidence → iterate or pivot.
+
+It asks for the target transformation, existing evidence, candidate mechanisms, and available analytical methods. Each stage defines a decision gate: when the evidence cannot distinguish hypotheses, revisit the validation design; when the observations conflict with the mechanism, revise the hypothesis. Outputs include a research plan, controls, decision criteria, and bounded conclusions.
+
+</details>
+
+**Use in the Web editor:** select an Agent and add the relevant Skills through its existing Skills control. Choose fixed loading or automatic selection where supported by the Harness. Skills are included with the project; no separate download is needed.
+
+When Main is authorized to reconfigure the workflow, it can adjust Skill selections as the research progresses. Actual data, tools, and experimental environments are configured for the task.
+
+[Browse all 875 scientific Skills](.agents/skills/README.md)
 
 <a id="quick-start"></a>
 
