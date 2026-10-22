@@ -12,7 +12,7 @@ For a first local task, follow the README's [quick start](../README.md#quick-sta
 
 - Node.js 24 or later. Collaboration's authoritative SQLite state requires Node 24.
 - npm 10 or later.
-- Executable Codex and [Inspire CLIs](../.agents/skills/inspire/references/setup/install-and-config.md#1-安装). SII experiments also require account and project initialization.
+- Executable Codex and [Inspire CLIs](../.agents/skills/general/inspire/references/setup/install-and-config.md#1-安装). SII experiments also require account and project initialization.
 - At least one working model gateway.
 - Git when enabling Git collaboration.
 
@@ -428,7 +428,7 @@ Use the platform's exact Project and Workspace names; replace `<TARGET_WORKSPACE
 
 These conditions have no safe implicit defaults. Reusable combinations can be saved with `inspire <workload> profile set`, but creation commands must explicitly select the Profile. Availability changes over time. Before each submission, query Quota and Availability; afterward check Events, Logs, Metrics, Instances, and Status, and clean up unused resources.
 
-See [installation and account setup](../.agents/skills/inspire/references/setup/install-and-config.md) and [resources and scheduling](../.agents/skills/inspire/references/resources-and-paths.md). Use the installed version's `inspire --help` and subcommand `--help` for exact arguments.
+See [installation and account setup](../.agents/skills/general/inspire/references/setup/install-and-config.md) and [resources and scheduling](../.agents/skills/general/inspire/references/resources-and-paths.md). Use the installed version's `inspire --help` and subcommand `--help` for exact arguments.
 
 ### Frontend and reverse proxy
 

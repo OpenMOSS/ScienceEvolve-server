@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const skillRoot = fileURLToPath(
-  new URL("../../.agents/skills", import.meta.url)
+  new URL("../../.agents/skills/general", import.meta.url)
 );
 
 describe("imported CCFA skills", () => {

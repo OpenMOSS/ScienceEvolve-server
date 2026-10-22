@@ -65,7 +65,7 @@ async function main(): Promise<void> {
   const explainerSandbox = await resolveExplainerSandboxConfiguration();
   const siiExperiments = new SiiExperimentService({ projectsRoot: storage.projectsDir(), inspireBin,
     configPath: config.inspireConfigPath, noProxy: config.inspireNoProxy, workspaceRoot: config.inspireWorkspaceRoot,
-    knowledgeRoot: path.join(config.skillRoots[0]!, "inspire"),
+    knowledgeRoot: path.join(config.skillRoots[0]!, "general", "inspire"),
     refreshMs: Math.max(1000, Number(process.env.SCIENCEEVOLVE_SII_REFRESH_MS) || 30_000) });
   const runner = new HarnessRuntimeFacade({
     siiExperiments,

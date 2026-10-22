@@ -1,3 +1,5 @@
+<a id="top"></a>
+
 <h1 align="center">ScienceEvolve Server</h1>
 
 <p align="center">
@@ -5,14 +7,14 @@
 </p>
 
 <p align="center">
-  <strong>English</strong> | <a href="./README_zh-CN.md">简体中文</a>
+  <strong>English</strong> | <a href="./README_zh-CN.md#top">简体中文</a>
 </p>
 
 <p align="center">
 <a href="#sdk"><img src="docs/readme/badges/sdk-en.svg" alt="📦 SDK / CLI · TypeScript · API" height="26"></a>
 <a href="#quick-start"><img src="docs/readme/badges/quick-start-en.svg" alt="🚀 Quick start · Install · connect · import" height="26"></a>
 <a href="#features"><img src="docs/readme/badges/features-en.svg" alt="✨ Features · Collaborate · iterate" height="26"></a>
-<a href="#scientific-skills"><img src="docs/readme/badges/skills-en.svg" alt="🧠 Scientific Skills · 875 Skills · 12 areas" height="26"></a>
+<a href="#skills-overview"><img src="docs/readme/badges/skills-en.svg" alt="🧠 Research Skills · 875 methods · 12 areas" height="26"></a>
 <a href="#dual-loops"><img src="docs/readme/badges/dual-loops-en.svg" alt="🔄 Dual loops · Task · process" height="26"></a>
 <a href="#tutorial"><img src="docs/readme/badges/tutorial-en.svg" alt="📖 Web tutorial · Projects · workflows" height="26"></a>
 <a href="#examples"><img src="docs/readme/badges/examples-en.svg" alt="🧪 Examples · 21 workflows" height="26"></a>
@@ -73,6 +75,40 @@ The **task loop** runs a method, collects real feedback, improves the method, an
 </div>
 
 [Main / Worker roles and dual loops](docs/research-workflows.md#dual-loops) · [Dynamic reconfiguration scope](docs/configuration.md#workflow)
+
+<a id="skills-overview"></a>
+
+## 🧠 Research Skills
+
+ScienceEvolve distills methods from published research into **reusable scientific workflows**. Agents can frame a research question, formulate hypotheses, design validation, analyze evidence, and adapt their next steps to the results, bringing domain methods into their own research process.
+
+**875 scientific methods across 12 research areas, distilled from 70,000+ published papers.**
+
+- **🧭 Research design**: define applicability and required inputs, organize testable hypotheses, variables, controls, and research steps, and specify expected outputs.
+- **🔎 Evidence and validation**: establish validation gates and claim boundaries, distinguishing verified facts, inferences, and untested hypotheses so conclusions remain tied to evidence.
+- **🔄 Feedback and iteration**: identify failure modes and define when to repeat validation, revise the study, or pivot if evidence is insufficient or observations contradict a hypothesis.
+
+Select task-relevant Skills for different Agents and provide the research goal, existing evidence, and available resources to guide research planning and result analysis. **The reusable part is the research method; conclusions still require evidence and validation from the current study.**
+
+<p>
+<a href=".agents/skills/scientific/immune-recognition/README.md#top"><img src="docs/readme/badges/skills-area-immune-en.svg" alt="Antibody and immune recognition · 111" width="32%"></a>
+<a href=".agents/skills/scientific/aqueous-batteries/README.md#top"><img src="docs/readme/badges/skills-area-aqueous-en.svg" alt="Aqueous battery interfaces · 92" width="32%"></a>
+<a href=".agents/skills/scientific/asymmetric-catalysis/README.md#top"><img src="docs/readme/badges/skills-area-catalysis-en.svg" alt="Asymmetric catalysis · 38" width="32%"></a>
+<br>
+<a href=".agents/skills/scientific/chromatin-regulation/README.md#top"><img src="docs/readme/badges/skills-area-chromatin-en.svg" alt="Chromatin and epigenomic regulation · 39" width="32%"></a>
+<a href=".agents/skills/scientific/quantum-materials/README.md#top"><img src="docs/readme/badges/skills-area-quantum-en.svg" alt="Quantum materials and condensed matter · 232" width="32%"></a>
+<a href=".agents/skills/scientific/fiber-composites/README.md#top"><img src="docs/readme/badges/skills-area-fiber-en.svg" alt="Fiber composites and battery materials · 121" width="32%"></a>
+<br>
+<a href=".agents/skills/scientific/cosmology/README.md#top"><img src="docs/readme/badges/skills-area-cosmology-en.svg" alt="Galaxy, cosmology, and simulations · 57" width="32%"></a>
+<a href=".agents/skills/scientific/fusion/README.md#top"><img src="docs/readme/badges/skills-area-fusion-en.svg" alt="Magnetic confinement fusion · 28" width="32%"></a>
+<a href=".agents/skills/scientific/neuromorphic-computing/README.md#top"><img src="docs/readme/badges/skills-area-neuro-en.svg" alt="Neuromorphic computing and Ising optimization · 41" width="32%"></a>
+<br>
+<a href=".agents/skills/scientific/organometallic-catalysis/README.md#top"><img src="docs/readme/badges/skills-area-dft-en.svg" alt="Organometallic catalysis and DFT · 25" width="32%"></a>
+<a href=".agents/skills/scientific/polymer-composites/README.md#top"><img src="docs/readme/badges/skills-area-polymer-en.svg" alt="Polymer composites and vitrimers · 60" width="32%"></a>
+<a href=".agents/skills/scientific/urban-resilience/README.md#top"><img src="docs/readme/badges/skills-area-urban-en.svg" alt="Urban hazard resilience · 31" width="32%"></a>
+</p>
+
+<sub>Browse Skills by area &nbsp; · &nbsp; <a href="#scientific-skills">Usage and examples</a> &nbsp; · &nbsp; <a href=".agents/skills/README.md#top">All Skills</a></sub>
 
 <a id="features"></a>
 
@@ -140,34 +176,22 @@ Use **Project Explainer** to understand the current workflow, edit Agent setting
 
 <a id="scientific-skills"></a>
 
-## Scientific Skills: research methods for your Agents
+## Skill usage and examples
 
-**875 Skills · 12 research areas · Distilled from 70,000+ published papers.**
+**875 scientific method Skills across 12 areas, plus 21 supporting Skills for research and writing.**
 
-ScienceEvolve includes a scientific method library for hypothesis generation, research design, experimental validation, evidence analysis, and iteration. Give each Agent the methods relevant to its task alongside its role, model, and tools.
+<a id="scientific-methods"></a>
 
-Each Skill describes **when to use it, required inputs, research steps, expected outputs, validation gates, claim boundaries, and failure handling**. The workflow organizes the team; Skills guide how each member approaches a scientific problem.
+### Scientific methods · 12 areas / 875 Skills
 
-| Research area | Skills |
-| :--- | :--- |
-| [Antibody and immune recognition](.agents/skills/README.md#antibody-and-immune-recognition) | 111 |
-| [Aqueous battery interfaces](.agents/skills/README.md#aqueous-battery-interfaces) | 92 |
-| [Asymmetric catalysis](.agents/skills/README.md#asymmetric-catalysis) | 38 |
-| [Chromatin and epigenomic regulation](.agents/skills/README.md#chromatin-and-epigenomic-regulation) | 39 |
-| [Quantum materials and condensed matter](.agents/skills/README.md#quantum-materials-and-condensed-matter) | 232 |
-| [Fiber composites and battery materials](.agents/skills/README.md#fiber-composites-and-battery-materials) | 121 |
-| [Galaxy, cosmology, and simulations](.agents/skills/README.md#galaxy-cosmology-and-simulations) | 57 |
-| [Magnetic confinement fusion](.agents/skills/README.md#magnetic-confinement-fusion) | 28 |
-| [Neuromorphic computing and Ising optimization](.agents/skills/README.md#neuromorphic-computing-and-ising-optimization) | 41 |
-| [Organometallic catalysis and DFT](.agents/skills/README.md#organometallic-catalysis-and-dft) | 25 |
-| [Polymer composites and vitrimers](.agents/skills/README.md#polymer-composites-and-vitrimers) | 60 |
-| [Urban hazard resilience](.agents/skills/README.md#urban-hazard-resilience) | 31 |
-| **Total** | **875** |
+The methods cover hypothesis generation, research design, experimental validation, evidence analysis, and iteration. Browse each area using the category cards above.
+
+Each Skill defines applicability, inputs, steps, outputs, validation gates, claim boundaries, and failure handling. Categories organize browsing; existing `builtin:<name>` references remain unchanged.
 
 <details>
 <summary><strong>Inside a Skill: asymmetric catalysis research design</strong></summary>
 
-The [chiral catalyst research-design Skill](.agents/skills/sci-catalysis-asymmetric-catalysis-chiral-catalyst-rese-1571cd89/SKILL.md) guides an Agent through:
+The [chiral catalyst research-design Skill](.agents/skills/scientific/asymmetric-catalysis/sci-catalysis-asymmetric-catalysis-chiral-catalyst-rese-1571cd89/SKILL.md) guides an Agent through:
 
 > Frame the problem → generate competing hypotheses → design minimal validation → analyze evidence → iterate or pivot.
 
@@ -179,13 +203,25 @@ It asks for the target transformation, existing evidence, candidate mechanisms, 
 
 When Main is authorized to reconfigure the workflow, it can adjust Skill selections as the research progresses. Actual data, tools, and experimental environments are configured for the task.
 
-[Browse all 875 scientific Skills](.agents/skills/README.md)
+[Browse all research areas](.agents/skills/scientific/README.md#top)
+
+<a id="general-skills"></a>
+
+### Supporting research & writing Skills · 21
+
+Research direction, ideation, literature research, experiment design, writing, figures, and review, plus Inspire experiment guidance.
+
+- **Team roles · 5**: research direction, ideation, experiment execution, writing, and review.
+- **Research, writing, and review · 15**: CCFA, Nature-style, and integrated writing methods.
+- **Experiment operations · 1**: Inspire operations and experiment resources.
+
+[Browse research & writing Skills](.agents/skills/general/README.md#top)
 
 <a id="quick-start"></a>
 
 ## Quick start
 
-You need **Node.js 24+**, **npm 10+**, an installed [Inspire CLI](.agents/skills/inspire/references/setup/install-and-config.md#1-安装), and a working model gateway. The current Server checks for Inspire at startup, including for local tasks.
+You need **Node.js 24+**, **npm 10+**, an installed [Inspire CLI](.agents/skills/general/inspire/references/setup/install-and-config.md#1-安装), and a working model gateway. The current Server checks for Inspire at startup, including for local tasks.
 
 ### 1. Install and start
 
@@ -448,6 +484,6 @@ The CCFA and Nature copies do not record import commits; their repository attrib
 <tr><td align="left">SDK documentation</td><td align="left"><a href="https://github.com/OpenMOSS/ScienceEvolve/blob/main/sdk/README.md">SDK guide</a> · <a href="https://github.com/OpenMOSS/ScienceEvolve/blob/main/example/README.md">SDK examples</a></td></tr>
 <tr><td align="left">Workflow files and manual import</td><td align="left"><a href="example/README_en.md">Example directory and import instructions</a></td></tr>
 <tr><td align="left">Workflow canvas screenshots</td><td align="left"><a href="docs/readme/workflows/README_en.md">21 actual Workflow canvases</a></td></tr>
-<tr><td align="left">Inspire CLI installation</td><td align="left"><a href=".agents/skills/inspire/references/setup/install-and-config.md">Installation and configuration</a></td></tr>
+<tr><td align="left">Inspire CLI installation</td><td align="left"><a href=".agents/skills/general/inspire/references/setup/install-and-config.md">Installation and configuration</a></td></tr>
 </tbody>
 </table>

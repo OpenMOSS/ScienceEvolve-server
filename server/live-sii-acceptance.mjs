@@ -35,7 +35,7 @@ const reportPath = path.join(root, "report.json");
 const save = () => fs.writeFile(reportPath, JSON.stringify(report, null, 2) + "\n", { mode: 0o600 });
 const service = new SiiExperimentService({ projectsRoot: path.join(root, "projects"),
   inspireBin: process.env.SCIENCEEVOLVE_INSPIRE_BIN, workspaceRoot: process.env.SCIENCEEVOLVE_INSPIRE_WORKSPACE_ROOT,
-  noProxy: [".sii.edu.cn"], knowledgeRoot: path.join(repository, ".agents", "skills", "inspire"), refreshMs: 30000 });
+  noProxy: [".sii.edu.cn"], knowledgeRoot: path.join(repository, ".agents", "skills", "general", "inspire"), refreshMs: 30000 });
 const signal = AbortSignal.timeout(12 * 60_000);
 const preflightClient = new Client({ name: "sii-live-preflight", version: "1" });
 let preflightBinding;

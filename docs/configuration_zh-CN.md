@@ -12,7 +12,7 @@
 
 - Node.js 24 或更高版本（协作运行的内置 SQLite 权威状态依赖 Node 24）
 - npm 10 或更高版本
-- 可执行的 Codex CLI 与 [Inspire CLI](../.agents/skills/inspire/references/setup/install-and-config.md#1-安装)；使用 SII 实验工具时还需完成账号和项目初始化
+- 可执行的 Codex CLI 与 [Inspire CLI](../.agents/skills/general/inspire/references/setup/install-and-config.md#1-安装)；使用 SII 实验工具时还需完成账号和项目初始化
 - 至少一个可用的模型网关
 - Git（启用 Git 协作时需要）
 
@@ -428,7 +428,7 @@ inspire resources availability --workspace all --include-cpu
 
 这些条件没有可安全依赖的隐式默认值。重复使用同一套条件时，可以通过 `inspire <workload> profile set` 保存 Workload Profile，但创建命令仍需显式使用该 Profile。资源可用量会变化，Agent 在每次提交前仍应查询 Quota 和 Availability，提交后继续检查 Events、Logs、Metrics、Instances 和 Status，并清理不再使用的资源。
 
-完整的 Inspire 配置与资源规则见 [安装与账号配置](../.agents/skills/inspire/references/setup/install-and-config.md) 和 [资源与调度条件](../.agents/skills/inspire/references/resources-and-paths.md)。具体命令参数始终以当前安装版本的 `inspire --help` 和子命令 `--help` 为准。
+完整的 Inspire 配置与资源规则见 [安装与账号配置](../.agents/skills/general/inspire/references/setup/install-and-config.md) 和 [资源与调度条件](../.agents/skills/general/inspire/references/resources-and-paths.md)。具体命令参数始终以当前安装版本的 `inspire --help` 和子命令 `--help` 为准。
 
 ### 前端与反向代理
 
