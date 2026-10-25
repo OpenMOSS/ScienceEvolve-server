@@ -75,6 +75,26 @@ class HoldingRunner implements AgentRunner {
 }
 
 describe("HTTP API", () => {
+  it("exposes and resolves the three bundled Agent4Sci skills without leaking host paths", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "agent4sci-api-"));
+    temporaryRoots.push(root);
+    const eventHub = new EventHub();
+    const storage = new ProjectStorage(root, eventHub);
+    await storage.initialize();
+    const app = createApp({ orchestrator: {} as Orchestrator, storage, eventHub,
+      skills: testSkillCatalog(), config: { modelSuggestions: [], maxEventHistory: 2 } });
+    const response = await request(app).get("/api/skills").expect(200);
+    for (const name of ["research", "experiment", "checklist"]) {
+      const id = `builtin:agent4sci-${name}`;
+      const entry = response.body.skills.find((skill: { id: string }) => skill.id === id);
+      expect(entry).toMatchObject({ id, name: `agent4sci-${name}`, source: "builtin" });
+      expect(entry).not.toHaveProperty("path");
+      const resolved = await request(app).post("/api/skills/resolve").send({ skill: id }).expect(200);
+      expect(JSON.stringify(resolved.body)).toContain(id);
+      expect(JSON.stringify(resolved.body)).not.toContain(builtinSkillRoot);
+    }
+  });
+
   it("keeps research examples outside the application API and runtime catalog", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "scienceevolve-no-example-library-"));
     temporaryRoots.push(root);
