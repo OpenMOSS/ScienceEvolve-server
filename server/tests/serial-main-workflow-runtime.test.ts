@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { publishAgentContextIndex, type AgentContextSource } from "../src/agent-context-index.js";
 import request from "supertest";
 import { createApp } from "../src/app.js";
 import { Orchestrator } from "../src/orchestrator.js";
@@ -163,10 +164,20 @@ describe("Main workflow proposals on the actual serial backend path", () => {
       expect(request.onPrepareWorkflowAdjustmentInput).toBeTypeOf("function");
       expect(request.onWorkflowAdjustmentInputReceived).toBeTypeOf("function");
       const inputId = `actual-original-input-${inputs.length}`;
-      const text = await request.onPrepareWorkflowAdjustmentInput!({ inputId, expectedSession: f.session });
+      const published: AgentContextSource[] = [];
+      const text = await request.onPrepareWorkflowAdjustmentInput!({ inputId, expectedSession: f.session,
+        publishContext: async sources => {
+          published.push(...sources);
+          return (await publishAgentContextIndex(request.inboxPath, sources))?.preview ?? "";
+        } });
       inputs.push(text);
       if (text) {
-        expect(text).toContain("Original Main public explanation");
+        expect(text).toContain("source=workflow-updates");
+        expect(text).toContain("Context index:");
+        expect(text).not.toContain("Original Main public explanation");
+        expect(published.find(source => source.key === "workflow-updates")?.records).toMatchObject([
+          { record: { explanation: "Original Main public explanation" }, transition: { status: "applied" } }
+        ]);
         await request.onWorkflowAdjustmentInputReceived!({ kind: "user.message", eventId: "controlled-native-reception",
           invocationId: request.invocationId, harnessId: f.session.harnessId, message: `${text}\nOriginal continuation input` }, f.session, inputId);
         expect(await request.onPrepareWorkflowAdjustmentInput!({ inputId: "same-session-next-legal-input", expectedSession: f.session })).toBe("");

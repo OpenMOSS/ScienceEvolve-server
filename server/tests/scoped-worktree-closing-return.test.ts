@@ -78,7 +78,12 @@ describe("stopped closing returns and fresh formal continuation", () => {
     f.db.returnScopedWorktreeClosingToLeader({ ...identity, observationFailure: {
       reason: "Actual Git rejected an extra path of uncertain source", errorCode: "GIT_PATH_VIOLATION", errorClass: "GitPathViolationError" } });
     expect(f.db.scopedRecoveryCandidates(P, "run-G")[0]!.closingAttempts![0]!.returned!.observation).toBeUndefined();
-    expect(() => f.db.revalidateScopedLeaderAction(f.manager())).toThrow("untrusted closing return");
+    expect(() => f.db.revalidateScopedLeaderAction(f.manager())).toThrow(expect.objectContaining({
+      code: "INVALID_STATE_TRANSITION", details: expect.objectContaining({ invalidField: "operation", recoveryOptions: [expect.objectContaining({
+        arrivalRequestId: f.execution.arrivalRequestId, allowedOperations: ["escalate"],
+        blockedOperations: { close_worktree: expect.stringContaining("trusted original-owner file manifest") }
+      })] })
+    }));
     expect(f.db.scopedWorktreeClosingAuthorizations(P)).toHaveLength(1);
     expect(f.db.scopedGroupIssues(P)).toHaveLength(1);
   });

@@ -1,3 +1,5 @@
+import type { ProjectViewStatus } from "./project-status";
+
 export type AgentId = string;
 export type WorkflowNodeId = string;
 export type NodeRunId = string;
@@ -281,21 +283,7 @@ export interface ProjectGitState {
   };
 }
 
-export type ProjectStatus =
-  | "draft"
-  | "queued"
-  | "running"
-  | "retrying"
-  | "interrupting"
-  | "interrupted"
-  | "pausing"
-  | "paused"
-  | "cancelling"
-  | "cancelled"
-  | "stopping"
-  | "stopped"
-  | "completed"
-  | "failed";
+export type ProjectStatus = ProjectViewStatus;
 
 export type AgentProgressState =
   | "waiting"

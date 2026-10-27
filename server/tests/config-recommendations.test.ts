@@ -471,7 +471,7 @@ describe("configuration recommendations through Project Explainer", () => {
     ambiguous.gateways.list.mockResolvedValue([gateway, { ...gateway, id: `gwy_${"b".repeat(32)}` }]);
     await expect(ambiguous.service.recommend(input(), new AbortController().signal)).rejects.toMatchObject({ status: 502 });
   });
-  it("exposes POST validation and unavailable-service errors without creating a project", async () => {
+  it("exposes validation and unavailable-service errors without creating a project", async () => {
     const createProject = vi.fn();
     const dependencies = { storage: { root: process.cwd() }, orchestrator: { createProject }, skills: {}, eventHub: {},
       config: { modelSuggestions: [], maxEventHistory: 10 } } as unknown as AppDependencies;
@@ -482,6 +482,20 @@ describe("configuration recommendations through Project Explainer", () => {
     const response = await request(configured).post("/api/config-recommendations").send({ title: "Task", requirement: "Research", advisor });
     expect(response.status).toBe(503);
     expect(response.body.error).toBe("No route");
+    for (const endpoint of ["/api/config-recommendations/explainer", "/api/agent-tool-recommendations/catalog"]) {
+      await request(app).get(endpoint).expect(503);
+      await request(app).get(endpoint).query({ projectId: `prj_${"a".repeat(32)}` }).expect(503);
+      for (const projectId of ["", "../other", `prj_${"A".repeat(32)}`]) {
+        const invalid = await request(app).get(endpoint).query({ projectId }).expect(400);
+        expect(invalid.body).toMatchObject({ error: "请求参数无效：projectId：Invalid", issues: [
+          { code: "invalid_string", validation: "regex", path: ["projectId"], message: "Invalid" }
+        ] });
+      }
+      const array = await request(app).get(endpoint).query({ projectId: ["first", "second"] }).expect(400);
+      expect(array.body.issues).toEqual([expect.objectContaining({ code: "invalid_type", path: ["projectId"], received: "array" })]);
+      const unknown = await request(app).get(endpoint).query({ unexpected: "value" }).expect(400);
+      expect(unknown.body.issues).toEqual([expect.objectContaining({ code: "unrecognized_keys", path: [], keys: ["unexpected"] })]);
+    }
     expect(createProject).not.toHaveBeenCalled();
   });
 

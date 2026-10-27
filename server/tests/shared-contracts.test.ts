@@ -37,7 +37,7 @@ describe("shared host contracts", () => {
     ]);
   });
 
-  it("keeps every host-neutral core pinned to the cross-host source fingerprint", () => {
+  it("pins the reviewed Server rule sources to exact canonical-LF fingerprints", () => {
     const sharedRoot = path.join(import.meta.dirname, "..", "src", "internal", "shared");
     for (const [file, expected] of Object.entries(sourceFingerprints.files)) {
       const source = fs.readFileSync(path.join(sharedRoot, file), "utf8").replace(/\r\n/g, "\n");

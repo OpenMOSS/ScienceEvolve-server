@@ -28,6 +28,7 @@ import {
   type ProjectExplainerRecommendationPort
 } from "./project-explainer.js";
 import { AgentConfigPresetStore } from "./agent-config-presets.js";
+import { SavedTaskLauncher, savedTaskProjectInput, savedTaskLaunchSchema } from "./saved-task-launcher.js";
 import { parseWorkflowImport } from "./workflow-import.js";
 import { ConfigRecommendationError, configRecommendationInputSchema, type ConfigRecommendationPort } from "./config-recommendations.js";
 import { agentToolRecommendationInputSchema, type AgentToolRecommendationService } from "./agent-tool-recommendations.js";
@@ -78,6 +79,7 @@ import { PROTOCOL_ROUTER_COMPATIBILITY_VERSION } from "./protocol-router.js";
 import { redactTrace } from "./utils.js";
 import type { ExecutionSummaryService } from "./execution-summary.js";
 import { GitHubAccountStore } from "./github-accounts.js";
+import { GitHubRepositoryManager, registerGitHubRepositoryManagementRoutes } from "./github-repository-management.js";
 import { GitHubAuthorizationError } from "./collaboration-git/errors.js";
 import { ProjectInputUploads, ProjectInputUploadError } from "./project-input-uploads.js";
 
@@ -85,6 +87,9 @@ const MAX_PENDING_SSE_EVENTS = 1_000;
 const DEFAULT_EVENT_PAGE_LIMIT = 1_000;
 const MAX_EVENT_PAGE_LIMIT = 5_000;
 const MAX_ARTIFACT_PREVIEW_BYTES = 5 * 1024 * 1024;
+const recommendationProjectQuerySchema = z.object({
+  projectId: z.string().regex(/^prj_[a-f0-9]{32}$/).optional()
+}).strict();
 
 function responseAbortSignal(response: Response): AbortSignal {
   const controller = new AbortController();
@@ -128,6 +133,7 @@ export interface AppDependencies {
   skills: SkillCatalog;
   configPresets?: AgentConfigPresetStore;
   savedResearchTasks?: SavedResearchTaskStore;
+  savedTaskLauncher?: SavedTaskLauncher;
   projectExplainer?: ProjectExplainerPort & Partial<ProjectExplainerRecommendationPort> & Partial<ProjectExplainerAssistantPort>;
   configRecommendations?: ConfigRecommendationPort;
   agentToolRecommendations?: Pick<AgentToolRecommendationService, "catalog" | "recommend">;
@@ -148,6 +154,8 @@ export function createApp(dependencies: AppDependencies) {
     dependencies.configPresets ?? new AgentConfigPresetStore(storage.root);
   const savedResearchTasks =
     dependencies.savedResearchTasks ?? new SavedResearchTaskStore(storage.root);
+  const savedTaskLauncher = dependencies.savedTaskLauncher ?? new SavedTaskLauncher(storage.root, savedResearchTasks,
+    task => orchestrator.createProject(savedTaskProjectInput(task)));
   const inputUploads = new ProjectInputUploads(storage.root);
   const projectExplainer = dependencies.projectExplainer;
   const harnessCatalog = dependencies.harnessCatalog ?? (async () =>
@@ -180,10 +188,12 @@ export function createApp(dependencies: AppDependencies) {
   app.use("/api/explainer/conversations", express.json({ limit: "3mb" }));
   app.use(express.json({ limit: "2mb" }));
   registerExplainerAssistantRoutes(app, projectExplainer);
+  registerGitHubRepositoryManagementRoutes(app, githubAccounts,
+    new GitHubRepositoryManager(storage.root, githubAccounts, () => storage.listStates()));
 
   app.get("/api/config-recommendations/explainer", async (request, response, next) => {
     try {
-      const { projectId } = z.object({ projectId: z.string().regex(/^prj_[a-f0-9]{32}$/).optional() }).strict().parse(request.query);
+      const { projectId } = recommendationProjectQuerySchema.parse(request.query);
       if (!projectExplainer?.getRecommendationConfig) {
         response.status(503).json({ error: "Project Explainer 推荐配置不可用。" });
         return;
@@ -267,7 +277,7 @@ export function createApp(dependencies: AppDependencies) {
   };
   app.get("/api/agent-tool-recommendations/catalog", async (request, response, next) => {
     try {
-      const { projectId } = z.object({ projectId: z.string().regex(/^prj_[a-f0-9]{32}$/).optional() }).strict().parse(request.query);
+      const { projectId } = recommendationProjectQuerySchema.parse(request.query);
       if (!dependencies.agentToolRecommendations) { response.status(503).json({ error: "工具推荐服务尚未配置。" }); return; }
       response.json(await dependencies.agentToolRecommendations.catalog(recommendationResources(projectId)));
     } catch (error) {
@@ -677,6 +687,16 @@ export function createApp(dependencies: AppDependencies) {
     try {
       response.json({ tasks: await savedResearchTasks.list() });
     } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/saved-research-tasks/start/batch", async (request, response, next) => {
+    try { response.status(202).json(await savedTaskLauncher.start(savedTaskLaunchSchema.parse(request.body))); }
+    catch (error) {
+      if ((error as { status?: number }).status === 409) {
+        response.status(409).json({ error: redactTrace((error as Error).message) }); return;
+      }
       next(error);
     }
   });

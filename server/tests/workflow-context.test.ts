@@ -81,6 +81,61 @@ async function fixture() {
 async function json(file: string) { return JSON.parse(await fs.readFile(file, "utf8")); }
 
 describe("management Workflow context", () => {
+  // Linux fixture baseline (UTF-16 / UTF-8 / lines): global 18474/18726/167,
+  // group 15229/15307/143, group-65 35572/35650/465. Allow 5% for readable
+  // wording, rounded up to 128 units / 256 bytes / 8 lines. These are output
+  // regression budgets, not token counts or model context-window limits.
+  it.each([
+    { scene: "global", scope: "global" as const, extraAgents: 0, budget: { utf16: 19456, utf8: 19712, lines: 176 } },
+    { scene: "group", scope: "group" as const, extraAgents: 0, budget: { utf16: 16000, utf8: 16128, lines: 152 } },
+    { scene: "group-65", scope: "group" as const, extraAgents: 65, budget: { utf16: 37376, utf8: 37632, lines: 496 } }
+  ])("bounds assembled workflow output and preserves scope ($scene)", async ({ scene, scope, extraAgents, budget }) => {
+    const f = await fixture();
+    const group = f.state.orchestration.scopedWorkflow!.groups.find(group => group.id === "G")!;
+    for (let index = 0; index < extraAgents; index++) {
+      const agentId = `budget_agent_${index}`, nodeId = `budget_node_${index}`;
+      f.state.agents[agentId] = structuredClone(f.state.agents.execution!);
+      f.state.orchestration.agents.push({ name: agentId, template: "general" });
+      group.workflow.nodes.push({ kind: "agent", nodeId, agentId });
+      group.workflow.input.edges.push({ kind: "parallel", target: nodeId });
+      group.workflow.routes[nodeId] = [{ kind: "strong", target: "finish" }];
+    }
+    const candidates = scope === "global" ? ["G", "review"] : ["finish"];
+    f.request.workflowContext = scope === "global" ? { scope, candidates, purpose: "outer-routing" }
+      : { scope, groupId: "G", groupRunId: "run-G", candidates, purpose: "route" };
+    const inputs = await prepareWorkflowContext(f.request, f.inputs);
+    const context = inputs.workflowContext!;
+    const policy = compileInvocationPolicy(f.state.agents.main, f.request);
+    const prompt = compileWorkflowPrompt(f.request, inputs, policy);
+    const normalized = prompt.replaceAll(f.root, "<fixture-root>")
+      .replaceAll(JSON.stringify(f.root).slice(1, -1), "<fixture-root>").replaceAll("\r\n", "\n");
+    const metrics = { utf16: normalized.length, codePoints: [...normalized].length,
+      utf8: Buffer.byteLength(normalized), lines: normalized.split("\n").length - Number(normalized.endsWith("\n")) };
+    const details = await json(context.agentsPath);
+    const agentIds = Object.keys(details.agents);
+    console.info("workflow-output-budget", JSON.stringify({ scene, ...metrics, visibleAgents: agentIds.length, budget }));
+    expect(metrics.utf16).toBeLessThanOrEqual(budget.utf16);
+    expect(metrics.utf8).toBeLessThanOrEqual(budget.utf8);
+    expect(metrics.lines).toBeLessThanOrEqual(budget.lines);
+    for (const agentId of agentIds) {
+      expect(prompt).toContain(`| ${agentId} |`);
+      expect(details.agents[agentId].instructions).toBe(f.state.agents[agentId].instructions);
+    }
+    expect(prompt).toContain(context.preview);
+    expect(prompt).toContain("Configuration revision: 7; state revision: 12;");
+    expect(prompt).toContain("Current Agent: main; role:");
+    expect(prompt).toContain(`Legal route candidates for this turn (exact node IDs): ${JSON.stringify(candidates)}`);
+    expect(prompt).toContain("OpenFARS permission mode:");
+    expect(prompt).not.toContain("gateway-credential-must-stay-private");
+    if (scope === "group") expect(prompt).toContain("it does not complete the project");
+    else expect(prompt).toContain("Project completion:");
+    if (extraAgents) {
+      expect(prompt).toContain("budget_node_64 => Agent budget_agent_64");
+      expect(prompt).toContain("budget_node_64 --strong--> finish");
+      expect(prompt).toContain("budget_agent_64");
+    }
+  });
+
   it("shows the last node and connection when a group has more than 50 graph entries", async () => {
     const f = await fixture();
     const workflow = f.state.orchestration.scopedWorkflow!.groups.find(group => group.id === "G")!.workflow;

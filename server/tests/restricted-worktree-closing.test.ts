@@ -105,10 +105,12 @@ describe("read-only discovery of exact original-task closing files", () => {
     await expect(discover(f)).rejects.toThrow(); expect(f.prepare).not.toHaveBeenCalled();
   });
 
-  it("leaves excluded internal runtime files outside the business candidate", async () => {
+  it("refuses excluded-looking runtime files without granting authority or modifying them", async () => {
     const f = await fixture(), target = path.join(f.worktreePath, "runtime/native.json");
     await fs.mkdir(path.dirname(target)); await fs.writeFile(target, "Internal runtime evidence\n");
-    expect(await discover(f)).toBeUndefined(); expect(await fs.readFile(target, "utf8")).toBe("Internal runtime evidence\n");
+    await expect(discover(f)).rejects.toThrow("exact owned business file");
+    expect(f.prepare).not.toHaveBeenCalled();
+    expect(await fs.readFile(target, "utf8")).toBe("Internal runtime evidence\n");
   });
 
   it.each(["symlink", "hardlink", "committed-symlink", "committed-submodule"])("does not turn %s into a writable candidate", async kind => {
@@ -434,11 +436,18 @@ describe("restricted original-task closing observations", () => {
     await expect(f.local.observeRestrictedWorktreeClosing(f.execution, 4, f.scope(), controller.signal)).rejects.toThrow();
   });
 
-  it.each(["pending", "committed"])("refuses an incomplete bounded %s observation instead of accepting a partial file list", async state => {
+  it.each(["pending", "committed"])("requires complete %s observations beyond display retention", async state => {
     const f = await fixture(), files = Array.from({ length: 220 }, (_, index) => `${String(index).padStart(4, "0")}-${"f".repeat(75)}.txt`);
     await Promise.all(files.map(file => fs.writeFile(path.join(f.worktreePath, file), "Closing data\n")));
     if (state === "committed") f.commit("Large authorized closing diff");
-    await expect(f.observe(f.scope(files, "completed-leftovers"))).rejects.toThrow("complete observation limit");
+    if (state === "committed") {
+      await expect(f.observe(f.scope(files, "completed-leftovers"))).rejects.toThrow("complete observation limit");
+    } else {
+      expect(Buffer.byteLength(f.git(["status", "--porcelain=v1", "-z"]))).toBeGreaterThan(16_000);
+      expect(await f.observe(f.scope(files, "completed-leftovers"))).toMatchObject({
+        pendingPaths: [...files].sort(), authorizedPaths: [...files].sort(), committedPaths: [], deliveryRequired: false
+      });
+    }
     expect(f.git(["status", "--porcelain=v1"]).split("\n").filter(Boolean)).toHaveLength(state === "pending" ? files.length : 0);
   });
 

@@ -10588,6 +10588,21 @@ label.experiment-mcp-control[data-disabled="true"] {
 .github-repository-empty span { display: grid; gap: 3px; }
 .github-repository-empty small { color: #77837b; }
 .github-repository-disclaimer { display: flex; align-items: center; gap: 6px; margin: -3px 0 0; color: #7d6550; font-size: 10px; }
+.github-repository-batch-trigger { display: inline-flex; align-items: center; gap: 6px; justify-self: start; padding: 8px 12px; border: 1px solid #e4c7c3; border-radius: 8px; background: #fff8f7; color: #9a3428; cursor: pointer; }
+.github-repository-batch-trigger:disabled { opacity: .5; cursor: default; }
+.github-repository-batch-dialog { width: min(720px, calc(100vw - 32px)); max-height: 85vh; overflow-y: auto; }
+.github-repository-batch-dialog > label { display: grid; gap: 7px; margin: 14px 0; }
+.github-repository-batch-dialog > label > input, .github-repository-batch-dialog > label > select { padding: 9px 11px; border: 1px solid #cfd9d1; border-radius: 7px; font: inherit; }
+.github-repository-batch-dialog > p { color: #667269; line-height: 1.6; }
+.github-repository-delete-selection { display: grid; gap: 10px; margin: 18px 0; }
+.github-repository-delete-selection label { display: flex; gap: 10px; align-items: center; padding: 10px; border: 1px solid #e0e6e1; border-radius: 8px; }
+.github-repository-delete-selection span { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.github-repository-delete-selection small { color: #68746c; }
+.github-repository-delete-results { padding: 0; list-style: none; }
+.github-repository-delete-results li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 12px 0; border-bottom: 1px solid #e0e6e1; overflow-wrap: anywhere; }
+.github-repository-delete-results li p { width: 100%; margin: 0; }
+.github-repository-deletion-auth { margin: 14px 0; padding: 12px; border-radius: 8px; background: #fff9e9; }
+.github-repository-batch-dialog .workflow-modal-actions .danger { color: #9a3428; border-color: #e4c7c3; }
 .github-account-selector { display: grid; gap: 10px; margin-top: 12px; padding: 14px; border: 1px solid #d8e2d9; border-radius: 10px; background: #f9fbf9; }
 .github-account-selector-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .github-account-selector-head > span { display: inline-flex; align-items: center; gap: 7px; color: #2e4737; }

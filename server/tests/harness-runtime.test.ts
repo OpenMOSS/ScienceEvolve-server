@@ -1308,7 +1308,7 @@ describe("HarnessRuntimeFacade", () => {
     const live: HarnessEvent[] = [];
     const traces: HarnessEvent[] = [];
     const runRequest = await request(root, {
-      onLiveHarnessEvent: (event) => live.push(event as unknown as HarnessEvent)
+      onLiveHarnessEvent: (event) => live.push(event)
     });
 
     await facade.run(

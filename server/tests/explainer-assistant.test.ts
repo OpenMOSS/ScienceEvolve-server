@@ -10,6 +10,8 @@ import { SavedResearchTaskStore } from "../src/saved-research-tasks.js";
 import { SkillCatalog } from "../src/skill-catalog.js";
 import { fixedMcpDefinition } from "../src/mcp-directory.js";
 import { isExplainerMcp } from "../src/internal/shared/explainer-tools.js";
+import { workflowAdjustmentSubmissionBodySchema } from "../src/workflow-adjustments.js";
+import { SavedTaskLauncher } from "../src/saved-task-launcher.js";
 import type { ProjectState } from "../src/types.js";
 
 const roots: string[] = [];
@@ -21,6 +23,7 @@ async function setup() {
   const route = { harness: "fixture-harness", gatewayId: `gwy_${"a".repeat(32)}`, model: "configured/exact-model" };
   let official = { revision: 7, hash: "a".repeat(64) };
   const submitWorkflow = vi.fn(async (_id: string, input: Record<string, unknown>) => {
+    workflowAdjustmentSubmissionBodySchema.parse(input);
     if (JSON.stringify(input.base) !== JSON.stringify(official)) throw new Error("stale official Workflow version");
     return { record: { requestId: input.requestId, status: "pending" } };
   });
@@ -152,7 +155,7 @@ describe("Project Explainer agent tools and durable project drafts", () => {
     expect(project.agents.main.gatewaySnapshot?.apiKey).toBe("server-only-secret");
   });
 
-  it("saves one real draft, replays exact operations and never exposes a launch tool", async () => {
+  it("saves one real draft and replays exact operations without launching research", async () => {
     const f = await setup();
     const input = mutation(0, "edit-operation-1", { title: "分析草稿", requirement: "分析合成数据并生成可复现验证报告" });
     const edited = await f.store.call(f.context.id, "update_draft", input);
@@ -170,6 +173,61 @@ describe("Project Explainer agent tools and durable project drafts", () => {
     expect(await fs.readdir(f.root)).not.toContain("projects");
     const restarted = new ExplainerAssistantStore(f.root, f.store.host);
     expect((await restarted.create({ taskId: result.action!.context.taskId })).id).toBe(f.context.id);
+  });
+
+  it("creates two independent drafts in one conversation and replays each creation without overwriting either", async () => {
+    const f = await setup();
+    const requirement = "调研全自动 AI 短剧制作流水线，两份设计共享同一个研究课题";
+    const firstInput = mutation(0, "create-independent-draft-a", { title: "草案 A", requirement,
+      orchestration: { decisionPlans: { main: "按 A 方案组织取证和评审" } } });
+    const first = await f.store.call(f.context.id, "create_draft", firstInput);
+    const second = await f.store.call(f.context.id, "create_draft", mutation(1, "create-independent-draft-b", {
+      title: "草案 B", requirement, orchestration: { decisionPlans: { main: "按 B 方案组织双路分析和成稿" } }
+    }));
+    const a = first.action!.savedTask!, b = second.action!.savedTask!;
+    expect(a.id).not.toBe(b.id);
+    expect(await f.tasks.list()).toHaveLength(2);
+    expect((await f.tasks.get(a.id))!).toMatchObject({ title: "草案 A", requirement,
+      orchestration: { decisionPlans: { main: "按 A 方案组织取证和评审" } } });
+    expect((await f.tasks.get(b.id))!).toMatchObject({ title: "草案 B", requirement,
+      orchestration: { decisionPlans: { main: "按 B 方案组织双路分析和成稿" } } });
+    expect(await f.store.call(f.context.id, "create_draft", firstInput)).toEqual(first);
+    const restarted = new ExplainerAssistantStore(f.root, f.store.host);
+    expect(await restarted.call(f.context.id, "create_draft", firstInput)).toEqual(first);
+    await expect(restarted.call(f.context.id, "create_draft", { ...firstInput, patch: { title: "覆盖 A" } }))
+      .rejects.toThrow("同一操作编号");
+    const list = (await restarted.call(f.context.id, "get_context", { section: "drafts" })).result as any;
+    expect(list.data.entries.map((entry: any) => entry.id)).toEqual(expect.arrayContaining([a.id, b.id]));
+    expect((await restarted.call(f.context.id, "get_context", { section: "drafts", entry: a.id })).result)
+      .toMatchObject({ data: { id: a.id, title: "草案 A", requirement } });
+    const aContext = await restarted.create({ taskId: a.id });
+    expect(aContext.id).not.toBe(f.context.id);
+    await restarted.call(aContext.id, "update_draft", mutation(0, "edit-only-created-draft-a", { title: "仅修改 A" }));
+    expect((await f.tasks.get(b.id))!.title).toBe("草案 B");
+    expect(await restarted.get(f.context.id)).toMatchObject({ revision: 2, draft: { title: "", requirement: "" } });
+    expect(await fs.readdir(f.root)).not.toContain("projects");
+  });
+
+  it("creates a new draft from a running project without changing its target, proposal or original saved task", async () => {
+    const f = await setup(), projectId = `prj_${"d".repeat(32)}`;
+    const original = await f.store.call(f.context.id, "update_draft", mutation(0, "save-original-project-b", {
+      title: "草案 B", requirement: "保留已启动的 B，另建同课题的独立 A 草稿"
+    }));
+    f.project.mockResolvedValue({ id: projectId, title: "运行 B", requirement: original.action!.context.draft.requirement,
+      agents: original.action!.context.draft.agents, orchestration: original.action!.context.draft.orchestration } as ProjectState);
+    await f.store.bindProject(f.context.id, projectId);
+    const before = await f.store.get(f.context.id);
+    const result = await f.store.call(f.context.id, "create_draft", mutation(before.revision, "create-alternative-project-a", {
+      title: "草案 A", orchestration: { decisionPlans: { main: "独立 A 方案" } }
+    }));
+    expect(result.action).toMatchObject({ kind: "draft.created", context: { projectId, taskId: before.taskId,
+      draft: before.draft, workflowBase: before.workflowBase }, savedTask: { title: "草案 A" } });
+    expect(result.action!.savedTask!.id).not.toBe(before.taskId);
+    expect((await f.tasks.get(before.taskId!))!.title).toBe("草案 B");
+    expect((await f.tasks.get(result.action!.savedTask!.id))!.requirement).toBe(before.draft.requirement);
+    expect(await f.store.resolve(projectId)).toBe(f.context.id);
+    expect(f.submitWorkflow).not.toHaveBeenCalled();
+    expect(await f.tasks.list()).toHaveLength(2);
   });
 
   it("rejects a stale agent edit after the user has changed the draft and preserves user text", async () => {
@@ -368,6 +426,18 @@ describe("Project Explainer agent tools and durable project drafts", () => {
     expect(await f.store.resolve(id)).toBe(f.context.id);
   });
 
+  it("submits the current proposal through the real strict HTTP-body schema without a duplicate projectId", async () => {
+    const f = await setup(), projectId = `prj_${"f".repeat(32)}`;
+    f.project.mockResolvedValue({ id: projectId, title: "运行 B", requirement: "应用用户明确要求的 Workflow 调整",
+      agents: f.context.draft.agents, orchestration: f.context.draft.orchestration } as ProjectState);
+    await f.store.bindProject(f.context.id, projectId);
+    const result = await f.store.call(f.context.id, "submit_workflow_adjustment", mutation(1, "submit-valid-workflow-body"));
+    expect(result.action!.kind).toBe("workflow.submitted");
+    expect(f.submitWorkflow).toHaveBeenCalledOnce();
+    expect(f.submitWorkflow.mock.calls[0][0]).toBe(projectId);
+    expect(f.submitWorkflow.mock.calls[0][1]).not.toHaveProperty("projectId");
+  });
+
   it("restores the matching original Workflow base when an assistant rebase is undone", async () => {
     const f = await setup(), id = `prj_${"c".repeat(32)}`;
     f.project.mockResolvedValue({ id, title: "研究项目", requirement: "保留运行项目实际接受的配置与每份草稿的基础版本",
@@ -384,7 +454,9 @@ describe("Project Explainer agent tools and durable project drafts", () => {
     const client = new Client({ name: "test-native-agent", version: "1" });
     try {
       await client.connect(new StreamableHTTPClientTransport(new URL(endpoint.url)));
-      expect((await client.listTools()).tools.map(tool => tool.name)).toContain("update_draft");
+      const names = (await client.listTools()).tools.map(tool => tool.name);
+      expect(names).toContain("update_draft"); expect(names).toContain("create_draft");
+      expect(names).not.toContain("start_projects");
       const error = await client.callTool({ name: "save_draft", arguments: mutation(0, "invalid-save-operation") });
       expect(error.isError).toBe(true); expect(actions).toHaveLength(0);
       const result = await client.callTool({ name: "update_draft", arguments: mutation(0, "native-edit-operation", { title: "原生工具", requirement: "由真正的原生 MCP 工具保存项目草稿" }) });
@@ -392,6 +464,63 @@ describe("Project Explainer agent tools and durable project drafts", () => {
       controller.abort();
       const blocked = await fetch(endpoint.url, { method: "POST", body: "{}" }); expect(blocked.status).toBe(404);
     } finally { await client.close(); await endpoint.close(); }
+  });
+
+  it("returns new draft IDs and each batch launch result through the actual native MCP response", async () => {
+    const f = await setup(), controller = new AbortController(), actions: any[] = [];
+    let sequence = 0;
+    const launch = vi.fn(async () => ({ id: `prj_${String(++sequence).padStart(32, "0")}` }));
+    const launcher = new SavedTaskLauncher(f.root, f.tasks, launch);
+    f.store.host.startProjects = (input, signal) => launcher.start(input, signal);
+    const endpoint = await openExplainerAssistantMcp(f.store, f.context.id, controller.signal, async action => { actions.push(action); });
+    const client = new Client({ name: "test-native-batch-agent", version: "1" });
+    try {
+      await client.connect(new StreamableHTTPClientTransport(new URL(endpoint.url)));
+      expect((await client.listTools()).tools.map(tool => tool.name)).toContain("start_projects");
+      const saved = [];
+      for (const [index, title] of ["A", "B"].entries()) {
+        const result = await client.callTool({ name: "create_draft", arguments: mutation(index, `native-create-draft-${title}`, {
+          title, requirement: "从真实 MCP 回执获取新草稿 ID，并按用户要求批量启动"
+        }) });
+        expect(result.isError).not.toBe(true);
+        const receipt = JSON.parse((result.content as { text: string }[])[0]!.text);
+        expect(receipt.kind).toBe("draft.created");
+        expect(receipt.href).toBe(`/saved-tasks/${receipt.savedTask.id}/edit`);
+        saved.push(receipt.savedTask);
+      }
+      expect(saved[0].id).not.toBe(saved[1].id);
+      const args = { expectedRevision: 2, operationId: "native-start-reviewed-drafts",
+        tasks: saved.map(task => ({ taskId: task.id, expectedUpdatedAt: task.updatedAt })) };
+      const result = await client.callTool({ name: "start_projects", arguments: args });
+      expect(result.isError).not.toBe(true);
+      const receipt = JSON.parse((result.content as { text: string }[])[0]!.text);
+      expect(receipt.launches.results.map((item: any) => item.status)).toEqual(["started", "started"]);
+      expect(new Set(receipt.launches.results.map((item: any) => item.projectId)).size).toBe(2);
+      await client.callTool({ name: "start_projects", arguments: args });
+      expect(launch).toHaveBeenCalledTimes(2);
+      expect(actions.map(action => action.kind)).toEqual(["draft.created", "draft.created", "projects.started", "projects.started"]);
+    } finally { await client.close(); await endpoint.close(); }
+  });
+
+  it("keeps manual edits and other conversations usable while a batch is submitting", async () => {
+    const f = await setup();
+    let entered!: () => void, release!: () => void;
+    const ready = new Promise<void>(resolve => { entered = resolve; });
+    f.store.host.startProjects = async input => {
+      entered(); await new Promise<void>(resolve => { release = resolve; });
+      return { operationId: input.operationId, results: [] };
+    };
+    const batch = f.store.call(f.context.id, "start_projects", { expectedRevision: 0, operationId: "slow-batch-launch-operation",
+      tasks: [{ taskId: `task_${"a".repeat(32)}`, expectedUpdatedAt: new Date().toISOString() }] });
+    await ready;
+    try {
+      await f.store.sync(f.context.id, { expectedRevision: 0, draft: { ...f.context.draft, title: "用户刚改的草稿" } });
+      const other = await f.store.create();
+      expect(other.id).not.toBe(f.context.id);
+    } finally { release(); }
+    const result = await batch;
+    expect(result.action!.context.draft.title).toBe("用户刚改的草稿");
+    expect(result.action!.context.revision).toBe(2);
   });
 
   it("admits only the invocation-bound tool endpoint into a read-only Explainer", () => {

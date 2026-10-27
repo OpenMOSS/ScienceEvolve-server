@@ -11,6 +11,11 @@ const callbackUrl = "https://openfars.example.test/api/github/auth/callback";
 type FakeIdentity = { id: number; login: string; avatarUrl?: string; scopes?: string };
 
 class FakeGitHubOAuth {
+  readonly deletions: string[] = [];
+  readonly repositoryRequests: { method: string; redirect?: RequestRedirect }[] = [];
+  deleteStatus = 204;
+  throwOnDelete = false;
+  redirectRepository = false;
   readonly codes = new Map<string, {
     accessToken: string;
     refreshToken?: string;
@@ -19,6 +24,9 @@ class FakeGitHubOAuth {
   }>();
   readonly identities = new Map<string, FakeIdentity>();
   readonly repositories = new Map<string, {
+    id: number;
+    ownerId: number;
+    admin: boolean;
     htmlUrl: string;
     private: boolean;
     defaultBranch: string;
@@ -41,10 +49,14 @@ class FakeGitHubOAuth {
   }
 
   addRepository(owner: string, repository: string, options: {
+    id?: number;
+    ownerId?: number;
+    admin?: boolean;
     private?: boolean;
     defaultBranch?: string;
   } = {}): void {
     this.repositories.set(`${owner}/${repository}`, {
+      id: options.id ?? 100 + this.repositories.size, ownerId: options.ownerId ?? 7, admin: options.admin ?? true,
       htmlUrl: `https://github.com/${owner}/${repository}`,
       private: options.private ?? true,
       defaultBranch: options.defaultBranch ?? "main"
@@ -91,12 +103,21 @@ class FakeGitHubOAuth {
       }, 200, { "x-oauth-scopes": identity.scopes ?? "repo" });
     }
     if (url.hostname === "api.github.com" && url.pathname.startsWith("/repos/")) {
+      this.repositoryRequests.push({ method: init.method ?? "GET", redirect: init.redirect });
       const token = new Headers(init.headers).get("authorization")?.replace(/^Bearer /, "") ?? "";
       if (!this.identities.has(token)) return this.response({ message: "Bad credentials" }, 401);
       const identity = decodeURIComponent(url.pathname.slice("/repos/".length));
+      if (init.method === "DELETE") {
+        this.deletions.push(identity);
+        if (this.throwOnDelete) throw new Error("simulated connection failure");
+        if (this.deleteStatus !== 204) return this.response({ message: "provider failure" }, this.deleteStatus);
+        this.repositories.delete(identity); return new Response(null, { status: 204 });
+      }
+      if (this.redirectRepository) return new Response(null, { status: 307, headers: { location: "https://other.example.test/repository" } });
       const repository = this.repositories.get(identity);
       if (!repository) return this.response({ message: "Not Found" }, 404);
       return this.response({
+        id: repository.id, name: identity.split("/")[1], owner: { id: repository.ownerId, login: identity.split("/")[0] }, permissions: { admin: repository.admin },
         html_url: repository.htmlUrl,
         private: repository.private,
         default_branch: repository.defaultBranch
@@ -144,6 +165,72 @@ afterEach(async () => {
 });
 
 describe("GitHubAccountStore", () => {
+  it("requests deletion scope only in a separate account-bound authorization and rejects the wrong GitHub identity", async () => {
+    const fake = new FakeGitHubOAuth(), store = storeAt(await root(), fake);
+    fake.addAccount("initial", "initial-token", { id: 7, login: "alice" });
+    const initial = store.startAuthorization();
+    expect(new URL(initial.authorizationUrl).searchParams.get("scope")).toBe("repo");
+    const { account } = await store.completeAuthorization({ code: "initial", state: stateFrom(initial.authorizationUrl) });
+    const authorize = await store.startRepositoryDeletionAuthorization(account.id);
+    expect(new URL(authorize.authorizationUrl).searchParams.get("scope")).toBe("repo delete_repo");
+    expect(new URL(authorize.authorizationUrl).searchParams.get("login")).toBe("alice");
+    fake.addAccount("wrong", "wrong-token", { id: 9, login: "bob", scopes: "repo, delete_repo" }, { scope: "repo, delete_repo" });
+    await expect(store.completeAuthorization({ code: "wrong", state: stateFrom(authorize.authorizationUrl) })).rejects.toThrow("所选 GitHub 账号");
+    expect(await store.list()).toHaveLength(1);
+    expect((await store.get(account.id))!.scopes).toEqual(["repo"]);
+    const retry = await store.startRepositoryDeletionAuthorization(account.id);
+    fake.addAccount("granted", "deletion-token", { id: 7, login: "alice", scopes: "repo, delete_repo" }, { scope: "repo, delete_repo" });
+    const granted = await store.completeAuthorization({ code: "granted", state: stateFrom(retry.authorizationUrl) });
+    expect(granted.account.scopes).toEqual(["repo", "delete_repo"]);
+  });
+
+  it("rejects a missing deletion grant without replacing the previous account credential", async () => {
+    const fake = new FakeGitHubOAuth(), store = storeAt(await root(), fake);
+    fake.addAccount("initial", "initial-token", { id: 7, login: "alice" });
+    const start = store.startAuthorization();
+    const { account } = await store.completeAuthorization({ code: "initial", state: stateFrom(start.authorizationUrl) });
+    const request = await store.startRepositoryDeletionAuthorization(account.id);
+    fake.addAccount("denied", "denied-token", { id: 7, login: "alice" });
+    await expect(store.completeAuthorization({ code: "denied", state: stateFrom(request.authorizationUrl) })).rejects.toThrow("未授予 delete_repo");
+    expect((await store.credentialResolver(account.id)()).token).toBe("initial-token");
+    await expect(store.inspectRepositoryForDeletion(account.id, "alice", "demo")).rejects.toMatchObject({ status: 403 });
+    expect(fake.deletions).toHaveLength(0);
+  });
+
+  it("revalidates repository identity and admin rights and never follows deletion redirects", async () => {
+    const fake = new FakeGitHubOAuth(), store = storeAt(await root(), fake);
+    fake.addAccount("granted", "deletion-token", { id: 7, login: "alice", scopes: "repo, delete_repo" }, { scope: "repo, delete_repo" });
+    const start = store.startAuthorization();
+    const { account } = await store.completeAuthorization({ code: "granted", state: stateFrom(start.authorizationUrl) });
+    fake.addRepository("alice", "demo", { id: 101 });
+    const target = await store.inspectRepositoryForDeletion(account.id, "alice", "demo");
+    fake.addRepository("alice", "demo", { id: 202 });
+    await expect(store.deleteRepository(account.id, target)).rejects.toThrow("仓库 ID 已变化");
+    fake.addRepository("alice", "demo", { id: 101, admin: false });
+    await expect(store.deleteRepository(account.id, target)).rejects.toThrow("管理员权限");
+    fake.addRepository("alice", "demo", { id: 101, ownerId: 9 });
+    await expect(store.deleteRepository(account.id, target)).rejects.toThrow("所属账号");
+    fake.addRepository("alice", "demo", { id: 101 }); fake.redirectRepository = true;
+    await expect(store.deleteRepository(account.id, target)).rejects.toThrow("移动或重命名");
+    expect(fake.deletions).toHaveLength(0);
+    fake.redirectRepository = false;
+    await store.deleteRepository(account.id, target);
+    expect(fake.deletions).toEqual(["alice/demo"]);
+    expect(fake.repositoryRequests.every(request => request.redirect === "manual")).toBe(true);
+    expect(JSON.stringify(target)).not.toContain("deletion-token");
+  });
+
+  it.each([403, 404, 500])("never reports a rejected or uncertain DELETE as successful (HTTP %s)", async status => {
+    const fake = new FakeGitHubOAuth(), store = storeAt(await root(), fake);
+    fake.addAccount("granted", "deletion-token", { id: 7, login: "alice", scopes: "repo, delete_repo" }, { scope: "repo, delete_repo" });
+    const start = store.startAuthorization();
+    const { account } = await store.completeAuthorization({ code: "granted", state: stateFrom(start.authorizationUrl) });
+    fake.addRepository("alice", "demo", { id: 101 }); fake.deleteStatus = status;
+    await expect(store.deleteRepository(account.id, { providerId: 101, owner: "alice", name: "demo" })).rejects.toMatchObject({
+      status: status === 500 ? 502 : status,
+      ...(status === 500 ? { code: "github_repository_deletion_uncertain" } : {})
+    });
+  });
   it("starts a state-bound PKCE flow with only the required repo scope", async () => {
     const directory = await root();
     const store = storeAt(directory, new FakeGitHubOAuth(), () => new Date("2026-09-24T08:00:00.000Z"));

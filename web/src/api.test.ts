@@ -41,6 +41,9 @@ import {
   saveProjectAgentConfigPreset,
   setDefaultGitHubAccount,
   startGitHubAuthorization,
+  startGitHubRepositoryDeletionAuthorization,
+  previewGitHubRepositoryDeletion,
+  deleteGitHubRepositories,
   syncExplainerConversation,
   streamProjectExplainerQuestion,
   testGateway,
@@ -71,6 +74,31 @@ function jsonResponse(value: unknown, status = 200): Response {
 describe("frontend API contract", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("uses account-scoped deletion authorization and preview receipts without forwarding repository names at confirmation", async () => {
+    const accountId = `gha_${"a".repeat(32)}`, previewId = "b".repeat(48);
+    const repositories = [{ projectId: `prj_${"c".repeat(32)}`, owner: "alice", name: "demo" }];
+    const preview = { accountId, accountLogin: "alice", previewId, expiresAt: "2026-10-25T12:00:00.000Z", confirmationText: "永久删除",
+      accessToken: "must-not-enter-client-state", repositories: repositories.map(item => ({ ...item, status: "ready", credential: "server-only" })) };
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse({ authorizationUrl: "https://github.com/login/oauth/authorize?scope=repo+delete_repo", expiresAt: preview.expiresAt }))
+      .mockResolvedValueOnce(jsonResponse(preview)).mockResolvedValueOnce(jsonResponse({ ...preview, repositories: repositories.map(item => ({ ...item, status: "deleted" })) }));
+    vi.stubGlobal("fetch", fetchMock);
+    await startGitHubRepositoryDeletionAuthorization(accountId);
+    const prepared = await previewGitHubRepositoryDeletion(accountId, repositories);
+    expect(JSON.stringify(prepared)).not.toMatch(/credential|accessToken|server-only/);
+    const result = await deleteGitHubRepositories(accountId, prepared.previewId, prepared.confirmationText);
+    expect(result.repositories[0]!.status).toBe("deleted");
+    expect(fetchMock.mock.calls[0]![0]).toBe(`./api/github/accounts/${accountId}/repository-deletion-authorization`);
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body)).toEqual({ repositories });
+    expect(JSON.parse(fetchMock.mock.calls[2]![1].body)).toEqual({ previewId, confirmationText: "永久删除" });
+  });
+
+  it("rejects malformed repository deletion outcomes instead of rendering them as success", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ previewId: "a".repeat(48), accountId: `gha_${"b".repeat(32)}`,
+      accountLogin: "alice", expiresAt: "2026-10-25T12:00:00.000Z", confirmationText: "永久删除",
+      repositories: [{ projectId: "project", owner: "alice", name: "demo", status: "success" }] })));
+    await expect(deleteGitHubRepositories(`gha_${"b".repeat(32)}`, "a".repeat(48), "永久删除")).rejects.toThrow("有效的仓库删除结果");
   });
 
   it.each([["", undefined], [" \t\n ", undefined], [" research-draft ", "research-draft"], ["invalid/name", "invalid/name"]])(

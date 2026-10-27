@@ -1,4 +1,5 @@
 import { normalizeScopedRuntime } from "./scoped-runtime";
+import { isProjectViewStatus } from "./project-status";
 import { acceptedGitHandoff } from "./project-results";
 import {
   AGENT_TEMPLATES,
@@ -1452,23 +1453,7 @@ function asOptionalNonNegativeInteger(value: unknown): number | undefined {
 
 export function normalizeStatus(value: unknown): ProjectStatus {
   const status = asString(value, "draft").toLowerCase();
-  const allowed: ProjectStatus[] = [
-    "draft",
-    "queued",
-    "running",
-    "retrying",
-    "interrupting",
-    "interrupted",
-    "pausing",
-    "paused",
-    "cancelling",
-    "cancelled",
-    "stopping",
-    "stopped",
-    "completed",
-    "failed"
-  ];
-  return allowed.includes(status as ProjectStatus) ? (status as ProjectStatus) : "draft";
+  return isProjectViewStatus(status) ? status : "draft";
 }
 
 export function isAgentTemplate(value: unknown): value is AgentTemplate {

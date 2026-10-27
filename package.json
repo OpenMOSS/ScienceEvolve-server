@@ -17,6 +17,7 @@
     "test:server": "npm run test -w server",
     "test:web": "npm run test -w web",
     "typecheck": "npm run typecheck -w server && npm run typecheck -w web",
+    "check": "npm run typecheck && npm run test:server && npm run test:web && npm run build:check",
     "r-projects:validate": "npm run build -w server && node scripts/r-projects/validate.mjs",
     "acceptance:gateway:plan": "npm run build -w server && node server/dist/src/real-gateway-acceptance-cli.js --plan",
     "acceptance:gateway": "npm run build -w server && node server/dist/src/real-gateway-acceptance-cli.js --run",

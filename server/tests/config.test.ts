@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -43,9 +43,21 @@ describe("application configuration", () => {
     expect(config.skillRoots.indexOf(config.userSkillRoot)).toBeGreaterThan(0);
   });
 
-  it("uses the embedded current Codex when loading the OpenFARS project root", () => {
-    const config = loadConfig(path.resolve(process.cwd(), ".."));
-    expect(config.codexBin).toContain(path.join("harness", "codex", "node_modules", ".bin", "codex"));
+  it("selects an installed embedded Codex while preserving the missing-install fallback and explicit override", () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "scienceevolve-codex-config-"));
+    const embedded = path.join(root, "harness", "codex", "node_modules", ".bin", "codex");
+    try {
+      expect(loadConfig(root).codexBin).toBe("codex");
+      mkdirSync(path.dirname(embedded), { recursive: true });
+      writeFileSync(embedded, "fixture executable\n");
+      expect(loadConfig(root).codexBin).toBe(embedded);
+      expect(loadConfig(path.join(root, "server")).codexBin).toBe(embedded);
+      const explicit = path.join(root, "custom", "codex");
+      vi.stubEnv("SCIENCEEVOLVE_CODEX_BIN", explicit);
+      expect(loadConfig(root).codexBin).toBe(explicit);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
   it("configures long-turn DSH and protocol inactivity deadlines", () => {
     vi.stubEnv("SCIENCEEVOLVE_AGENT_ACTIVITY_IDLE_WINDOW_MS", "300000");

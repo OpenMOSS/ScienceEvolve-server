@@ -15,6 +15,7 @@ import { HarnessRuntimeFacade } from "./harness-runtime/runtime.js";
 import { createProductionHarnessRuntimeResidentAdapter } from "./harness-runtime/resident-runtime-adapter.js";
 import { ProjectExplainerService } from "./project-explainer.js";
 import { SavedResearchTaskStore } from "./saved-research-tasks.js";
+import { SavedTaskLauncher, savedTaskProjectInput } from "./saved-task-launcher.js";
 import { workflowAdjustmentSubmissionBodySchema } from "./workflow-adjustments.js";
 import { ConfigRecommendationService } from "./config-recommendations.js";
 import { AgentToolRecommendationService } from "./agent-tool-recommendations.js";
@@ -110,10 +111,13 @@ async function main(): Promise<void> {
     githubAccounts
   );
   const savedResearchTasks = new SavedResearchTaskStore(storage.root);
+  const savedTaskLauncher = new SavedTaskLauncher(storage.root, savedResearchTasks,
+    task => orchestrator.createProject(savedTaskProjectInput(task)));
   const projectExplainer = new ProjectExplainerService(
     runner,
     storage,
     { gatewayStore, assistant: { tasks: savedResearchTasks, skills, accounts: () => githubAccounts.list(),
+      startProjects: (input, signal) => savedTaskLauncher.start(input, signal),
       workflow: async id => {
         const result = await orchestrator.queryWorkflowAdjustments(id);
         if (!result.context) throw new Error("Workflow context is unavailable");
@@ -148,6 +152,7 @@ async function main(): Promise<void> {
     skills,
     projectExplainer,
     savedResearchTasks,
+    savedTaskLauncher,
     configRecommendations,
     agentToolRecommendations,
     executionSummaries,

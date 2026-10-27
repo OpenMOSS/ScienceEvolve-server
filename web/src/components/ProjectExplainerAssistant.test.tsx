@@ -188,6 +188,58 @@ describe("shared Project Explainer floating assistant", () => {
     expect(await screen.findByText("已设计并保存，可以先查看草稿。")).toBeVisible();
   });
 
+  it.each([false, true])("shows two created drafts without applying them over the current editor (running project: %s)", async runningProject => {
+    const projectId = `prj_${"e".repeat(32)}`;
+    if (runningProject) backend = { ...backend, projectId, taskId };
+    const refresh = vi.fn();
+    window.addEventListener("openfars:saved-tasks-changed", refresh);
+    vi.mocked(api.streamExplainerConversation).mockImplementation(async (_id, _question, sink) => {
+      for (const [suffix, title] of [["1", "草案 A"], ["2", "草案 B"]]) {
+        const savedTask = { id: `task_${suffix.repeat(32)}`, title, updatedAt: new Date().toISOString() };
+        backend = { ...backend, revision: backend.revision + 1 };
+        const action: api.ExplainerAssistantAction = { kind: "draft.created", context: structuredClone(backend),
+          savedTask, summary: `已新建独立草稿《${title}》`, href: `/saved-tasks/${savedTask.id}/edit` };
+        const incoming = event("status", action.summary, { assistantAction: action });
+        history.push(incoming); await sink(incoming);
+      }
+    });
+    try {
+      render(<ProjectExplainerAssistantProvider target={runningProject ? { projectId } : { newProject: true }}><Editor /></ProjectExplainerAssistantProvider>);
+      await open(); await send("新建两份独立草案 A 和 B");
+      await waitFor(() => expect(screen.getAllByRole("link", { name: "打开项目草稿" })).toHaveLength(2));
+      expect(screen.getAllByRole("link", { name: "打开项目草稿" }).map(link => link.getAttribute("href")))
+        .toEqual([`#/saved-tasks/task_${"1".repeat(32)}/edit`, `#/saved-tasks/task_${"2".repeat(32)}/edit`]);
+      expect(screen.getByRole("textbox", { name: "手动课题名称" })).toHaveValue("当前课题");
+      expect(refresh).toHaveBeenCalledTimes(2);
+      expect(api.createProject).not.toHaveBeenCalled();
+    } finally { window.removeEventListener("openfars:saved-tasks-changed", refresh); }
+  });
+
+  it("shows per-draft batch outcomes with links only for actual projects and refreshes the project list", async () => {
+    const stream = deferredStream(), refreshed = vi.fn();
+    window.addEventListener("openfars:projects-started", refreshed);
+    try {
+      render(<ProjectExplainerAssistantProvider target={{ newProject: true }}><Editor /></ProjectExplainerAssistantProvider>);
+      await open(); await send("启动选定的四份草稿");
+      const action: api.ExplainerAssistantAction = { kind: "projects.started", context: { ...backend, revision: backend.revision + 1 },
+        summary: "批量启动结果：2 个项目已提交，1 个失败，1 个结果待核对。", launches: { operationId: "batch-result-test", results: [
+          { taskId: `task_${"1".repeat(32)}`, title: "草案 A", status: "started", projectId: `prj_${"1".repeat(32)}` },
+          { taskId: `task_${"2".repeat(32)}`, title: "草案 B", status: "started", projectId: `prj_${"2".repeat(32)}` },
+          { taskId: `task_${"3".repeat(32)}`, title: "草案 C", status: "failed", error: "草稿已有新的修改" },
+          { taskId: `task_${"4".repeat(32)}`, title: "草案 D", status: "unconfirmed", error: "启动结果尚未确认" }
+        ] } };
+      await act(async () => { await stream.emit(event("status", action.summary, { assistantAction: action })); stream.finish(); });
+      expect(screen.getAllByRole("link", { name: "打开项目" }).map(link => link.getAttribute("href")))
+        .toEqual([`#/projects/prj_${"1".repeat(32)}`, `#/projects/prj_${"2".repeat(32)}`]);
+      expect(screen.getByText("草案 C：启动失败")).toBeVisible();
+      expect(screen.getByText("草案 D：结果待核对")).toBeVisible();
+      expect(screen.getByText("草稿已有新的修改")).toBeVisible();
+      expect(screen.getByRole("textbox", { name: "手动课题名称" })).toHaveValue("当前课题");
+      expect(refreshed).toHaveBeenCalledOnce();
+      expect(api.createProject).not.toHaveBeenCalled();
+    } finally { window.removeEventListener("openfars:projects-started", refreshed); }
+  });
+
   it("keeps the same active stream when minimized and reopened", async () => {
     const stream = deferredStream();
     render(<ProjectExplainerAssistantProvider target={{}}>首页</ProjectExplainerAssistantProvider>);

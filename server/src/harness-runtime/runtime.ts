@@ -1555,7 +1555,7 @@ export class HarnessRuntimeFacade implements AgentRunner, AdapterSmokeProbeRunne
           event as unknown as Record<string, unknown>
         );
         await request.onLiveHarnessEvent?.(
-          event as unknown as Record<string, unknown>
+          event as HarnessEvent & Record<string, unknown>
         );
       }
     });
@@ -2500,7 +2500,7 @@ export class HarnessRuntimeFacade implements AgentRunner, AdapterSmokeProbeRunne
           canonicalEvent as unknown as Record<string, unknown>
         );
         await request.onLiveHarnessEvent?.(
-          canonicalEvent as unknown as Record<string, unknown>
+          canonicalEvent as HarnessEvent & Record<string, unknown>
         );
         if (canonicalEvent.kind === "assistant.delta") return;
         // Keep all canonical history attempt-local until the Adapter and

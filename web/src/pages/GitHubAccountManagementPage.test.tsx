@@ -7,10 +7,14 @@ import {
   getProjects,
   setDefaultGitHubAccount,
   startGitHubAuthorization,
+  startGitHubRepositoryDeletionAuthorization,
+  previewGitHubRepositoryDeletion,
+  deleteGitHubRepositories,
   verifyGitHubAccount
 } from "../api";
 import type { GitHubAccountRecord, Project } from "../types";
 import { GitHubAccountManagementPage } from "./GitHubAccountManagementPage";
+import { normalizeProject } from "../lib";
 
 vi.mock("../api", () => ({
   deleteGitHubAccount: vi.fn(),
@@ -19,6 +23,9 @@ vi.mock("../api", () => ({
   getProjects: vi.fn(),
   setDefaultGitHubAccount: vi.fn(),
   startGitHubAuthorization: vi.fn(),
+  startGitHubRepositoryDeletionAuthorization: vi.fn(),
+  previewGitHubRepositoryDeletion: vi.fn(),
+  deleteGitHubRepositories: vi.fn(),
   verifyGitHubAccount: vi.fn()
 }));
 
@@ -54,6 +61,9 @@ beforeEach(() => {
   vi.mocked(deleteGitHubAccount).mockReset();
   vi.mocked(setDefaultGitHubAccount).mockReset();
   vi.mocked(startGitHubAuthorization).mockReset();
+  vi.mocked(startGitHubRepositoryDeletionAuthorization).mockReset();
+  vi.mocked(previewGitHubRepositoryDeletion).mockReset();
+  vi.mocked(deleteGitHubRepositories).mockReset();
   vi.mocked(verifyGitHubAccount).mockReset();
 });
 
@@ -62,6 +72,48 @@ afterEach(() => {
 });
 
 describe("GitHubAccountManagementPage", () => {
+  it("uses a separate account-bound OAuth request for repository deletion", async () => {
+    vi.mocked(getGitHubAccounts).mockResolvedValue({ accounts: [alice], oauthConfigured: true });
+    vi.mocked(getProjects).mockResolvedValue([normalizeProject({ id: `prj_${"1".repeat(32)}`, title: "Demo", status: "completed",
+      git: { enabled: true, status: "ready", provider: "github", account: alice, repository: { owner: "alice", name: "demo", htmlUrl: "https://github.com/alice/demo", defaultBranch: "main", private: true, localPath: "repository" } }
+    })]);
+    vi.mocked(startGitHubRepositoryDeletionAuthorization).mockResolvedValue({ authorizationUrl: "https://github.com/login/oauth/authorize?scope=repo+delete_repo", expiresAt: "2026-10-25T12:00:00.000Z" });
+    const popup = { closed: false, close: vi.fn(), location: { href: "about:blank" } };
+    vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
+    render(<GitHubAccountManagementPage onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "批量删除仓库" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "批量删除仓库" }));
+    fireEvent.click(screen.getByRole("button", { name: "授权仓库删除" }));
+    await waitFor(() => expect(startGitHubRepositoryDeletionAuthorization).toHaveBeenCalledWith(alice.id));
+    expect(startGitHubAuthorization).not.toHaveBeenCalled();
+    expect(popup.location.href).toContain("delete_repo");
+  });
+
+  it("marks successfully deleted repositories in their existing cards while retaining the local project entries", async () => {
+    const account = { ...alice, scopes: ["repo", "delete_repo"] };
+    vi.mocked(getGitHubAccounts).mockResolvedValue({ accounts: [account], oauthConfigured: true });
+    const projects = ["a", "b"].map((name, index) => normalizeProject({ id: `prj_${String(index + 1).repeat(32)}`, title: `Project ${name}`, status: "completed",
+      git: { enabled: true, status: "ready", provider: "github", account, repository: { owner: "alice", name, htmlUrl: `https://github.com/alice/${name}`, defaultBranch: "main", private: true, localPath: "repository" } }
+    }));
+    vi.mocked(getProjects).mockResolvedValue(projects);
+    const repositories = projects.map(project => ({ projectId: project.id, owner: "alice", name: project.git!.repository!.name, status: "ready" as const }));
+    const preview = { previewId: "a".repeat(48), accountId: account.id, accountLogin: "alice", expiresAt: "2026-10-25T12:00:00.000Z", confirmationText: "永久删除", repositories };
+    vi.mocked(previewGitHubRepositoryDeletion).mockResolvedValue(preview);
+    vi.mocked(deleteGitHubRepositories).mockResolvedValue({ ...preview, repositories: repositories.map(item => ({ ...item, status: "deleted" })) });
+    render(<GitHubAccountManagementPage onBack={vi.fn()} />);
+    await screen.findByText("alice/a");
+    fireEvent.click(screen.getByRole("button", { name: "批量删除仓库" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "选择当前账号所有可删除仓库" }));
+    fireEvent.click(screen.getByRole("button", { name: "预览删除 2 个仓库" }));
+    fireEvent.change(await screen.findByRole("textbox", { name: "仓库永久删除确认词" }), { target: { value: "永久删除" } });
+    fireEvent.click(screen.getByRole("button", { name: "永久删除 2 个仓库" }));
+    await screen.findByText("批量删除结果");
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+    expect(screen.getAllByText("GitHub 已删除")).toHaveLength(2);
+    expect(screen.getByText("Project a")).toBeVisible(); expect(screen.getByText("Project b")).toBeVisible();
+    expect(screen.queryByRole("link", { name: "前往 GitHub 删除" })).not.toBeInTheDocument();
+    expect(deleteGitHubAccount).not.toHaveBeenCalled();
+  });
   it("does not claim OAuth is unconfigured when the backend cannot be reached", async () => {
     vi.mocked(getGitHubAccounts).mockRejectedValue(new Error("后端服务不可用"));
     render(<GitHubAccountManagementPage onBack={vi.fn()} />);

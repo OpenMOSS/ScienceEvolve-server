@@ -23,9 +23,11 @@ import {
   getProjects,
   setDefaultGitHubAccount,
   startGitHubAuthorization,
+  startGitHubRepositoryDeletionAuthorization,
   verifyGitHubAccount
 } from "../api";
 import { Button, ErrorPanel } from "../components/Common";
+import { GitHubRepositoryBatchDelete } from "../components/GitHubRepositoryBatchDelete";
 import type { GitHubAccountRecord, GitHubRepositoryObservation, Project } from "../types";
 
 type RepositoryCheck =
@@ -142,7 +144,7 @@ export function GitHubAccountManagementPage({ onBack }: { onBack: () => void }) 
     };
   }, [load, stopPopupMonitor]);
 
-  const connect = async () => {
+  const connect = async (deletionAccountId?: string) => {
     setConnecting(true);
     setError("");
     setNotice("");
@@ -153,7 +155,7 @@ export function GitHubAccountManagementPage({ onBack }: { onBack: () => void }) 
       return;
     }
     try {
-      const authorization = await startGitHubAuthorization();
+      const authorization = deletionAccountId ? await startGitHubRepositoryDeletionAuthorization(deletionAccountId) : await startGitHubAuthorization();
       popup.location.href = authorization.authorizationUrl;
       stopPopupMonitor();
       popupMonitorRef.current = window.setInterval(() => {
@@ -272,6 +274,7 @@ export function GitHubAccountManagementPage({ onBack }: { onBack: () => void }) 
                 <div className="github-account-tags">
                   {account.isDefault && <em><Star size={11} />默认账号</em>}
                   <em>repo</em>
+                  {account.scopes.includes("delete_repo") && <em>可删除仓库</em>}
                   <em>服务端加密</em>
                 </div>
                 <dl>
@@ -303,10 +306,19 @@ export function GitHubAccountManagementPage({ onBack }: { onBack: () => void }) 
           <span className="github-repository-library-icon" aria-hidden="true"><FolderGit2 size={20} /></span>
           <div>
             <h2 id="github-repository-library-title">项目仓库</h2>
-            <p>这里只汇总 ScienceEvolve 项目创建的仓库；逐提交 GitTree 请进入项目查看，代码、活动、Pull Request 与删除仍由 GitHub 提供。</p>
+            <p>汇总 ScienceEvolve 项目创建的仓库；可按账号选择并批量删除远端仓库。逐提交 GitTree 请进入项目查看。</p>
           </div>
           <span className="github-repository-count">{repositoryProjects.length} 个</span>
         </header>
+        <GitHubRepositoryBatchDelete accounts={accounts} projects={repositoryProjects} connecting={connecting}
+          deletedProjectIds={new Set(Object.entries(repositoryChecks).filter(([, check]) => check.status === "deleted").map(([id]) => id))}
+          onAuthorize={oauthConfigured ? accountId => void connect(accountId) : undefined} onDeleted={repositories => {
+            const names = new Set(repositories.map(repository => `${repository.owner}/${repository.name}`.toLowerCase()));
+            const observation = { exists: false, observedAt: new Date().toISOString() };
+            setRepositoryChecks(current => ({ ...current, ...Object.fromEntries(repositoryProjects.filter(project =>
+              names.has(`${project.git!.repository!.owner}/${project.git!.repository!.name}`.toLowerCase()))
+              .map(project => [project.id, { status: "deleted" as const, observation }])) }));
+          }} />
         {repositoriesError && <ErrorPanel title="项目仓库加载失败" message={repositoriesError} />}
         {repositoriesLoading ? (
           <div className="github-repository-loading"><LoaderCircle className="spin" size={18} />正在读取项目仓库…</div>
@@ -365,7 +377,7 @@ export function GitHubAccountManagementPage({ onBack }: { onBack: () => void }) 
         ) : (
           <div className="github-repository-empty"><FolderGit2 size={25} /><span><strong>还没有项目仓库</strong><small>启用 Git 机制并启动项目后，仓库会显示在这里。</small></span></div>
         )}
-        <p className="github-repository-disclaimer"><CircleAlert size={14} />删除操作由 GitHub 完成；进入 Settings 后仍需在 Danger Zone 中确认。</p>
+        <p className="github-repository-disclaimer"><CircleAlert size={14} />批量删除需要额外授权并确认所选仓库；也可以前往 GitHub Settings 删除单个仓库。</p>
       </section>
     </main>
   );

@@ -14,6 +14,7 @@ import { emptyProjectComputeUsage } from "../src/inspire-compute-usage.js";
 import { ScopedRuntimeGit } from "./helpers/scoped-runtime-git.js";
 import { mergedPullSynchronizationOperationId, prepareOperation, finalizeOperation } from "../src/collaboration-git/operation.js";
 import { HarnessRuntimeError } from "../src/harness-runtime/errors.js";
+import { hasUserWorkflowPause } from "../src/workflow-recovery.js";
 import { validateStagedInvocationInputs, prepareInvocationInputs } from "../src/harness-runtime/invocation-inputs.js";
 import type { ControlAction, ControlActionEnvelope, ProjectState } from "../src/types.js";
 
@@ -171,10 +172,26 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
             });
           }
           const actions: ControlActionEnvelope[] = [];
+          const rootTask = scope?.role === "execution-artifact" || scope?.role === "standalone-route";
+          const businessTask = rootTask || scope?.role === "scoped-agent";
+          const omitOwnFinish = options.omitFirstFinish === input.request.agent && scope?.role === "scoped-agent" &&
+            !scope.executionId.startsWith("group-final-") && !finishOmitted;
+          if (omitOwnFinish) finishOmitted = true;
+          else if (businessTask) {
+            // The live completion call authors Memory before its Git delivery.
+            actions.push(await accept(input, turn, { tool: "finish_task", summary: `Verified ${input.request.agent}'s assigned task` }));
+          }
           if ((scope?.role === "execution-artifact" || scope?.role === "standalone-route") && !(options.omitFirstRootGit && !rootGitOmitted)) {
-            actions.push(await accept(input, turn, { tool: "git_push", reason: "Commit root delivery" }));
-            actions.push(await accept(input, turn, { tool: "github_create_pr", base: "main", title: "Root delivery", body: "Root delivery" }));
-            actions.push(await accept(input, turn, { tool: "github_merge_pr", providerNumber: git.pulls.get(scope.executionId)!.providerNumber, reason: "Integrate root delivery" }));
+            const prior = git.pulls.get(scope.executionId);
+            const delivered = prior?.status === "merged" && prior.headSha === git.localRefs.get(prior.head) &&
+              git.localRefs.get("main") === git.refs.get("main");
+            // A retained native continuation repairs its missing formal action;
+            // it does not publish the same already merged head as a new PR.
+            if (!delivered) {
+              actions.push(await accept(input, turn, { tool: "git_push", reason: "Commit root delivery" }));
+              actions.push(await accept(input, turn, { tool: "github_create_pr", base: "main", title: "Root delivery", body: "Root delivery" }));
+              actions.push(await accept(input, turn, { tool: "github_merge_pr", providerNumber: git.pulls.get(scope.executionId)!.providerNumber, reason: "Integrate root delivery" }));
+            }
           }
           if (scope?.role === "scoped-agent" && scope.executionId.startsWith("group-final-")) {
             const final = coordinator.database().scopedFinalIntegration(id, scope.groupRunId)!;
@@ -196,8 +213,7 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
           if (scope?.role === "execution-artifact" || scope?.role === "standalone-route") rootGitOmitted = true;
           // Own-task completion keeps the current channel available for the
           // Leader's separate group operation, exactly as the native MCP does.
-          if (options.omitFirstFinish === input.request.agent && scope?.role === "scoped-agent" && !scope.executionId.startsWith("group-final-") && !finishOmitted) finishOmitted = true;
-          else actions.push(await accept(input, turn, { tool: "finish_task" }));
+          if (!businessTask) actions.push(await accept(input, turn, { tool: "finish_task" }));
           if (scope?.role === "scoped-leader") {
             if (turn.prompt.includes("Purpose: complete")) {
               const proof = coordinator.database().scopedGroupFinalMergeFact(id, scope.groupRunId);
@@ -231,7 +247,8 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
         expect(proposal.schemaVersion).toBe(2);
         expect(proposal.lockedRuntime.main.gatewayName).toBe("Accepted Main gateway");
         expect(JSON.stringify(proposal)).not.toContain("private-original-main-route");
-        const reference = JSON.parse(await fs.readFile(path.join(input.open.inputs!.workspacePath, ".scienceevolve/workflow-current.json"), "utf8"));
+        expect(input.open.inputs!.workflowCurrentPath).toEqual(expect.any(String));
+        const reference = JSON.parse(await fs.readFile(input.open.inputs!.workflowCurrentPath!, "utf8"));
         expect(reference.baseHash).toBe(proposal.baseHash);
         expect(reference.lockedRuntime).toEqual(proposal.lockedRuntime);
         proposal.orchestration = desiredWorkflow;
@@ -374,7 +391,8 @@ describe("v3 project coordinator production entry", () => {
       return normal(request);
     });
     await f.coordinator.createProject(f.state, { enabled: true, provider: "github" });
-    await expect.poll(() => f.state.status, { timeout: 10_000 }).toBe("paused");
+    await expect.poll(() => f.state.status, { timeout: 10_000 }).toBe("retrying");
+    expect(hasUserWorkflowPause(f.state)).toBe(false);
     expect(f.state.lastError).toContain("Original session cache is unreadable");
     expect(f.state.lastError).not.toContain("scoped-launch-secret");
     // In-memory failure fields precede the awaited atomic state-file write.
@@ -425,7 +443,11 @@ describe("v3 project coordinator production entry", () => {
     }
     const successor = f.opened.find((entry) => entry.controlScope?.role === "scoped-agent" && entry.request.agent === "execution")!;
     const inbox = await fs.readFile(successor.request.inboxPath, "utf8");
-    expect(inbox).toContain("Predecessor handoff:"); expect(inbox).toContain("Committed idea");
+    expect(inbox).toContain("Predecessor handoff:");
+    expect(inbox).toContain('source="predecessor-handoff"');
+    expect(successor.request.contextSources?.find(source => source.key === "predecessor-handoff")?.records).toEqual([
+      { sourceRunId: expect.any(String), output: expect.stringContaining("Committed idea") }
+    ]);
     const child = f.state.scopedGroupRuns!.find((group) => group.groupId === "H")!;
     expect(f.state.scopedGroupFinalMerges?.some((merge) => merge.groupRunId === child.id)).toBe(true);
     expect(f.opened.filter((entry) => entry.request.agent === "execution" && !(entry.controlScope && "executionId" in entry.controlScope && entry.controlScope.executionId.startsWith("group-final-"))).map((entry) => entry.request.workspacePath))
@@ -466,7 +488,8 @@ describe("v3 project coordinator production entry", () => {
     const groupInvocations = f.opened.filter((entry) => entry.controlScope?.role === "scoped-agent")
       .map((entry) => entry.request.invocationId);
     const restarted = await f.restart();
-    expect(f.state.status).toBe("paused");
+    expect(f.state.status).toBe("retrying");
+    expect(hasUserWorkflowPause(f.state)).toBe(false);
     expect(f.state.userIntervention?.status).toBe("pending");
     await restarted.respondToUserIntervention(f.state, { message: "Continue after the restart." });
     try { await expect.poll(() => f.state.status, { timeout: 4_000 }).toBe("completed"); }
@@ -487,7 +510,8 @@ describe("v3 project coordinator production entry", () => {
     clock += 60_000;
     f.releaseBlocked();
     await expect.poll(() => f.coordinator.projectReadModel(f.state).phase, { timeout: 4_000 }).toBe("collaboration:writer-lease-lost");
-    expect(f.coordinator.projectReadModel(f.state).status).toBe("paused");
+    expect(f.coordinator.projectReadModel(f.state).status).toBe("retrying");
+    expect(hasUserWorkflowPause(f.coordinator.projectReadModel(f.state))).toBe(false);
     expect(f.coordinator.projectReadModel(f.state).lastError).toMatch(/restart/i);
     await expect(f.coordinator.resumeProject(f.state)).rejects.toThrow(/writer lease was lost/);
     expect(f.git().log).toHaveLength(mutationsBefore);

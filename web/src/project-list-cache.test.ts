@@ -3,6 +3,7 @@ import { normalizeProject } from "./lib";
 import { workflowOuterNodes } from "./components/workflow-canvas/core/workflow-nodes";
 import { cacheProjectList, cacheProjectQueue, clearProjectListMemoryCache, readCachedProjectList, readCachedProjectQueue } from "./project-list-cache";
 import type { Project, QueueSnapshot } from "./types";
+import { PROJECT_VIEW_STATUSES } from "./project-status";
 
 function project(): Project {
   const value = normalizeProject({ id: "project-1", title: "Cached research", requirement: "Research requirement",
@@ -47,6 +48,24 @@ describe("project list cache", () => {
     expect(workflowOuterNodes(snapshot.projects[0].orchestration)).toEqual(workflowOuterNodes(original.orchestration));
     expect(snapshot.projects[0].agents).toEqual({});
     expect(readCachedProjectQueue()).toBeUndefined();
+  });
+
+  it.each(PROJECT_VIEW_STATUSES)("retains historical display status %s through persistence", status => {
+    const original = project();
+    original.status = status;
+    cacheProjectList([original], 1);
+    clearProjectListMemoryCache();
+    expect(readCachedProjectList()?.projects[0].status).toBe(status);
+  });
+
+  it.each(["RUNNING", "unknown", "__proto__", "active"])("rejects cached status %s without API fallback", status => {
+    cacheProjectList([project()], 1);
+    const key = localStorage.key(0)!;
+    const stored = JSON.parse(localStorage.getItem(key)!);
+    stored.projects[0].status = status;
+    localStorage.setItem(key, JSON.stringify(stored));
+    clearProjectListMemoryCache();
+    expect(readCachedProjectList()).toBeUndefined();
   });
 
   it("preserves scoped collaboration card order and member counts without workflow policy", () => {

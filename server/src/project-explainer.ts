@@ -539,7 +539,7 @@ export class ProjectExplainerService implements ProjectExplainerPort, ProjectExp
       const workspacePath = path.join(runtimePath, "workspaces");
       await fs.mkdir(workspacePath, { recursive: true, mode: 0o700 });
       return { projectPath, workspacePath, runtimePath, stableWorkspace: true,
-        ...(includeEvidence ? { instructions: assistantInstructions(context) } : {}),
+        ...(includeEvidence ? { instructions: assistantInstructions(context, !!this.assistant.host.startProjects) } : {}),
         evidence: includeEvidence ? await this.assistant.contextEvidence(projectId) : {} };
     }
     const projectPath = await fs.realpath(this.storage.projectDir(projectId));

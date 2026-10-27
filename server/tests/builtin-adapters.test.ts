@@ -86,7 +86,7 @@ const lineValue = (prefix, suffix) => {
     ? line.slice(prefix.length, -suffix.length)
     : "";
 };
-const inboxPath = lineValue("Current task Inbox: ", ". Open it for your assigned task; use the context index for background records and read details only when needed.") || lineValue("Read the invocation Inbox at ", ".");
+const inboxPath = lineValue("Current task Inbox: ", ". Its exact current instructions are included below; use the context index for background and do not reload unchanged material.") || lineValue("Current task Inbox: ", ". Open it for your assigned task; use the context index for background records and read details only when needed.") || lineValue("Read the invocation Inbox at ", ".");
 const memoryPath =
   lineValue("Persistent project memory: ", ". Consult relevant portions when needed; do not reload unchanged memory or entire histories by default.") ||
   lineValue("Read persistent project memory at ", " before acting.") ||
@@ -179,14 +179,16 @@ import { spawnSync } from "node:child_process";
 const args = process.argv.slice(2);
 const sessionIndex = args.indexOf("--session");
 const behavior = ${JSON.stringify(behavior)};
-const prompt = args.at(-1) ?? "";
+let input = "";
+for await (const chunk of process.stdin) input += chunk;
+const prompt = input || args.at(-1) || "";
 const lineValue = (prefix, suffix) => {
   const line = prompt.split("\\n").find((value) => value.startsWith(prefix));
   return line && line.endsWith(suffix)
     ? line.slice(prefix.length, -suffix.length)
     : "";
 };
-const inboxPath = lineValue("Current task Inbox: ", ". Open it for your assigned task; use the context index for background records and read details only when needed.") || lineValue("Read the invocation Inbox at ", ".");
+const inboxPath = lineValue("Current task Inbox: ", ". Its exact current instructions are included below; use the context index for background and do not reload unchanged material.") || lineValue("Current task Inbox: ", ". Open it for your assigned task; use the context index for background records and read details only when needed.") || lineValue("Read the invocation Inbox at ", ".");
 const memoryPath =
   lineValue("Persistent project memory: ", ". Consult relevant portions when needed; do not reload unchanged memory or entire histories by default.") ||
   lineValue("Read persistent project memory at ", " before acting.") ||
@@ -357,7 +359,7 @@ const handle = (request) => {
       ? line.slice(prefix.length, -suffix.length)
       : "";
   };
-  const inboxPath = prompt ? lineValue("Current task Inbox: ", ". Open it for your assigned task; use the context index for background records and read details only when needed.") || lineValue("Read the invocation Inbox at ", ".") : "";
+  const inboxPath = prompt ? lineValue("Current task Inbox: ", ". Its exact current instructions are included below; use the context index for background and do not reload unchanged material.") || lineValue("Current task Inbox: ", ". Open it for your assigned task; use the context index for background records and read details only when needed.") || lineValue("Read the invocation Inbox at ", ".") : "";
   const memoryPath = prompt
     ? lineValue("Persistent project memory: ", ". Consult relevant portions when needed; do not reload unchanged memory or entire histories by default.") ||
       lineValue("Read persistent project memory at ", " before acting.") ||
@@ -833,8 +835,12 @@ child.on("exit", code => process.exit(code ?? 1));
       expect(request.purpose).toBe("explainer");
       expect(request.project.agents.__explainer__?.instructions).toContain("worker authoritative inbox");
       expect(request.project.agents.__explainer__?.instructions).toContain("<quoted-project-evidence>");
-      expect(request.project.agents.__explainer__?.instructions).toContain("Do not call tools");
+      expect(request.project.agents.__explainer__?.instructions).toMatch(/^Explain the quoted project evidence\.\n/);
+      expect(request.kind).toBe("worker");
+      expect(request.permission).toBe("workspace");
+      expect(request.control).toBeUndefined();
       expect(request.skillPaths).toEqual([]);
+      expect(request.autoSkillPaths).toEqual([]);
       expect(request.availableSkillPaths).toEqual([]);
       expect(request.project.agents.__explainer__?.mcpServers).toEqual([]);
       expect(request.project.agents.__explainer__?.webSearch).toBe(false);
@@ -1661,8 +1667,13 @@ child.on("exit", code => process.exit(code ?? 1));
         (event as { kind: string }).kind
       );
       expect(publishedKinds).toEqual(identityMode === "inconsistent"
-        ? ["lifecycle"]
+        ? ["lifecycle", "user.message"]
         : []);
+      if (identityMode === "inconsistent") {
+        expect(officialEvents.mock.calls[1]?.[0]).toMatchObject({
+          kind: "user.message", invocationId: request.invocationId, harnessId: "claude-code", message: expect.any(String)
+        });
+      }
     }
   );
 
@@ -1751,7 +1762,10 @@ child.on("exit", code => process.exit(code ?? 1));
     ), "utf8");
     expect(stderr).toContain("[REDACTED]");
     expect(stderr).not.toContain("fixture-private-token");
-    expect(officialEvents).toHaveBeenCalledTimes(1);
+    expect(officialEvents.mock.calls.map(([event]) => (event as { kind: string }).kind)).toEqual(["lifecycle", "user.message"]);
+    expect(officialEvents.mock.calls[1]?.[0]).toMatchObject({
+      invocationId: request.invocationId, harnessId: "claude-code", message: expect.any(String)
+    });
     expect(JSON.stringify(officialEvents.mock.calls)).not.toContain("must not be emitted");
   });
 

@@ -133,6 +133,7 @@ import {
   userInterventionResponseMarkdown,
   workerHandoffMarkdown
 } from "./prompt.js";
+import { MainDecisionValidationError, resolveMainDecision, validateDisplaySelection } from "./main-decision.js";
 import {
   ControlActionService,
   hashControlCapability,
@@ -298,10 +299,7 @@ export interface AgentActivityIdleObservation {
   idleWindowMs: number;
 }
 
-/** A structurally valid Main response violated the active routing contract. */
-export class MainDecisionValidationError extends Error {
-  override name = "MainDecisionValidationError";
-}
+export { MainDecisionValidationError, resolveMainDecision } from "./main-decision.js";
 
 /** The model returned prose but did not commit the required control action. */
 export class ControlProtocolError extends Error {
@@ -6932,9 +6930,9 @@ export class Orchestrator {
   private publishLiveHarnessEvent(
     projectId: string,
     agent: AgentName,
-    value: Record<string, unknown>
+    value: HarnessEvent
   ): void {
-    const event = value as unknown as HarnessEvent;
+    const event = value;
     const attempt = Number.isSafeInteger(event.attempt) ? event.attempt! : 0;
     if (
       (event.kind === "assistant.delta" || event.kind === "assistant.message") &&
@@ -6991,91 +6989,6 @@ export class Orchestrator {
     };
     this.runtimes.set(projectId, runtime);
     return runtime;
-  }
-}
-
-export function resolveMainDecision(
-  state: ProjectState,
-  raw: MainDecision
-): MainDecision {
-  const orchestration = orchestrationFor(state);
-  const pending = state.pendingMainDecision;
-  const capabilities = state.mainCapabilities ??
-    pending?.capabilities ??
-    buildMainCapabilitySnapshot(state);
-  const allowedCandidates = capabilities.routeCandidates;
-  const isAgentTarget =
-    raw.nextAgent !== "finish" && raw.nextAgent !== "user";
-  if (raw.display) {
-    validateDisplaySelection(orchestration, raw.display);
-  }
-  if (raw.nextAgent === "user" && !capabilities.canRequestUser) {
-    throw new MainDecisionValidationError(
-      "Main cannot request user intervention because this workflow has it disabled"
-    );
-  }
-  if (raw.nextAgent === "finish") {
-    const weakFinishSelection = capabilities.controlMode === "weak-branch" &&
-      allowedCandidates.includes("finish");
-    if (!capabilities.canComplete && !weakFinishSelection) {
-      throw new MainDecisionValidationError(
-        `Main selected finish outside a configured termination decision`
-      );
-    }
-    assertMainRouteIsValid(state, raw);
-    return { ...raw };
-  }
-  if (isAgentTarget && !isConfiguredAgent(orchestration, raw.nextAgent)) {
-    throw new MainDecisionValidationError(
-      `Main cannot route to unknown Agent name ${raw.nextAgent}`
-    );
-  }
-  if (
-    isAgentTarget &&
-    !allowedCandidates.includes(raw.nextAgent)
-  ) {
-    throw new MainDecisionValidationError(
-      `Main selected ${raw.nextAgent}, but the configured candidate edges are: ${allowedCandidates.join(", ")}`
-    );
-  }
-  return { ...raw };
-}
-
-function validateDisplaySelection(
-  orchestration: AgentOrchestrationTemplate,
-  display: NonNullable<MainDecision["display"]>
-): void {
-  const entries = [display.primary, ...display.items];
-  for (const item of entries) {
-    if (!isConfiguredAgent(orchestration, item.agent)) {
-      throw new MainDecisionValidationError(
-        `Main cannot display a file from unknown Agent ${item.agent}`
-      );
-    }
-    if (item.path.includes("\0")) {
-      throw new MainDecisionValidationError(
-        `Main selected an invalid display path: ${item.path}`
-      );
-    }
-  }
-}
-
-function assertMainRouteIsValid(
-  state: ProjectState,
-  decision: MainDecision
-): void {
-  const orchestration = orchestrationFor(state);
-  if (decision.nextAgent !== "finish") return;
-  if (orchestration.termination.agent === SYSTEM_CONTROLLER_AGENT) return;
-  const pending = state.pendingMainDecision;
-  const routeSource = pending?.sourceAgent ?? orchestration.termination.agent;
-  const finishConfigured = workflowRoutesForAgent(orchestration, routeSource).some(
-    (edge) => edge.target === "finish"
-  );
-  if (!finishConfigured) {
-    throw new MainDecisionValidationError(
-      `Main cannot finish because ${routeSource} has no configured finish edge`
-    );
   }
 }
 

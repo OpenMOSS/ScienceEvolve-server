@@ -482,6 +482,7 @@ The CCFA and Nature copies do not record import commits; their repository attrib
 </thead>
 <tbody>
 <tr><td align="left">Research workflows</td><td align="left"><a href="docs/research-workflows.md">Main / Worker roles, dual loops, and method sources</a></td></tr>
+<tr><td align="left">Maintenance</td><td align="left"><a href="docs/maintenance.md">Local checks, CI and rule ownership</a></td></tr>
 <tr><td align="left">SDK documentation</td><td align="left"><a href="https://github.com/OpenMOSS/ScienceEvolve/blob/main/sdk/README.md">SDK guide</a> · <a href="https://github.com/OpenMOSS/ScienceEvolve/blob/main/example/README.md">SDK examples</a></td></tr>
 <tr><td align="left">Workflow files and manual import</td><td align="left"><a href="example/README_en.md">Example directory and import instructions</a></td></tr>
 <tr><td align="left">Workflow canvas screenshots</td><td align="left"><a href="docs/readme/workflows/README_en.md">21 actual Workflow canvases</a></td></tr>

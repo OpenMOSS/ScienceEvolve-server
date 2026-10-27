@@ -59,7 +59,7 @@ const draftPayload = (input: CreateProjectInput) => {
 };
 const actionFromEvent = (event: ProjectExplainerEvent) => {
   const action = event.data?.assistantAction as ExplainerAssistantAction | undefined;
-  return action?.context?.id && ["draft.updated", "draft.saved", "draft.undone", "workflow.submitted"].includes(action.kind) ? action : undefined;
+  return action?.context?.id && ["draft.created", "draft.updated", "draft.saved", "draft.undone", "workflow.submitted", "projects.started"].includes(action.kind) ? action : undefined;
 };
 
 export function ProjectExplainerAssistantProvider({ children, target }: { children: ReactNode; target: { newProject?: boolean; taskId?: string; projectId?: string } }) {
@@ -157,7 +157,7 @@ export function ProjectExplainerAssistantProvider({ children, target }: { childr
     contextRef.current = action.context; setContext(action.context);
     const bridge = editor.current;
     const matches = bridge && (bridge.projectId ? bridge.projectId === action.context.projectId : bridge.taskId ? bridge.taskId === action.context.taskId : currentKey.current === "new");
-    if (matches && action.kind !== "workflow.submitted") {
+    if (matches && !["workflow.submitted", "draft.created", "projects.started"].includes(action.kind)) {
       const current = explainerDraftFingerprint(bridge.read());
       if (force || current === expected || current === explainerDraftFingerprint(previous.draft)) {
         bridge.apply(action.context.draft, action.context.taskId, action.context.workflowBase); setPendingAction(undefined);
@@ -166,7 +166,8 @@ export function ProjectExplainerAssistantProvider({ children, target }: { childr
       }
     }
     if (action.kind === "workflow.submitted") window.dispatchEvent(new CustomEvent("openfars:workflow-adjusted", { detail: { projectId: action.context.projectId } }));
-    if (action.context.taskId && !action.context.projectId) window.dispatchEvent(new Event("openfars:saved-tasks-changed"));
+    if (action.kind === "projects.started") window.dispatchEvent(new Event("openfars:projects-started"));
+    if (action.kind === "draft.created" || action.context.taskId && !action.context.projectId) window.dispatchEvent(new Event("openfars:saved-tasks-changed"));
   };
   const bindDraft = async (taskId: string, draft: CreateProjectInput) => {
     const prior = contextRef.current; if (!prior || loadedKey.current !== currentKey.current) return;
@@ -304,13 +305,18 @@ export function ProjectExplainerAssistantProvider({ children, target }: { childr
         </div>}
         <div className="explainer-floating-transcript" ref={transcript} role="log" aria-label="助手对话记录" aria-live="polite">
           {loading && <p className="explainer-floating-empty"><LoaderCircle className="spin" size={18} />正在读取同一段会话…</p>}
-          {!loading && !turns.length && <div className="explainer-floating-empty"><MessageSquare size={25} /><strong>描述你想做的研究或 Workflow</strong><p>可以创建项目草稿、增加并行协作组，或继续调整当前配置。草稿由你查看后启动。</p>
+          {!loading && !turns.length && <div className="explainer-floating-empty"><MessageSquare size={25} /><strong>描述你想做的研究或 Workflow</strong><p>可以创建多份独立草稿、设计并行协作组，或调整当前配置。准备好后，可明确要求启动指定草稿。</p>
             <button type="button" onClick={() => setQuestion("请根据我的课题设计 Workflow，至少包含一个协作组，组内至少三个 Agent 并行协作，最后独立复核。")}>试试：三个 Agent 并行协作</button></div>}
           {turns.map(event => {
             const action = actionFromEvent(event);
             if (["reasoning", "tool", "tool_output"].includes(event.kind)) return <ProjectExplainerTrace key={`${event.turnId}:${event.kind}:${event.itemId ?? event.id}`}
               event={event} output={outputs.get(traceKey(event))} active={active && event.turnId === activeTurnId} />;
-            return action ? <article key={event.id} className="explainer-action-card"><strong>{action.kind === "draft.saved" || action.kind === "draft.updated" && action.context.taskId && !action.context.projectId ? "项目草稿已保存" : action.kind === "workflow.submitted" ? "Workflow 修改已提交" : "草稿已更新"}</strong><p>{action.summary}</p>
+            return action ? <article key={event.id} className="explainer-action-card"><strong>{action.kind === "projects.started" ? "批量启动结果" : action.kind === "draft.created" ? "独立项目草稿已新建" : action.kind === "draft.saved" || action.kind === "draft.updated" && action.context.taskId && !action.context.projectId ? "项目草稿已保存" : action.kind === "workflow.submitted" ? "Workflow 修改已提交" : "草稿已更新"}</strong><p>{action.summary}</p>
+              {action.launches?.results.map(result => <div key={result.taskId}>
+                <span>{result.title || result.taskId}：{result.status === "started" ? "已提交启动" : result.status === "unconfirmed" ? "结果待核对" : "启动失败"}</span>
+                {result.error && <p>{result.error}</p>}
+                {result.status === "started" && result.projectId && /^prj_[a-f0-9]{32}$/.test(result.projectId) && <a href={`#/projects/${result.projectId}`}>打开项目</a>}
+              </div>)}
               {action.href && /^\/(?:saved-tasks\/task_[a-f0-9]{32}\/edit|projects\/prj_[a-f0-9]{32})$/.test(action.href) && <a href={`#${action.href}`}>打开{action.href.startsWith("/saved-tasks/") ? "项目草稿" : "项目"}</a>}</article>
               : <article key={`${event.turnId}:${event.itemId ?? event.id}`} className={`explainer-chat-message ${event.kind}`} role={event.kind === "error" ? "alert" : undefined}><small>{event.kind === "user" ? "你" : "Project Explainer"}</small><ReactMarkdown>{event.text}</ReactMarkdown></article>;
           })}

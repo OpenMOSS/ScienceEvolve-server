@@ -143,7 +143,7 @@ async function fixture(mode: Mode = "confirmed", twoJournals = false, hierarchy?
             stagingPath: authority.control.stagingPath, revalidate: authority.revalidate });
           const response = database.terminalPushCoordinationIncidents(PROJECT).find(incident => incident.id === input.request.terminalPushCoordination!.incidentId)?.userResponse;
           if (response) {
-            expect(turn.prompt).not.toContain(response.response);
+            expect(turn.prompt.split(response.response)).toHaveLength(2);
             expect(JSON.stringify(input.request.contextSources)).toContain(response.response);
             expect(JSON.stringify(input.request.contextSources)).toContain("My actual Main coordination memory");
             expect(database.terminalPushCoordinatorTurns(PROJECT).at(-1)?.userResponseRequestId).toBe(response.requestId);

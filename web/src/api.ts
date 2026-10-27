@@ -656,8 +656,11 @@ export interface ExplainerAssistantContext {
   workflowBase?: { revision: number; hash: string };
 }
 export interface ExplainerAssistantAction {
-  kind: "draft.updated" | "draft.saved" | "draft.undone" | "workflow.submitted";
+  kind: "draft.created" | "draft.updated" | "draft.saved" | "draft.undone" | "workflow.submitted" | "projects.started";
   context: ExplainerAssistantContext; summary: string; href?: string; requestId?: string;
+  savedTask?: { id: string; title: string; updatedAt: string };
+  launches?: { operationId: string; results: { taskId: string; title?: string; status: "started" | "failed" | "unconfirmed";
+    projectId?: string; href?: string; error?: string }[] };
 }
 export function explainerAssistantDraftPayload(input: CreateProjectInput): CreateProjectInput {
   const git = { ...(input.git ?? { enabled: false }) };
@@ -1592,6 +1595,16 @@ export async function startGitHubAuthorization(): Promise<{ authorizationUrl: st
     method: "POST",
     body: JSON.stringify({})
   });
+  return unwrapGitHubAuthorization(value);
+}
+
+export async function startGitHubRepositoryDeletionAuthorization(accountId: string): Promise<{ authorizationUrl: string; expiresAt: string }> {
+  return unwrapGitHubAuthorization(await request(`/api/github/accounts/${encodeURIComponent(accountId)}/repository-deletion-authorization`, {
+    method: "POST", body: JSON.stringify({})
+  }));
+}
+
+function unwrapGitHubAuthorization(value: unknown): { authorizationUrl: string; expiresAt: string } {
   const record = value && typeof value === "object"
     ? value as Record<string, unknown>
     : {};
@@ -1599,6 +1612,39 @@ export async function startGitHubAuthorization(): Promise<{ authorizationUrl: st
     throw new Error("服务未返回有效的 GitHub 登录地址");
   }
   return { authorizationUrl: record.authorizationUrl, expiresAt: record.expiresAt };
+}
+
+export interface GitHubRepositoryDeletionSelection { projectId: string; owner: string; name: string }
+export interface GitHubRepositoryDeletionPreview {
+  previewId: string; accountId: string; accountLogin: string; expiresAt: string; confirmationText: string;
+  repositories: (GitHubRepositoryDeletionSelection & { providerId?: number;
+    status: "ready" | "deleting" | "deleted" | "failed" | "unconfirmed"; error?: string })[];
+}
+function unwrapGitHubRepositoryDeletion(value: unknown): GitHubRepositoryDeletionPreview {
+  const result = value as GitHubRepositoryDeletionPreview | null;
+  if (!result || typeof result.previewId !== "string" || !/^[a-f0-9]{48}$/.test(result.previewId) ||
+    typeof result.accountId !== "string" || !/^gha_[a-f0-9]{32}$/i.test(result.accountId) || typeof result.accountLogin !== "string" ||
+    typeof result.expiresAt !== "string" || result.confirmationText !== "永久删除" ||
+    !Array.isArray(result.repositories) || !result.repositories.length || result.repositories.length > 100 || result.repositories.some(item => !item ||
+      typeof item.projectId !== "string" || typeof item.owner !== "string" || typeof item.name !== "string" ||
+      item.error !== undefined && typeof item.error !== "string" ||
+      !["ready", "deleting", "deleted", "failed", "unconfirmed"].includes(item.status)))
+    throw new Error("服务未返回有效的仓库删除结果");
+  return { previewId: result.previewId, accountId: result.accountId, accountLogin: result.accountLogin,
+    expiresAt: result.expiresAt, confirmationText: result.confirmationText,
+    repositories: result.repositories.map(item => ({ projectId: item.projectId, owner: item.owner, name: item.name, status: item.status,
+      ...(typeof item.providerId === "number" ? { providerId: item.providerId } : {}),
+      ...(item.error ? { error: item.error } : {}) })) };
+}
+export async function previewGitHubRepositoryDeletion(accountId: string, repositories: GitHubRepositoryDeletionSelection[]): Promise<GitHubRepositoryDeletionPreview> {
+  return unwrapGitHubRepositoryDeletion(await request(`/api/github/accounts/${encodeURIComponent(accountId)}/repositories/delete-preview`, {
+    method: "POST", body: JSON.stringify({ repositories })
+  }));
+}
+export async function deleteGitHubRepositories(accountId: string, previewId: string, confirmationText: string): Promise<GitHubRepositoryDeletionPreview> {
+  return unwrapGitHubRepositoryDeletion(await request(`/api/github/accounts/${encodeURIComponent(accountId)}/repositories/delete-batch`, {
+    method: "POST", body: JSON.stringify({ previewId, confirmationText })
+  }));
 }
 
 function unwrapGitHubAccount(value: unknown): GitHubAccountRecord {

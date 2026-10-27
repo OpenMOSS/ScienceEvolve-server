@@ -19,26 +19,34 @@ const mutationProperties = {
 export const EXPLAINER_TOOLS = [
   { name: "get_context", description: "Default: current revision, section names and the complete Agent index only. Every metadata index includes all entries without pagination; detail bodies are opened individually. Read a selected draft field with section=draft,key=<field>; one Agent with section=agent,key=<agentId>; list catalog fields with section=catalog, then key=<field> and entry=<listed entry> for one full record. Project/workflow sections likewise use key. Read only needed details before editing, and refresh after a stale revision rejection.",
     inputSchema: { type: "object", properties: {
-      section: { type: "string", enum: ["overview", "draft", "agent", "catalog", "project", "workflow", "evidence"] },
+      section: { type: "string", enum: ["overview", "draft", "drafts", "agent", "catalog", "project", "workflow", "evidence"] },
       key: { type: "string", minLength: 1, maxLength: 256 }, entry: { type: "string", minLength: 1, maxLength: 1024 }
     }, additionalProperties: false }, annotations: { readOnlyHint: true } },
+  { name: "start_projects", description: "Start one or multiple selected saved drafts as real research projects, ONLY when the user explicitly asks to start them. Read section=drafts first and use each exact taskId/updatedAt. Returns an individual project link or error for every draft; successful items are not launched again on an exact retry. May initialize Git repositories. Does not change the current editor/project target.",
+    inputSchema: { type: "object", properties: { ...mutationProperties,
+      tasks: { type: "array", minItems: 1, maxItems: 100, items: { type: "object", properties: {
+        taskId: { type: "string", pattern: "^task_[a-f0-9]{32}$" }, expectedUpdatedAt: { type: "string", format: "date-time" }
+      }, required: ["taskId", "expectedUpdatedAt"], additionalProperties: false } }
+    }, required: ["expectedRevision", "operationId", "tasks"], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true } },
   ...[
+    ["create_draft", "Create a NEW independent project draft in the homepage library. Use this for every new/additional/alternative draft, once per draft with a unique operationId. A JSON merge patch starts from the current draft. Preserves all previous saved drafts and the current editor/project target, including when bound to a running project. Returns savedTask.id and its actual link. Never starts research or creates a repository."],
     ["update_draft", "Update the current draft using an RFC 7396 JSON merge patch. Valid project designs automatically save to the homepage draft library and return a link; running-project adjustment drafts remain proposals. Never starts research or creates a repository. Objects merge, arrays replace, null removes. Provide a complete valid graph whenever changing graph structure."],
-    ["save_draft", "Create or save the project as a persistent draft in the homepage library. Never launches research or creates a Git repository. Returns the actual saved task ID and navigation link."],
+    ["save_draft", "Save the CURRENT project draft in the homepage library, updating its existing task ID. This is NOT create-new or save-as; use create_draft for a new independent draft. Never launches research or creates a Git repository. Returns the actual saved task ID and navigation link."],
     ["undo_draft", "Undo the last assistant draft edit when the user asks. User edits made since then are preserved through revision checks."],
     ["submit_workflow_adjustment", "Submit the current adjustment draft to an existing running project, only when the user asks to apply their changes. The existing Workflow mechanism decides the actual safe application time. Never launches projects."]
   ].map(([name, description]) => ({ name: name!, description: description!,
     inputSchema: { type: "object", properties: { ...mutationProperties,
-      ...(name === "update_draft" ? { patch: { type: "object", additionalProperties: false,
+      ...(["create_draft", "update_draft"].includes(name!) ? { patch: { type: "object", additionalProperties: false,
         description: "Read get_context first. Omit unrelated fields. Workflow/configuration edits must preserve requirement; requirement is the research brief for downstream research Agents, not your workflow-design instructions.",
         properties: { title: { type: "string" }, requirement: { type: "string", description: EXPLAINER_DRAFT_FIELD_GUIDANCE.requirement },
           agents: { type: ["object", "null"], description: EXPLAINER_DRAFT_FIELD_GUIDANCE.agents },
           orchestration: { type: ["object", "null"], description: EXPLAINER_DRAFT_FIELD_GUIDANCE.orchestration },
           git: { type: ["object", "null"], description: EXPLAINER_DRAFT_FIELD_GUIDANCE.git },
           skillDefinitions: { type: ["object", "null"] }, mcpDefinitions: { type: ["object", "null"] } } },
-        workflowBase: { type: "object", properties: { revision: { type: "integer" }, hash: { type: "string" } }, required: ["revision", "hash"], additionalProperties: false,
-          description: "Set only after reviewing and rebasing the draft against this exact current official Workflow version." } } : {}) },
-      required: ["expectedRevision", "operationId", ...(name === "update_draft" ? ["patch"] : [])], additionalProperties: false },
+        ...(name === "update_draft" ? { workflowBase: { type: "object", properties: { revision: { type: "integer" }, hash: { type: "string" } }, required: ["revision", "hash"], additionalProperties: false,
+          description: "Set only after reviewing and rebasing the draft against this exact current official Workflow version." } } : {}) } : {}) },
+      required: ["expectedRevision", "operationId", ...(["create_draft", "update_draft"].includes(name!) ? ["patch"] : [])], additionalProperties: false },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } }))
 ];
 
@@ -131,7 +139,7 @@ export async function openExplainerAssistantMcp(store: ExplainerAssistantStore |
     if (request.method !== "POST") { response.writeHead(405).end(); return; }
     const mcp = new Server({ name: EXPLAINER_MCP_NAME, version: "1.0.0" }, { capabilities: { tools: {} } });
     active.add(mcp);
-    const tools = [...(store ? EXPLAINER_TOOLS : []), ...(readDirectory ? [EXPLAINER_READ_CONTEXT_TOOL] : [])];
+    const tools = [...(store ? EXPLAINER_TOOLS.filter(tool => tool.name !== "start_projects" || store.host.startProjects) : []), ...(readDirectory ? [EXPLAINER_READ_CONTEXT_TOOL] : [])];
     mcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
     mcp.setRequestHandler(CallToolRequestSchema, async request => {
       try {
@@ -147,6 +155,7 @@ export async function openExplainerAssistantMcp(store: ExplainerAssistantStore |
         if (result.action) await onAction(result.action);
         const value = result.action ? { kind: result.action.kind, summary: result.action.summary,
           changedFields: result.action.changedFields, href: result.action.href, requestId: result.action.requestId,
+          savedTask: result.action.savedTask, launches: result.action.launches,
           context: { id: result.action.context.id, revision: result.action.context.revision,
             taskId: result.action.context.taskId, projectId: result.action.context.projectId,
             canUndo: result.action.context.canUndo } } : result.result;

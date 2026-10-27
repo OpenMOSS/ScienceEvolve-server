@@ -1,4 +1,5 @@
 import { AGENT_TEMPLATES, type Project, type QueueSnapshot } from "./types";
+import { isProjectViewStatus } from "./project-status";
 
 interface ProjectListSnapshot {
   projects: Project[];
@@ -13,7 +14,6 @@ function cacheKey(): string {
   return `scienceevolve:project-list:v1:${new URL(`${base}/api/projects`, window.location.href).href}`;
 }
 
-const statuses = new Set(["draft", "queued", "running", "retrying", "interrupting", "interrupted", "pausing", "paused", "cancelling", "cancelled", "stopping", "stopped", "completed", "failed"]);
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid cache object");
   return value as Record<string, unknown>;
@@ -43,7 +43,7 @@ function array(value: unknown): unknown[] {
 function displayProject(value: unknown): Project {
   const p = object(value);
   const status = string(p.status);
-  if (!statuses.has(status) || !string(p.id)) throw new Error("Invalid cached project");
+  if (!isProjectViewStatus(status) || !string(p.id)) throw new Error("Invalid cached project");
   const progress = object(p.overallProgress);
   const orchestration = object(p.orchestration);
   const agents = array(orchestration.agents).map((value) => {
@@ -64,7 +64,7 @@ function displayProject(value: unknown): Project {
   if (intervention && intervention.status !== "pending" && intervention.status !== "answered") throw new Error("Invalid intervention");
   return {
     id: string(p.id), title: string(p.title), requirement: string(p.requirement),
-    status: status as Project["status"], phase: string(p.phase), cycle: number(p.cycle), turn: 0,
+    status, phase: string(p.phase), cycle: number(p.cycle), turn: 0,
     createdAt: optionalString(p.createdAt), updatedAt: optionalString(p.updatedAt), archivedAt: optionalString(p.archivedAt),
     currentAgent: optionalString(p.currentAgent), queuedAgent: optionalString(p.queuedAgent),
     queueDepth: optionalNumber(p.queueDepth), queuePosition: optionalNumber(p.queuePosition),

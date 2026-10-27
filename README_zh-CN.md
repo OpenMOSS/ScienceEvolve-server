@@ -482,6 +482,7 @@ CCFA 与 Nature 的内置副本未记录导入时的提交版本；上游仓库�
 </thead>
 <tbody>
 <tr><td align="left">研究工作流说明</td><td align="left"><a href="docs/research-workflows_zh-CN.md">Main / Worker 分工、双循环与方法来源</a></td></tr>
+<tr><td align="left">维护检查</td><td align="left"><a href="docs/maintenance.md">本地检查、CI 与规则归属</a></td></tr>
 <tr><td align="left">SDK 文档</td><td align="left"><a href="https://github.com/OpenMOSS/ScienceEvolve/blob/main/sdk/README_zh-CN.md">SDK 使用指南</a> · <a href="https://github.com/OpenMOSS/ScienceEvolve/blob/main/example/README.md">SDK 示例</a></td></tr>
 <tr><td align="left">Workflow 文件与手动导入</td><td align="left"><a href="example/README.md">示例目录与导入说明</a></td></tr>
 <tr><td align="left">Workflow 画布截图</td><td align="left"><a href="docs/readme/workflows/README.md">21 张真实 Workflow 画布</a></td></tr>

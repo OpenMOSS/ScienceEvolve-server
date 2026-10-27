@@ -83,7 +83,12 @@ describe("unused exact closing grant refusal", () => {
     const action: ControlAction = { tool: "coordinate_group_task", groupRunId: "run-G", coordinatorEpoch: claim.coordinatorEpoch,
       arrivalRequestId: f.execution.arrivalRequestId, operation: "close_worktree", rationale: "Do not restore an untrusted manifest",
       closing: { executionId: f.execution.id, ownershipEpoch: 1, paths: f.files } };
-    expect(() => f.db.revalidateScopedLeaderAction({ ...identity, envelope: envelope(action, "close") })).toThrow("without writable paths");
+    expect(() => f.db.revalidateScopedLeaderAction({ ...identity, envelope: envelope(action, "close") })).toThrow(expect.objectContaining({
+      code: "INVALID_STATE_TRANSITION", details: expect.objectContaining({ invalidField: "operation", recoveryOptions: [expect.objectContaining({
+        arrivalRequestId: f.execution.arrivalRequestId, allowedOperations: ["escalate"],
+        blockedOperations: { close_worktree: expect.stringContaining("trusted original-owner file manifest") }
+      })] })
+    }));
     f.db.recordScopedLeaderTaskCompletion({ ...identity, envelope: envelope({ tool: "finish_task", summary: "My actual escalation" }, "finish") });
     const { closing, ...escalation } = action;
     f.db.acceptScopedLeaderAction({ ...identity, residentStopConfirmed: true, envelope: envelope({ ...escalation, operation: "escalate" }, "escalate") });

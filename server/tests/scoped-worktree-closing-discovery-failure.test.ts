@@ -89,7 +89,12 @@ describe("trusted read-failure facts without a writable closing manifest", () =>
     expect(() => f.db.revalidateScopedLeaderAction({ ...manager, envelope: { projectId: P, agent: "main", invocationId: "inv_uncertain", callId: "forbidden",
       capabilityHash: "c".repeat(64), stateVersion: claimed.coordinatorEpoch, receivedAt: f.time(), action: {
         tool: "coordinate_group_task", groupRunId: "run-G", coordinatorEpoch: claimed.coordinatorEpoch, arrivalRequestId: f.execution.arrivalRequestId,
-        operation, rationale: "Cannot substitute guessed paths", ...(operation === "close_worktree" ? { closing: { executionId: f.execution.id, ownershipEpoch: 1, paths: f.files } } : {}) } } })).toThrow(/closing issue|original direct Leader/);
+        operation, rationale: "Cannot substitute guessed paths", ...(operation === "close_worktree" ? { closing: { executionId: f.execution.id, ownershipEpoch: 1, paths: f.files } } : {}) } } })).toThrow(expect.objectContaining({
+          code: "INVALID_STATE_TRANSITION", details: expect.objectContaining({ invalidField: "operation", recoveryOptions: [expect.objectContaining({
+            arrivalRequestId: f.execution.arrivalRequestId, allowedOperations: ["escalate"],
+            blockedOperations: { close_worktree: expect.stringContaining("trusted original-owner file manifest") }
+          })] })
+        }));
     expect(f.db.scopedWorktreeClosingAuthorizations(P)).toEqual([]);
   });
 });

@@ -1416,6 +1416,16 @@ export function ProjectListPage({
     });
   }, [gateways, savedTasks]);
 
+  const publishListSnapshot = useCallback((next: Project[]) => {
+    projectsRef.current = next;
+    hasProjectSnapshotRef.current = true;
+    cacheProjectList(next, lastTokenRefreshAt.current);
+    setProjects(next);
+    setHasProjectSnapshot(true);
+    setLoading(false);
+    setError("");
+  }, []);
+
   const load = useCallback(async (initial = false, refreshTokens = false) => {
     if (!pageActiveRef.current) return;
     const requests: Promise<void>[] = [];
@@ -1441,13 +1451,7 @@ export function ProjectListPage({
                 tokenUsage: usageByProject.get(project.id) ?? project.tokenUsage
               }));
           if (updateTokenSnapshot) lastTokenRefreshAt.current = Date.now();
-          projectsRef.current = next;
-          hasProjectSnapshotRef.current = true;
-          cacheProjectList(next, lastTokenRefreshAt.current);
-          setProjects(next);
-          setHasProjectSnapshot(true);
-          setLoading(false);
-          setError("");
+          publishListSnapshot(next);
           setRefreshWarning("");
         }).catch((reason: unknown) => {
           if (!pageActiveRef.current || request !== projectRequestRef.current) return;
@@ -1481,7 +1485,7 @@ export function ProjectListPage({
       );
     }
     await Promise.allSettled(requests);
-  }, []);
+  }, [publishListSnapshot]);
 
   const publishProjectMutation = useCallback((update?: (current: Project[]) => Project[]) => {
     if (!pageActiveRef.current) return;
@@ -1491,16 +1495,10 @@ export function ProjectListPage({
     loadInFlight.current = false;
     if (update) {
       const next = update(projectsRef.current);
-      projectsRef.current = next;
-      hasProjectSnapshotRef.current = true;
-      cacheProjectList(next, lastTokenRefreshAt.current);
-      setProjects(next);
-      setHasProjectSnapshot(true);
-      setLoading(false);
-      setError("");
+      publishListSnapshot(next);
     }
     setRefreshing(queueLoadInFlight.current);
-  }, []);
+  }, [publishListSnapshot]);
 
   useEffect(() => {
     pageActiveRef.current = true;
@@ -1517,12 +1515,14 @@ export function ProjectListPage({
     }, 10 * 60_000);
     document.addEventListener("visibilitychange", refresh);
     window.addEventListener("openfars:saved-tasks-changed", refresh);
+    window.addEventListener("openfars:projects-started", refresh);
     return () => {
       pageActiveRef.current = false;
       window.clearInterval(statusTimer);
       window.clearInterval(tokenTimer);
       document.removeEventListener("visibilitychange", refresh);
       window.removeEventListener("openfars:saved-tasks-changed", refresh);
+      window.removeEventListener("openfars:projects-started", refresh);
     };
   }, [load]);
 
