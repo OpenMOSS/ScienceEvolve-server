@@ -30,6 +30,10 @@ import readline from "node:readline";
 import { zstdCompressSync } from "node:zlib";
 const harness = ${JSON.stringify(harness)}, echo = ${JSON.stringify(echo)};
 const args = process.argv.slice(2);
+if (harness === "codex" && args[0] === "debug" && args[1] === "models") {
+  console.log(JSON.stringify({ models: [{ slug: "fixture-model", use_responses_lite: false, tool_mode: null }] }));
+  process.exit(0);
+}
 const emit = value => process.stdout.write(JSON.stringify(value) + "\\n");
 const capture = prompt => {
   const workflowUpdates = [];

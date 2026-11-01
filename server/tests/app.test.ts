@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -75,6 +75,24 @@ class HoldingRunner implements AgentRunner {
 }
 
 describe("HTTP API", () => {
+  it("queries Harness prompts read-only and rejects secret or writable configuration fields", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-prompt-query-")); temporaryRoots.push(root);
+    const eventHub = new EventHub(), storage = new ProjectStorage(root, eventHub); await storage.initialize();
+    const query = vi.fn(async (input: { harness: string; model: string }) => ({ ...input, status: "available", sourceType: "bundled-default",
+      scope: "base-default", installedVersion: "0.153.4", collectedAt: "2026-10-27T00:00:00Z", configurationDigest: "digest", text: "NATIVE_BASE" }));
+    const createProject = vi.fn();
+    const app = createApp({ orchestrator: { createProject } as unknown as Orchestrator, storage, eventHub, skills: testSkillCatalog(),
+      harnessPrompts: { query }, config: { modelSuggestions: [], maxEventHistory: 2 } });
+    const response = await request(app).post("/api/harness-prompts/query").send({ harness: "codex", model: "exact", webSearch: false }).expect(200);
+    expect(response.body).toMatchObject({ model: "exact", text: "NATIVE_BASE", sourceType: "bundled-default" });
+    expect(query).toHaveBeenCalledWith({ harness: "codex", model: "exact", webSearch: false });
+    for (const forbidden of [{ apiKey: "secret" }, { gatewaySnapshot: { apiKey: "secret" } }, { instructions: "OVERWRITE" }, { sessionPath: "/private/session" }])
+      await request(app).post("/api/harness-prompts/query").send({ harness: "codex", model: "exact", ...forbidden }).expect(400);
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(createProject).not.toHaveBeenCalled();
+    expect(await fs.readdir(root)).not.toContain("sessions");
+  });
+
   it("exposes and resolves the three bundled Agent4Sci skills without leaking host paths", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "agent4sci-api-"));
     temporaryRoots.push(root);
@@ -696,9 +714,10 @@ describe("HTTP API", () => {
       };
       expect(snapshot.project.currentAgent).toBe("idea");
       expect(snapshot.project.queueDepth).toBe(0);
-      expect(snapshot.events.some((event) => event.type === "agent.started")).toBe(
-        true
-      );
+      // The snapshot is a bounded tail; full startup history is verified below
+      // through the bootstrap timeline, independently of later trace events.
+      expect(snapshot.events.length).toBeLessThanOrEqual(2);
+      expect(snapshot.events.every(event => Number.isInteger(event.seq))).toBe(true);
       expect(snapshot.artifacts).toEqual([
         expect.objectContaining({
           id: "workspace:Memory.md",

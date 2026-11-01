@@ -49,8 +49,8 @@ import {
 import type { InvocationInputs, InvocationPolicy, SessionRef } from "./contracts.js";
 import { validateSessionRef } from "./session-ref.js";
 import { compileWorkflowPrompt } from "./invocation-policy.js";
-import { filesystemAuthorityPrompt, type FilesystemAuthority } from "./filesystem-authority.js";
-import type { InvocationGatewayRoute } from "./gateway-route.js";
+import { type FilesystemAuthority } from "./filesystem-authority.js";
+import { modelRouteBinding, type InvocationGatewayRoute, type InvocationModelRoute } from "./gateway-route.js";
 import { HarnessRuntimeError, ResidentInputPreparationError, ResidentTurnRetryableError, harnessRecoveryDelayMs, proxyFailureError } from "./errors.js";
 import { sessionRecoveryNote } from "../internal/shared/session-recovery.js";
 import {
@@ -79,12 +79,16 @@ import {
 } from "./runtime.js";
 
 const MAX_CONTROL_LINE_BYTES = 1024 * 1024;
+export function residentControlRequestTimeoutMs(request: Record<string, unknown>): number {
+  return controlRequestTimeoutMs(request.method);
+}
+
 
 export type ResidentGatewayRouteFactory = (
   request: AgentRunRequest,
   onTrace: TraceSink,
   signal: AbortSignal
-) => Promise<InvocationGatewayRoute>;
+) => Promise<InvocationModelRoute>;
 
 export interface ResidentControlRevalidationInput {
   request: AgentRunRequest;
@@ -444,7 +448,9 @@ export class HarnessRuntimeResidentAdapter {
       const prepared = await this.#options.runtime.prepareResidentScope({
         request: launchRequest,
         ...(context.role === "leader" ? { inputs: input.inputs! } : {}),
-        launchRoute: gatewayFrontdoor.route,
+        launchRoute: request.project.agents[request.agent].nativeCodexProfileId
+          ? modelRouteBinding(await this.#options.runtime.openResidentTurnGatewayRoute(launchRequest, input.onTrace, input.signal))
+          : gatewayFrontdoor.route,
         filesystemAuthorityInput: input.filesystemAuthorityInput,
         ...(controlFrontdoor
           ? { controlMcp: broker.controlMcpBinding(controlFrontdoor) }
@@ -726,7 +732,7 @@ interface PreparedTurnAuthority {
   request: AgentRunRequest;
   turn: ResidentTurn;
   nativeTurn?: ResidentTurn;
-  route: InvocationGatewayRoute;
+  route: InvocationModelRoute;
   controller: AbortController;
   detachSignal: () => void;
   control?: PreparedControlAuthority;
@@ -795,7 +801,7 @@ class StableTurnAuthorityBroker implements ResidentTurnAuthorityBroker {
     this.#options.signal.addEventListener("abort", abort, { once: true });
     const detachSignal = () => this.#options.signal.removeEventListener("abort", abort);
     let control: PreparedControlAuthority | undefined;
-    let route: InvocationGatewayRoute | undefined;
+    let route: InvocationModelRoute | undefined;
     try {
       const runtime: Awaited<ReturnType<ResidentTurnRequestFactory>> =
         this.#options.turnRequestFactory
@@ -873,15 +879,10 @@ class StableTurnAuthorityBroker implements ResidentTurnAuthorityBroker {
         ? await request.onPendingControlResults(input.inputId, structuredClone(this.#nativeSession!)) : "";
       const unboundedPrompt = [
         resultNotification,
-        compileWorkflowPrompt(request, inputs, context.policy),
-        // Describe callable descriptor tools only when this launch mounted them.
-        ...(context.filesystemMcpAvailable ? [filesystemAuthorityPrompt(context.authority, inputs)] : []),
-        // Current instructions are required input, regardless of their size.
-        // Only their supporting evidence/history belongs behind an index.
-        input.nativeNotice ?? `Current resident assignment:\n${input.prompt}`
+        compileWorkflowPrompt(request, inputs, context.policy, { inlineInbox: input.nativeNotice ?? input.prompt }),
       ].filter(Boolean).join("\n\n");
       const fitted = fitContextInjection(unboundedPrompt, agentContextWindow(request.project.agents[request.agent]),
-        contextReplacements(inputs), context.policy.constraintPrompt);
+        [], context.policy.constraintPrompt);
       const prompt = fitted.prompt;
       route.setInjectionBudget?.(prompt, context.policy.constraintPrompt);
       this.#turnSequence += 1;
@@ -889,7 +890,7 @@ class StableTurnAuthorityBroker implements ResidentTurnAuthorityBroker {
         inputId: input.inputId,
         invocationId: input.invocationId,
         prompt,
-        route: { baseUrl: route.baseUrl, token: route.token },
+        route: modelRouteBinding(route),
         ...(control ? { controlCapability: control.capability } : {}),
         ...(runtime.durableRehydrate
           ? { durableRehydrate: structuredClone(runtime.durableRehydrate) }
@@ -947,7 +948,7 @@ class StableTurnAuthorityBroker implements ResidentTurnAuthorityBroker {
 
       // No await is permitted between these assignments. They form one event-
       // loop atomic publication of Gateway plus control downstream authority.
-      this.#options.gatewayFrontdoor.rotate(prepared.route);
+      this.#options.gatewayFrontdoor.rotate("nativeCodexProfileHome" in prepared.route ? undefined : prepared.route);
       this.#options.controlFrontdoor?.rotate(prepared.control?.downstream);
       this.#current = prepared;
       this.#options.siiBinding?.activate(prepared.request);
@@ -1204,7 +1205,7 @@ class StableTurnAuthorityBroker implements ResidentTurnAuthorityBroker {
     let drainFailure: unknown;
     try {
       await Promise.all([
-        this.#options.gatewayFrontdoor.drain(prepared.route),
+        "nativeCodexProfileHome" in prepared.route ? Promise.resolve() : this.#options.gatewayFrontdoor.drain(prepared.route),
         prepared.control && this.#options.controlFrontdoor
           ? this.#options.controlFrontdoor.drain(prepared.control.downstream)
           : Promise.resolve(),
@@ -1500,7 +1501,8 @@ class StableGatewayFrontdoor {
   }
 }
 
-class StableControlFrontdoor {
+/** Internal transport; not part of the public SDK workflow/API surface. */
+export class StableControlFrontdoor {
   readonly row: ResidentMcpRow;
   readonly #server: NetServer;
   readonly #token: string;
@@ -1626,12 +1628,13 @@ class StableControlFrontdoor {
         if (newline < 0) break;
         const line = buffered.slice(0, newline);
         buffered = buffered.slice(newline + 1);
-        queue = queue.then(() => this.#handleLine(socket, line));
+        queue = queue.then(() => this.#handleLine(socket, line)).catch(() => { socket.destroy(); });
       }
     });
   }
 
   async #handleLine(socket: Socket, line: string): Promise<void> {
+    if (socket.destroyed) return;
     let response: Record<string, unknown>;
     try {
       const envelope = JSON.parse(line) as Record<string, unknown>;
@@ -2305,7 +2308,13 @@ function assertTurnInput(input: {
   }
 }
 
-function assertInvocationRoute(route: InvocationGatewayRoute): void {
+function assertInvocationRoute(route: InvocationModelRoute): void {
+  if (route && "nativeCodexProfileHome" in route) {
+    if (!path.isAbsolute(route.nativeCodexProfileHome) || !route.authorityId || route.authorityId.includes("\0") || typeof route.close !== "function") {
+      throw adapterError("Resident route factory returned invalid native profile authority");
+    }
+    return;
+  }
   if (!route || typeof route.baseUrl !== "string" || typeof route.token !== "string" ||
     !route.token.trim() || route.token.includes("\0") || typeof route.close !== "function") {
     throw adapterError("Resident route factory returned an invalid invocation route");
@@ -2390,9 +2399,14 @@ function sameTurnAuthority(expected: ResidentTurn, supplied: ResidentTurn): bool
   return expected.inputId === supplied.inputId &&
     expected.invocationId === supplied.invocationId &&
     expected.prompt === supplied.prompt &&
-    expected.route.baseUrl === supplied.route.baseUrl &&
-    safeSecretEqual(expected.route.token, supplied.route.token) &&
+    sameModelRouteAuthority(expected.route, supplied.route) &&
     expected.controlCapability === supplied.controlCapability;
+}
+
+function sameModelRouteAuthority(expected: ResidentTurn["route"], supplied: ResidentTurn["route"]): boolean {
+  if ("nativeCodexProfileHome" in expected) return "nativeCodexProfileHome" in supplied &&
+    expected.nativeCodexProfileHome === supplied.nativeCodexProfileHome && safeSecretEqual(expected.authorityId, supplied.authorityId);
+  return "baseUrl" in supplied && expected.baseUrl === supplied.baseUrl && safeSecretEqual(expected.token, supplied.token);
 }
 
 function turnKey(inputId: string, invocationId: string): string {

@@ -15,6 +15,39 @@ afterEach(async () => {
 });
 
 describe.runIf(process.platform === "linux" || process.platform === "win32")("filesystem read MCP optional version compatibility", () => {
+  it.runIf(process.platform === "linux")("runs real ls/cat/rg at the project entry without allowing command execution or writes", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-project-shell-")); roots.push(root);
+    const home = path.join(root, "home"), project = path.join(root, "project"), worktree = path.join(project, "workspaces"), runtime = path.join(root, "runtime");
+    await Promise.all([fs.mkdir(home), fs.mkdir(worktree, { recursive: true }), fs.mkdir(runtime)]);
+    await fs.writeFile(path.join(project, "request.md"), "Exact samples: A=27 B=31\n");
+    await fs.writeFile(path.join(worktree, "Memory.md"), "retained memory");
+    const authority = await compileFilesystemAuthority({ permission: "workspace", role: "delivery", gitEnabled: false,
+      serviceUserRoot: home, executionWorktree: worktree, ownedMemoryPath: path.join(worktree, "Memory.md"),
+      protectedRoots: [runtime], inputReadRoots: [project] });
+    const prepared = await prepareFilesystemAuthorityMcp({ authority, executionRuntimePath: runtime });
+    const client = rpc(prepared.row.command, prepared.row.args);
+    const call = async (command: string, target: string, pattern?: string) => {
+      const response = await client.request({ method: "tools/call", params: { name: "shell", arguments: { command, path: target, ...(pattern ? { pattern } : {}) } } });
+      return response.result;
+    };
+    try {
+      const list = await client.request({ method: "tools/list" });
+      expect(list.result.tools.some((tool: any) => tool.name === "shell")).toBe(true);
+      const ls = await call("ls", project); expect(ls.isError).not.toBe(true);
+      expect(ls.structuredContent).toMatchObject({ command: "ls", exitCode: 0 });
+      expect(ls.structuredContent.stdout).toContain("request.md");
+      const cat = await call("cat", path.join(project, "request.md"));
+      expect(cat.structuredContent.stdout).toBe("Exact samples: A=27 B=31\n");
+      const rg = await call("rg", project, "A=27");
+      expect(rg.structuredContent).toMatchObject({ command: "rg", exitCode: 0 });
+      expect(rg.structuredContent.stdout).toContain("Exact samples: A=27 B=31");
+      expect((await call("sh", project)).isError).toBe(true);
+      expect((await call("cat", "/etc/passwd")).isError).toBe(true);
+      expect((await call("cat", path.join(project, "request.md; touch stolen"))).isError).toBe(true);
+      expect(await fs.readFile(path.join(project, "request.md"), "utf8")).toBe("Exact samples: A=27 B=31\n");
+      expect(authority.writeRoots).toEqual([worktree]);
+    } finally { await client.close(); }
+  });
   it("versions every workspace file through the real Git MCP, including ignored and hidden files", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "scienceevolve-git-every-file-")); roots.push(root);
     const home = path.join(root, "home"), worktree = path.join(home, "worktree"), runtime = path.join(root, "runtime");

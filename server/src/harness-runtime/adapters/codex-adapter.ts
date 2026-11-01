@@ -79,7 +79,10 @@ export class CodexAdapter extends AdapterBase implements HarnessAdapter {
       {
         ...this.options,
         harnessId: descriptor.id,
-        skillsAlreadyStaged: true
+        skillsAlreadyStaged: true,
+        workflowPromptPrepared: true,
+        ...("nativeCodexProfileHome" in context.route
+          ? { nativeCodexProfileHome: context.route.nativeCodexProfileHome } : {})
       },
       context.processHost,
       context.spec.session!
@@ -95,15 +98,15 @@ export class CodexAdapter extends AdapterBase implements HarnessAdapter {
       );
     }
     const sourceGateway = sourceConfig.gatewaySnapshot;
-    if (!sourceGateway) throw new Error("Codex requires a validated gateway snapshot");
+    if (!sourceGateway && !("nativeCodexProfileHome" in route)) throw new Error("Codex requires a validated model route");
     const explainerPrompt = spec.prompt;
     const routedConfig = {
       ...sourceConfig,
       instructions: explainerPrompt,
       mcpServers: [...spec.policy.mcpServers],
       webSearch: spec.policy.webSearch,
-      gatewaySnapshot: {
-        ...sourceGateway,
+      gatewaySnapshot: "nativeCodexProfileHome" in route ? undefined : {
+        ...sourceGateway!,
         url: route.baseUrl,
         apiKey: route.token,
         protocol: "responses" as const,

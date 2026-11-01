@@ -12,6 +12,9 @@ import type {
 } from "../types.js";
 import type {
   HarnessAdapterRequest,
+  HarnessAdapter,
+  LaunchPlan,
+  ResidentInactivityPolicy,
   HarnessId,
   InvocationInputs,
   InvocationSpec,
@@ -22,9 +25,10 @@ import type {
   FilesystemAuthority,
   PreparedFilesystemMcp
 } from "./filesystem-authority.js";
-import type { ResidentProcessBinding } from "./process-host.js";
+import type { ResidentProcessBinding, ResidentProcessLauncher } from "./process-host.js";
 import type {
-  BuiltinResidentProtocol,
+  ResidentProtocol,
+  ResidentProtocolCodec,
   ResidentRecoveryStrategy,
   ResidentTurnAuthorityBroker
 } from "./resident-native-driver.js";
@@ -99,7 +103,7 @@ export interface ResidentTurn {
   invocationId: string;
   prompt: string;
   /** A fresh, short-lived route is required for every model turn. */
-  route: { baseUrl: string; token: string };
+  route: import("./gateway-route.js").ModelRouteBinding;
   /** A fresh orchestration capability is required for every model turn. */
   controlCapability?: string;
   durableRehydrate?: ResidentDurableRehydrateProvenance;
@@ -131,7 +135,7 @@ export interface ResidentScopeOpenRequest {
   request: HarnessAdapterRequest;
   spec: InvocationSpec;
   session: SessionRef;
-  launchRoute: { baseUrl: string; token: string };
+  launchRoute: import("./gateway-route.js").ModelRouteBinding;
   filesystemAuthority: FilesystemAuthority;
   mcpRows: readonly ResidentMcpRow[];
   /** Facade-captured credential used only for fixed-directory MCP indirection. */
@@ -159,7 +163,7 @@ export interface PrepareResidentScopeRequest {
   request: AgentRunRequest;
   /** Required only for leader management; delivery inputs are staged here. */
   inputs?: InvocationInputs;
-  launchRoute: { baseUrl: string; token: string };
+  launchRoute: import("./gateway-route.js").ModelRouteBinding;
   /** Compiled only after first-use Git memory has been safely staged. */
   filesystemAuthorityInput: {
     serviceUserRoot: string;
@@ -182,7 +186,7 @@ export interface PrepareResidentScopeRequest {
 
 export interface ResidentAdapterLaunchEvidence {
   harnessId: string;
-  protocol: BuiltinResidentProtocol;
+  protocol: ResidentProtocol;
   recoveryStrategy: ResidentRecoveryStrategy;
   command: string;
   args: readonly string[];
@@ -957,8 +961,9 @@ function validateTurn(turn: ResidentTurn): void {
     ["inputId", turn.inputId],
     ["invocationId", turn.invocationId],
     ["prompt", turn.prompt],
-    ["route base URL", turn.route.baseUrl],
-    ["route token", turn.route.token]
+    ...("nativeCodexProfileHome" in turn.route
+      ? [["native profile home", turn.route.nativeCodexProfileHome], ["native authority", turn.route.authorityId]] as const
+      : [["route base URL", turn.route.baseUrl], ["route token", turn.route.token]] as const)
   ] as const) {
     if (!value || value.length > 1_000_000 || value.includes("\0")) {
       throw contractError(`Resident turn has an invalid ${label}`);
@@ -1050,4 +1055,17 @@ function contractError(message: string, cause?: unknown): HarnessRuntimeError {
     {},
     { source: "process", cause: cause instanceof Error ? cause : undefined }
   );
+}
+
+/** Adapter-owned protocol preparation; common ProcessHost retains launch authority. */
+export interface ResidentAdapterLaunchRequest extends ResidentScopeOpenRequest {
+  adapter: HarnessAdapter;
+  executable: string;
+  processHost: ResidentProcessLauncher;
+  inactivityPolicy?: Partial<ResidentInactivityPolicy>;
+}
+export interface ResidentAdapterLaunchDefinition {
+  plan: LaunchPlan;
+  codec: ResidentProtocolCodec;
+  unstartedReservation?: true;
 }

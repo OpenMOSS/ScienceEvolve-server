@@ -37,7 +37,7 @@ export function ProjectExplainerTrace({ event, output, active }: { event: Projec
   const text = output?.text || tool.outputPreview || "";
   const input = preview(tool.input);
   if (event.kind === "tool_output") return <details className="explainer-trace-output"><summary>查看工具结果</summary><pre>{event.text || "工具未返回文本结果。"}</pre></details>;
-  return <div className={`explainer-trace-tool${failed ? " is-failed" : ""}`} aria-label={`${explainerToolLabel(name)}：${status}`}>
+  return <div className={`explainer-trace-tool${failed ? " is-failed" : completed ? " is-completed" : ""}`} aria-label={`${explainerToolLabel(name)}：${status}`}>
     <div className="explainer-trace-tool-heading"><Wrench size={14} /><strong>{explainerToolLabel(name)}</strong>
       <span>{status}</span>{!completed && active ? <LoaderCircle className="spin" size={12} /> : failed ? <CircleAlert size={13} /> : completed ? <CheckCircle2 size={13} /> : null}</div>
     <code className="explainer-trace-tool-name">{name}</code>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Eye, FilePlus2, PencilLine, RefreshCw, Settings2, X } from "lucide-react";
 import { ApiError, getWorkflowAdjustmentDetail, submitWorkflowAdjustment, withdrawWorkflowAdjustment } from "../api";
 import type { FixedMcpDefinition, GatewayRecord, HarnessCatalogEntry, Project, SkillDefinition } from "../types";
 import type { WorkflowAdjustmentContext, WorkflowAdjustmentRecord, WorkflowAdjustmentSummary } from "../workflowAdjustments";
@@ -66,6 +66,7 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
   const [panel, setPanel] = useState<"config" | "records">("config");
   const [recordFilters, setRecordFilters] = useState<AdjustmentRecordFilters>({ query: "", source: "all", status: "all" });
   const [preview, setPreview] = useState<Preview>();
+  const recommendationDetails = useRef<HTMLDetailsElement>(null);
   const previewRef = useRef(preview); previewRef.current = preview;
   const [replaceId, setReplaceId] = useState<string>();
   const [withdrawId, setWithdrawId] = useState<string>();
@@ -159,12 +160,23 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      if (recommendationDetails.current?.open) {
+        recommendationDetails.current.open = false;
+        recommendationDetails.current.querySelector("summary")?.focus();
+        event.preventDefault(); return;
+      }
       const dialogs = [...document.querySelectorAll('[role="dialog"][aria-modal="true"]')].filter(dialog => !dialog.closest("[hidden]"));
       if (dialogs.length === 1) {
         if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); onClose();
       }
     };
-    window.addEventListener("keydown", escape); return () => window.removeEventListener("keydown", escape);
+    const dismissRecommendation = (event: PointerEvent) => {
+      const details = recommendationDetails.current;
+      if (details?.open && !details.contains(event.target as Node)) details.open = false;
+    };
+    window.addEventListener("keydown", escape);
+    document.addEventListener("pointerdown", dismissRecommendation);
+    return () => { window.removeEventListener("keydown", escape); document.removeEventListener("pointerdown", dismissRecommendation); };
   }, [onClose]);
   const leavePreview = () => { detailRefreshController.current?.abort(); setPreview(undefined); setDetailError(""); };
 
@@ -284,19 +296,22 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
   return <div className={`workflow-canvas-dialog workflow-adjustment-dialog${panel === "records" ? " showing-records" : ""}`} role="dialog" aria-modal="true" aria-label="查看与调整当前 Workflow">
     <div className="workflow-canvas-dialog-backdrop" aria-hidden="true" />
     <div className="workflow-canvas-dialog-panel">
-      <div className="workflow-canvas-dialog-head"><div><strong>查看与调整当前 Workflow</strong><small>编辑草稿后提交，等待相关任务的安全边界应用。</small></div><button type="button" aria-label="关闭 Workflow 调整" onClick={close}><X size={17} /></button></div>
+      <div className="workflow-canvas-dialog-head">
+        <div className="adjustment-heading"><strong>查看与调整当前 Workflow</strong><small>编辑草稿后提交，等待相关任务的安全边界应用。</small></div>
+        <div className="adjustment-header-controls">
+          <div className="adjustment-versions" aria-label="Workflow 版本">
+            {draft && <span className={`adjustment-version${stale ? " is-stale" : ""}`}>草稿基础 r{draft.base.revision}</span>}
+            {context && <span className="adjustment-version is-current">当前正式 r{context.current.version.revision}</span>}
+          </div>
+          <div className="adjustment-header-actions">
+            <button type="button" className="adjustment-refresh" aria-label="刷新正式配置" title="刷新正式配置" aria-busy={historyLoading} onClick={() => void refresh()}><RefreshCw size={14} className={historyLoading ? "spin" : undefined} /></button>
+            <button type="button" aria-label="查看当前正式版本" title="查看当前正式版本" disabled={!context} onClick={() => context && setPreview({ kind: "current", current: structuredClone(context.current) })}><Eye size={14} />查看正式版本</button>
+            <button type="button" className="adjustment-new-draft" aria-label="使用正式配置新建草稿" title="使用当前正式配置替换本地草稿" disabled={!context || busy} onClick={freshDraft}><FilePlus2 size={14} />新建草稿</button>
+          </div>
+        </div>
+        <button type="button" className="adjustment-close" aria-label="关闭 Workflow 调整" onClick={close}><X size={17} /></button>
+      </div>
       <div className="adjustment-status">
-        {draft && <span>草稿基础 r{draft.base.revision}</span>}{context && <span>当前正式 r{context!.current.version.revision}</span>}
-        <button type="button" aria-busy={historyLoading} onClick={() => void refresh()}>刷新正式配置</button>
-        <button type="button" disabled={!context} onClick={() => context && setPreview({ kind: "current", current: structuredClone(context.current) })}>查看当前正式版本</button>
-        <button type="button" disabled={!context || busy} onClick={freshDraft}>使用正式配置新建草稿</button>
-        {preview && <button type="button" onClick={leavePreview}>返回我的草稿</button>}
-        {preview?.kind === "record" && selected && <><strong>只读提案 · {sourceLabel(selected)} · 基础 r{selected.base.revision} · {adjustmentStatusLabel[selected.status]}</strong>
-          <button type="button" onClick={() => setPreview({ ...preview, view: preview.view === "base" ? "proposal" : "base" })}>{preview.view === "base" ? "查看修改后" : "查看原基础"}</button></>}
-        {preview?.kind === "current" && <><strong>只读正式版本 r{preview.current.version.revision}</strong>
-          <button type="button" disabled={!draft || !context || !sameWorkflowVersion(preview.current.version, context.current.version) || !!pending || busy}
-            onClick={() => { if (!draftRef.current || !window.confirm("已核对正式版本及完整差异。保留当前完整草稿，以此正式版本为基础继续；不会自动合并内容。是否确认？")) return;
-              persist({ ...draftRef.current, base: structuredClone(preview.current.version), baseSnapshot: structuredClone(preview.current.snapshot) }); leavePreview(); setError(""); }}>已核对，更新草稿基础</button></>}
         {preview?.kind === "current" && context && !sameWorkflowVersion(preview.current.version, context.current.version) && <p role="status">正式配置已更新，当前预览仍为 r{preview.current.version.revision}。请重新查看最新正式版本后核对。</p>}
         {preview?.kind === "record" && context && preview.journalVersion !== context.journalVersion && <p role="status">修改记录已有更新，当前预览保留最近一次完整读取的内容。</p>}
         {stale && <p role="status">正式配置已变化。原草稿及基础版本已保留，请查看当前正式版本与完整差异，核对后再提交。</p>}
@@ -309,7 +324,33 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
       {draft && recommendation ? <RecommendationProvider input={{ projectId: project.id, title: project.title, requirement: project.requirement,
         agents: recommendation.agents, orchestration: recommendation.orchestration, git: { enabled: project.git?.enabled === true } }}
         gateways={gateways} harnesses={harnesses} disabled={!!preview || terminal}>
-        <details className="adjustment-recommendation"><summary>工具推荐设置</summary><ExplainerRecommendationSettings /></details>
+        <div className={`adjustment-context-bar${preview ? " is-preview" : ""}`}>
+          <div className="adjustment-context-main">
+            {preview ? <>
+              <button type="button" className="adjustment-back-to-draft" onClick={leavePreview}><ArrowLeft size={14} />返回我的草稿</button>
+              <span className="adjustment-preview-label"><Eye size={14} />
+                <strong>{preview.kind === "current" ? `只读正式版本 r${preview.current.version.revision}`
+                  : `只读提案 · ${sourceLabel(preview.record)} · 基础 r${preview.record.base.revision} · ${adjustmentStatusLabel[preview.record.status]}`}</strong>
+              </span>
+              <div className="adjustment-preview-actions">
+                {preview.kind === "record" && <button type="button" onClick={() => setPreview({ ...preview, view: preview.view === "base" ? "proposal" : "base" })}><Eye size={13} />{preview.view === "base" ? "查看修改后" : "查看原基础"}</button>}
+                {preview.kind === "current" && <button type="button" className="adjustment-review-base"
+                  disabled={!context || !sameWorkflowVersion(preview.current.version, context.current.version) || !!pending || busy}
+                  onClick={() => { if (!draftRef.current || !window.confirm("已核对正式版本及完整差异。保留当前完整草稿，以此正式版本为基础继续；不会自动合并内容。是否确认？")) return;
+                    persist({ ...draftRef.current, base: structuredClone(preview.current.version), baseSnapshot: structuredClone(preview.current.snapshot) }); leavePreview(); setError(""); }}><Check size={14} />已核对，更新草稿基础</button>}
+              </div>
+            </> : <><span className="adjustment-editing-label"><PencilLine size={13} />本地草稿</span><span className="adjustment-editing-hint">完成编辑后提交修改</span></>}
+          </div>
+          <details ref={recommendationDetails} className="adjustment-recommendation">
+            <summary><Settings2 size={14} /><span>工具推荐设置</span><ChevronDown size={13} /></summary>
+            <div className="adjustment-recommendation-panel">
+              <div className="adjustment-recommendation-heading"><strong>工具推荐设置</strong>
+                <button type="button" aria-label="关闭工具推荐设置" onClick={() => { if (recommendationDetails.current) recommendationDetails.current.open = false; recommendationDetails.current?.querySelector("summary")?.focus(); }}><X size={15} /></button>
+              </div>
+              <ExplainerRecommendationSettings />
+            </div>
+          </details>
+        </div>
         <div className="workflow-canvas-dialog-scroll">
           <div className="adjustment-canvas" hidden={!!preview}>
             <CanvasTextDraftContext.Provider value={textPersistence}>
@@ -318,7 +359,7 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
                 onAgentsChange={agents => edit(current => ({ ...current, snapshot: { ...current.snapshot, agents } }))} />
             </CanvasTextDraftContext.Provider>
           </div>
-          {previewSnapshot && <div className="adjustment-canvas"><WorkflowCanvasEditor {...sharedCanvas} orchestration={previewSnapshot.orchestration}
+          {previewSnapshot && <div className="adjustment-canvas is-preview"><WorkflowCanvasEditor {...sharedCanvas} orchestration={previewSnapshot.orchestration}
             agents={previewSnapshot.agents} readOnly onOrchestrationChange={() => {}} onAgentsChange={() => {}} /></div>}
         </div>
         {!preview && <div className="adjustment-submit"><label>修改说明（公开，选填）<textarea aria-label="修改说明" maxLength={20_000} value={draft.explanation} disabled={terminal} onChange={event => edit(current => ({ ...current, explanation: event.target.value }))} /></label>

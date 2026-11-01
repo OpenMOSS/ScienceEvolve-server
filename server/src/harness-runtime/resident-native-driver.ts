@@ -31,6 +31,8 @@ export type BuiltinResidentProtocol =
   | "claude-stream-json"
   | "pi-rpc"
   | "dsh-sdk-json-rpc";
+/** Additional codecs are supplied by trusted Adapter code, never a workflow string. */
+export type ResidentProtocol = BuiltinResidentProtocol | (string & {});
 
 export const RESIDENT_PROTOCOL_BUFFER_CAPACITY = 256;
 /**
@@ -108,7 +110,9 @@ export interface ResidentCompletionTailPolicy {
 }
 
 export interface ResidentProtocolCodec {
-  readonly protocol: BuiltinResidentProtocol;
+  readonly protocol: ResidentProtocol;
+  /** Only an initial pending session may receive a native-allocated identity. */
+  readonly allocatesNativeSessionId?: boolean;
   readonly recoveryStrategy: ResidentRecoveryStrategy;
   /** Native-frame mapping; the common driver alone owns liveness policy. */
   observe(frame: Readonly<Record<string, unknown>>): ResidentProtocolObservation | undefined;
@@ -395,7 +399,7 @@ export class ResidentNativeDriver implements ResidentHarnessDriver {
   #windowsPaused = false;
   readonly identity: ResidentProcessIdentity;
   session: SessionRef;
-  readonly protocol: BuiltinResidentProtocol;
+  readonly protocol: ResidentProtocol;
   readonly recoveryStrategy: ResidentRecoveryStrategy;
   readonly #child: ChildProcessWithoutNullStreams;
   readonly #connection: JsonLineConnection;
@@ -752,7 +756,7 @@ export class ResidentNativeDriver implements ResidentHarnessDriver {
 
   #consumeFreshTurnAuthority(turn: ResidentTurn): void {
     const routeDigest = createHash("sha256")
-      .update(turn.route.token)
+      .update("nativeCodexProfileHome" in turn.route ? turn.route.authorityId : turn.route.token)
       .digest("hex");
     if (this.#activatedRouteDigests.has(routeDigest)) {
       throw driverError("Resident native driver rejected a stale per-turn route");
@@ -773,9 +777,9 @@ export class ResidentNativeDriver implements ResidentHarnessDriver {
   }
 }
 
-class JsonLineConnection implements ResidentProtocolConnection {
+export class JsonLineConnection implements ResidentProtocolConnection {
   #inputEcho?: { session: SessionRef; text: string; frameLimit: number };
-  readonly #protocol: BuiltinResidentProtocol;
+  readonly #protocol: ResidentProtocol;
   readonly #frameBytes = new WeakMap<Record<string, unknown>, number>();
   #maxObservedOversizedFrames = 0;
   readonly completed: Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
@@ -811,7 +815,7 @@ class JsonLineConnection implements ResidentProtocolConnection {
     child: ChildProcessWithoutNullStreams,
     onFrame: OpenResidentNativeDriverOptions["onFrame"],
     onProtocolFrame: ((frame: Readonly<Record<string, unknown>>) => void) | undefined,
-    protocol: BuiltinResidentProtocol
+    protocol: ResidentProtocol
   ) {
     this.#child = child;
     this.#onFrame = onFrame;
@@ -1744,11 +1748,13 @@ export function codexAppServerCodec(options: {
 }
 
 const CODEX_INITIALIZATION_NOTIFICATIONS = new Set([
+  "account/updated",
   "account/rateLimits/updated",
   "configWarning",
   "deprecationNotice",
   "mcpServer/startupStatus/updated",
   "remoteControl/status/changed",
+  "skills/changed",
   "thread/started",
   "thread/goal/cleared",
   "thread/status/changed",
@@ -1758,7 +1764,7 @@ const CODEX_INITIALIZATION_NOTIFICATIONS = new Set([
 /** A larger frame is permitted only for the verbatim, just-sent native user
  * input. All remaining metadata stays bounded and every other frame retains
  * the ordinary limit, including assistant/tool output and stale input. */
-function isExactNativeInputEcho(protocol: BuiltinResidentProtocol, frame: Record<string, unknown>, session: SessionRef, text: string): boolean {
+function isExactNativeInputEcho(protocol: ResidentProtocol, frame: Record<string, unknown>, session: SessionRef, text: string): boolean {
   const strip = (content: unknown): unknown => {
     if (content === text) return "";
     if (!Array.isArray(content) || !content.length) return undefined;
@@ -1817,6 +1823,17 @@ function codexBackgroundNotification(
   }
   if (frame.method === "account/rateLimits/updated") {
     return isRecord(frame.params.rateLimits);
+  }
+  if (frame.method === "account/updated") {
+    return ["authMode", "planType"].every((key) => Object.hasOwn(frame.params as object, key)) &&
+      Object.keys(frame.params).every((key) => key === "authMode" || key === "planType") &&
+      (frame.params.authMode === null || ["apiKey", "chatgpt", "chatgptAuthTokens"].includes(String(frame.params.authMode))) &&
+      (frame.params.planType === null || boundedProtocolString(frame.params.planType));
+  }
+  // Codex watches its skills directory even with automatic skill discovery
+  // disabled. This empty invalidation notification carries no turn/tool data.
+  if (frame.method === "skills/changed") {
+    return Object.keys(frame.params).length === 0;
   }
   if (frame.method === "deprecationNotice") {
     return boundedProtocolString(frame.params.summary) &&
@@ -2493,9 +2510,9 @@ function assertInitializedSession(
     initialized.nativeId.includes("\0")) {
     throw driverError("Resident protocol returned an invalid initialized SessionRef");
   }
-  const codexAllocation = codec.protocol === "codex-app-server" &&
+  const nativeAllocation = (codec.protocol === "codex-app-server" || codec.allocatesNativeSessionId === true) &&
     requested.nativeId.startsWith("pending:") && !requested.resumedAt;
-  if (!codexAllocation && initialized.nativeId !== requested.nativeId) {
+  if (!nativeAllocation && initialized.nativeId !== requested.nativeId) {
     throw driverError("Resident protocol changed its authoritative native session identity");
   }
 }

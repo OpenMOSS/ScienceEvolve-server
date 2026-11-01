@@ -112,9 +112,10 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
     else await prepareInvocationInputs(input.request);
     if (input.controlScope?.role === "scoped-leader" || input.controlScope?.role === "scoped-main") {
       const inbox = await fs.readFile(input.request.inboxPath, "utf8");
-      expect(inbox).toContain(`"groupRunId":"${input.controlScope.groupRunId}"`);
-      expect(inbox).toContain(`"coordinatorEpoch":${input.controlScope.coordinatorEpoch}`);
-      expect(inbox).toContain(`"invocationId":"${input.request.invocationId}"`);
+      expect(input.request.executionContext).toMatchObject({ groupRunId: input.controlScope.groupRunId,
+        coordinatorEpoch: input.controlScope.coordinatorEpoch });
+      expect(inbox).not.toContain("Current control identity:");
+      expect(inbox).toContain("来源：");
     }
     await input.onOpened?.();
   };
@@ -215,7 +216,7 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
           // Leader's separate group operation, exactly as the native MCP does.
           if (!businessTask) actions.push(await accept(input, turn, { tool: "finish_task" }));
           if (scope?.role === "scoped-leader") {
-            if (turn.prompt.includes("Purpose: complete")) {
+            if (input.request.workflowContext?.purpose === "complete") {
               const proof = coordinator.database().scopedGroupFinalMergeFact(id, scope.groupRunId);
               const action: ControlAction = proof
                 ? { tool: "complete_group", groupRunId: scope.groupRunId, coordinatorEpoch: scope.coordinatorEpoch,
@@ -443,8 +444,8 @@ describe("v3 project coordinator production entry", () => {
     }
     const successor = f.opened.find((entry) => entry.controlScope?.role === "scoped-agent" && entry.request.agent === "execution")!;
     const inbox = await fs.readFile(successor.request.inboxPath, "utf8");
-    expect(inbox).toContain("Predecessor handoff:");
-    expect(inbox).toContain('source="predecessor-handoff"');
+    expect(inbox).toContain("来源：");
+    expect(inbox).not.toContain('source="predecessor-handoff"');
     expect(successor.request.contextSources?.find(source => source.key === "predecessor-handoff")?.records).toEqual([
       { sourceRunId: expect.any(String), output: expect.stringContaining("Committed idea") }
     ]);

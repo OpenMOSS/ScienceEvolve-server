@@ -168,7 +168,8 @@ describe("project creation with uploaded inputs", () => {
       expect(await fs.readFile(path.join(run.workspacePath, "user_inputs", "reference", "figure.png"))).toEqual(image);
       expect(await fs.readFile(path.join(run.workspacePath, "user_inputs", "manual.txt"), "utf8")).toBe("由系统文件管理器添加");
       const inbox = await fs.readFile(run.inboxPath, "utf8");
-      expect(inbox).toContain("user_inputs/reference/figure.png");
+      expect(inbox).not.toContain("## User-supplied project files");
+      expect(inbox).toContain("Analyze the supplied image");
       expect(inbox).toContain("The image shows the reference design.");
       const savedRequest = await fs.readFile(path.join(root, "projects", created.body.project.id, "request.md"), "utf8");
       expect(savedRequest).toContain("user_inputs/reference/figure.png");

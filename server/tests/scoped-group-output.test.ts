@@ -1,8 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { scopedGroupOutput, scopedPredecessorOutput } from "../src/scoped-group-output.js";
+import { scopedGroupOutput, scopedPredecessorOutput, scopedPredecessorMessages } from "../src/scoped-group-output.js";
 import type { CredentialFreeProjectStateProjection, ScopedArrivalRecord } from "../src/collaboration-state/contracts.js";
 
 describe("verified scoped group handoffs", () => {
+  it("delivers every relevant predecessor body with attribution and excludes an older Loop batch", () => {
+    const loops = { review: { batch: 2, iterations: 1, totalIterations: 4 } };
+    const source = (requestId: string, agentId: string, batch = loops) => ({ requestId, agentId, targetNodeId: agentId,
+      groupRunId: "G", targetKind: "agent", status: "completed", pathContext: { pathId: requestId, loops: batch } });
+    const arrivals = [source("analysis-current", "analysis"), source("charts-current", "charts"),
+      source("analysis-old", "analysis", { review: { batch: 1, iterations: 1, totalIterations: 1 } })];
+    const bodies = ["Preserve sample sizes A=27 and B=31. ".repeat(200), "Use clean-data.png and seconds. ".repeat(200), "OLD_BATCH_MUST_NOT_APPEAR"];
+    const projection = { scopedArrivals: arrivals,
+      scopedExecutions: arrivals.map((arrival, i) => ({ id: `exec-${i}`, arrivalRequestId: arrival.requestId, agentId: arrival.agentId,
+        groupRunId: "G", status: "completed", ownershipEpoch: 1 })),
+      scopedAgentMerges: arrivals.map((_, i) => ({ executionId: `exec-${i}` })),
+      scopedAgentReports: bodies.map((output, i) => ({ executionId: `exec-${i}`, ownershipEpoch: 1, output }))
+    } as unknown as CredentialFreeProjectStateProjection;
+    const target = { sourceRunId: "charts-current", targetNodeId: "report", groupRunId: "G", pathContext: { pathId: "report", loops } } as ScopedArrivalRecord;
+    expect(scopedPredecessorMessages(projection, target, { analysis: [{ kind: "strong", target: "report" }], charts: [{ kind: "strong", target: "report" }] }))
+      .toEqual([{ sender: "analysis", body: bodies[0] }, { sender: "charts", body: bodies[1] }]);
+  });
   it("includes current merged descendant results and explicit skips, but excludes failed/old/unmerged/outside reports", () => {
     const projection = {
       scopedGroupRuns: [{ id: "G" }, { id: "H", parentGroupRunId: "G" }, { id: "outside" }],

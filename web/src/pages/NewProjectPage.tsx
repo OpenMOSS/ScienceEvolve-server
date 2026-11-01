@@ -57,6 +57,8 @@ import { ExperimentMcpControl } from "../components/ExperimentMcpControl";
 import { OrchestrationTemplateEditor } from "../components/OrchestrationTemplateEditor";
 import { GitRepositorySettings, gitRepositoryNameError } from "../components/GitRepositorySettings";
 import { WorkflowCanvasEditor } from "../components/WorkflowCanvasEditor";
+import { AgentPromptPanels } from "../components/workflow-canvas/AgentPromptPanels";
+import { readCachedResource } from "../resource-cache";
 import {
   agentMeta,
   agentMcpServerKey,
@@ -567,24 +569,8 @@ function AgentConfigCard({
         {!mcpSupported && <small className="field-error harness-capability-note">当前 Harness 不支持 MCP</small>}
         <ExperimentMcpControl agentName={agentName} selected={config.experimentMcp === true}
           disabled={!mcpSupported} onChange={onExperimentMcpChange} />
-        {agentName === "main" && (
-          <label className="field agent-prompt-field main-system-prompt-field">
-            <span className="agent-prompt-label">
-              <span>
-                <FileText size={14} />
-                系统固定 Prompt
-              </span>
-              <em>只读</em>
-            </span>
-            <textarea
-              value={mainSystemPrompt || "Main 的固定调度协议将在服务连接后显示。"}
-              readOnly
-              aria-label="Main 系统固定 Prompt"
-              rows={7}
-            />
-            <small>该协议由系统强制注入，用户不能修改。</small>
-          </label>
-        )}
+        <AgentPromptPanels agentId={agentName} agent={{ ...config, harness: selectedHarnessId }}
+          mainSystemPrompt={mainSystemPrompt} />
         <label className="field agent-prompt-field">
           <span className="agent-prompt-label">
             <span>
@@ -711,8 +697,9 @@ export function NewProjectPage({
 }) {
   const workflowStructureId = useId();
   const agentFormationId = useId();
-  const [title, setTitle] = useState("");
-  const [requirement, setRequirement] = useState("");
+  const [cachedTask] = useState(() => savedTaskId ? readCachedResource<SavedResearchTask>(`saved-task:${savedTaskId}`) : undefined);
+  const [title, setTitle] = useState(cachedTask?.title ?? "");
+  const [requirement, setRequirement] = useState(cachedTask?.requirement ?? "");
   const [inputDescription, setInputDescription] = useState("");
   const [inputFiles, setInputFiles] = useState<InputFileMeta[]>([]);
   const inputSessionStorageKey = `openfars-user-inputs:${savedTaskId ?? "new"}`;
@@ -731,49 +718,62 @@ export function NewProjectPage({
   const projectFileInputRef = useRef<HTMLInputElement>(null);
   const projectFolderInputRef = useRef<HTMLInputElement | null>(null);
   const [agents, setAgents] = useState<AgentsConfig>(() =>
-    cloneAgentsConfig(DEFAULT_AGENTS)
+    cloneAgentsConfig(cachedTask?.agents ?? DEFAULT_AGENTS)
   );
   const [orchestration, setOrchestration] =
     useState<AgentOrchestrationTemplate>(() =>
-      cloneAgentOrchestration(DEFAULT_AGENT_ORCHESTRATION)
+      cloneAgentOrchestration(cachedTask?.orchestration ?? DEFAULT_AGENT_ORCHESTRATION)
     );
-  const [skillDefinitions, setSkillDefinitions] = useState<ProjectSkillDefinitions>({});
-  const [mcpDefinitions, setMcpDefinitions] = useState<ProjectMcpDefinitions>({});
-  const [agentPrompts, setAgentPrompts] = useState<Record<string, string>>({});
-  const [mainSystemPrompt, setMainSystemPrompt] = useState("");
-  const [mcpDirectory, setMcpDirectory] = useState<FixedMcpDefinition[]>([]);
-  const [skills, setSkills] = useState<SkillDefinition[]>([]);
-  const [models, setModels] = useState<string[]>(DEFAULT_MODELS);
-  const [gateways, setGateways] = useState<GatewayRecord[]>([]);
-  const [harnesses, setHarnesses] = useState<NonNullable<Catalog["harnesses"]>>([]);
+  const [skillDefinitions, setSkillDefinitions] = useState<ProjectSkillDefinitions>(() => structuredClone(cachedTask?.skillDefinitions ?? {}));
+  const [mcpDefinitions, setMcpDefinitions] = useState<ProjectMcpDefinitions>(() => structuredClone(cachedTask?.mcpDefinitions ?? {}));
+  const [cachedCatalog] = useState(() => readCachedResource<Catalog>("catalog"));
+  const [agentPrompts, setAgentPrompts] = useState<Record<string, string>>(cachedCatalog?.agentPrompts ?? {});
+  const [mainSystemPrompt, setMainSystemPrompt] = useState(cachedCatalog?.mainSystemPrompt ?? "");
+  const [mcpDirectory, setMcpDirectory] = useState<FixedMcpDefinition[]>(cachedCatalog?.mcpDirectory ?? []);
+  const [skills, setSkills] = useState<SkillDefinition[]>(cachedCatalog?.skills ?? []);
+  const [models, setModels] = useState<string[]>(cachedCatalog?.models ?? DEFAULT_MODELS);
+  const [gateways, setGateways] = useState<GatewayRecord[]>(cachedCatalog?.gateways ?? []);
+  const [harnesses, setHarnesses] = useState<NonNullable<Catalog["harnesses"]>>(cachedCatalog?.harnesses ?? []);
   const [defaultHarnessId, setDefaultHarnessId] = useState<string>();
   const [runtimeCatalogState, setRuntimeCatalogState] = useState<
     "loading" | "ready" | "failed" | "invalid"
   >("loading");
   const [runtimeCatalogError, setRuntimeCatalogError] = useState("");
   const [defaultGatewayId, setDefaultGatewayId] = useState<string>();
-  const [skillsLoading, setSkillsLoading] = useState(true);
+  const [skillsLoading, setSkillsLoading] = useState(!cachedCatalog);
   const [skillsWarning, setSkillsWarning] = useState("");
-  const [configPresets, setConfigPresets] = useState<AgentConfigPreset[]>([]);
-  const [selectedPresetId, setSelectedPresetId] = useState("default");
-  const [workflowName, setWorkflowName] = useState("未命名流程");
+  const [configPresets, setConfigPresets] = useState<AgentConfigPreset[]>(() => readCachedResource<AgentConfigPreset[]>("presets:true") ?? readCachedResource<AgentConfigPreset[]>("presets:false") ?? []);
+  const [selectedPresetId, setSelectedPresetId] = useState(cachedTask ? "saved-task" : "default");
+  const [workflowName, setWorkflowName] = useState(cachedTask?.title ?? "未命名流程");
   const [configPresetWarning, setConfigPresetWarning] = useState("");
-  const [editingTask, setEditingTask] = useState<SavedResearchTask>();
+  const [editingTask, setEditingTask] = useState<SavedResearchTask | undefined>(cachedTask);
+  const [taskDeleted, setTaskDeleted] = useState(false);
   const [savedTaskLoadError, setSavedTaskLoadError] = useState("");
   const [savingTask, setSavingTask] = useState(false);
   const [saveTaskError, setSaveTaskError] = useState("");
   const [saveTaskNotice, setSaveTaskNotice] = useState("");
+  useEffect(() => {
+    const changed = (event: Event) => {
+      const ids = (event as CustomEvent<{ deletedTaskIds?: string[] }>).detail?.deletedTaskIds;
+      if (!editingTask || !ids?.includes(editingTask.id)) return;
+      setEditingTask(undefined);
+      setTaskDeleted(true); setSelectedPresetId("recommended");
+      setSaveTaskNotice("当前草稿已删除。编辑内容保留为未保存副本，再次保存会创建新草稿。");
+    };
+    window.addEventListener("openfars:saved-tasks-changed", changed);
+    return () => window.removeEventListener("openfars:saved-tasks-changed", changed);
+  }, [editingTask]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [touched, setTouched] = useState(false);
   const [canvasEditorOpen, setCanvasEditorOpen] = useState(false);
-  const [gitEnabled, setGitEnabled] = useState(false);
+  const [gitEnabled, setGitEnabled] = useState(cachedTask?.git?.enabled ?? false);
   const [githubAccounts, setGithubAccounts] = useState<GitHubAccountRecord[]>([]);
   const [githubAccountsLoading, setGithubAccountsLoading] = useState(true);
-  const [githubAccountId, setGithubAccountId] = useState<string>();
-  const [gitRepositoryName, setGitRepositoryName] = useState("");
+  const [githubAccountId, setGithubAccountId] = useState<string | undefined>(cachedTask?.git?.enabled ? cachedTask.git.accountId : undefined);
+  const [gitRepositoryName, setGitRepositoryName] = useState(cachedTask?.git?.enabled ? cachedTask.git.repositoryName ?? "" : "");
   const [gitRepositoryVisibility, setGitRepositoryVisibility] =
-    useState<GitRepositoryVisibility>("private");
+    useState<GitRepositoryVisibility>(cachedTask?.git?.enabled ? cachedTask.git.repositoryVisibility ?? "private" : "private");
   const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(new Set());
   const [workflowDetailsExpanded, setWorkflowDetailsExpanded] = useState(false);
   const [agentFormationExpanded, setAgentFormationExpanded] = useState(false);
@@ -788,9 +788,13 @@ export function NewProjectPage({
   const [newConfigBlank, setNewConfigBlank] = useState(false);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const wasInactiveRef = useRef(false);
+  const loadingDraft = { title, requirement, agents, orchestration, skillDefinitions, mcpDefinitions,
+    git: { enabled: gitEnabled, accountId: githubAccountId, repositoryName: gitRepositoryName, repositoryVisibility: gitRepositoryVisibility } };
+  const latestLoadingDraft = useRef(loadingDraft); latestLoadingDraft.current = loadingDraft;
 
   useEffect(() => {
     let mounted = true;
+    const beforeRefresh = JSON.stringify(latestLoadingDraft.current);
     let currentCatalog: Catalog | undefined;
     void Promise.allSettled([
       getCatalog().then(catalog => { currentCatalog = catalog; return catalog; }),
@@ -800,6 +804,10 @@ export function NewProjectPage({
         // The selected draft is usable independently of slower resource and
         // account directories. Later responses must not reset manual edits.
         setEditingTask(task);
+        if (cachedTask && JSON.stringify(latestLoadingDraft.current) !== beforeRefresh) {
+          setSaveTaskNotice("已保留你在后台刷新期间的草稿编辑。");
+          return task;
+        }
         setTitle(task.title);
         setWorkflowName(task.title);
         setRequirement(task.requirement);
@@ -1591,6 +1599,7 @@ export function NewProjectPage({
         ? await updateSavedResearchTask(editingTask.id, input)
         : await createSavedResearchTask(input);
       setEditingTask(task);
+      setTaskDeleted(false);
       let assistantNotice = "";
       try { await assistant?.bindDraft(task.id, input); } catch { assistantNotice = " 助手同步需要重新读取，已保存的草稿保留。"; }
       setSelectedPresetId("saved-task");
@@ -1795,9 +1804,11 @@ export function NewProjectPage({
       setGitEnabled(draft.git?.enabled ?? false); setGithubAccountId(draft.git?.accountId);
       setGitRepositoryName(draft.git?.repositoryName ?? ""); setGitRepositoryVisibility(draft.git?.repositoryVisibility ?? "private");
       setSelectedPresetId("recommended"); setWorkflowName(draft.title || "助手配置");
+      if (taskId) setTaskDeleted(false);
       if (taskId) setEditingTask({ schemaVersion: 2, kind: "scienceevolve-saved-research-task", id: taskId,
         createdAt: editingTask?.createdAt ?? new Date().toISOString(), updatedAt: new Date().toISOString(), ...draft,
         orchestration: draft.orchestration ?? orchestration });
+      else setEditingTask(undefined);
     }
   });
 
@@ -1832,9 +1843,9 @@ export function NewProjectPage({
           </Button>
           <span className="draft-state">
             <span />
-            {savedTaskId || editingTask ? "已保存任务" : "新项目"}
+            {taskDeleted ? "未保存副本" : savedTaskId || editingTask ? "已保存任务" : "新项目"}
           </span>
-          {saveTaskNotice && <small className="new-page-save-feedback">已保存到主页</small>}
+          {saveTaskNotice && <small className="new-page-save-feedback">{editingTask ? "已保存到主页" : "内容已保留"}</small>}
           {saveTaskError && <small className="new-page-save-feedback is-error">保存失败，请查看下方提示</small>}
         </div>
       </div>

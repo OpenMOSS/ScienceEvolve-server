@@ -69,6 +69,8 @@ export interface LocalGitServiceOptions extends GitProjectBinding {
   /** v3 scopes retain one checkout per Agent; v2 keeps one per execution. */
   worktreeMode?: "execution" | "agent";
   runner?: GitCommandRunner;
+  /** Host-owned immutable source tree; no refs, commits or user repository mutations. */
+  initialTree?: (input: { repositoryPath: string; signal?: AbortSignal }) => Promise<{ tree: string; fingerprint: string } | undefined>;
   now?: () => string;
   allowedRemoteHosts?: readonly string[];
   /** Test-only escape hatch for a local bare remote; false in production. */
@@ -173,6 +175,7 @@ export class LocalCollaborationGitService {
 
   private readonly operationStore: CollaborationGitOperationStore;
   private readonly runner: GitCommandRunner;
+  private readonly initialTree: LocalGitServiceOptions["initialTree"];
   private readonly now: () => string;
   private readonly allowedRemoteHosts: Set<string>;
   private readonly allowLocalRemotes: boolean;
@@ -193,6 +196,7 @@ export class LocalCollaborationGitService {
     this.worktreeRoot = path.join(this.projectRoot, "git-worktrees");
     this.operationStore = options.operationStore;
     this.runner = options.runner ?? new ExecFileGitCommandRunner();
+    this.initialTree = options.initialTree;
     this.now = options.now ?? (() => new Date().toISOString());
     this.allowedRemoteHosts = new Set(
       (options.allowedRemoteHosts ?? ["github.com"]).map((host) => host.toLowerCase())
@@ -286,10 +290,22 @@ export class LocalCollaborationGitService {
     await this.ensureOpenFarsLocalExcludes();
     await this.ensureWorktreeConfiguration(input.signal);
 
+    const seed = await this.initialTree?.({ repositoryPath: this.repositoryPath, signal: input.signal });
+    if (seed) {
+      safeSha(seed.tree, "initial source tree");
+      if (!/^[0-9a-f]{64}$/.test(seed.fingerprint) ||
+        (await this.command(this.repositoryPath, ["cat-file", "-t", seed.tree], input.signal)).stdout.trim() !== "tree") {
+        throw new GitInputError("Invalid host initial source tree");
+      }
+    }
+    const sourceMarker = seed ? `OpenFARS-Source: ${seed.fingerprint}` : undefined;
     const existing = await this.refHead("refs/heads/main", input.signal);
     if (existing) {
       const marker = await this.commitMessage(existing, input.signal);
-      if (!marker.includes(`OpenFARS-Operation: ${input.operationId}`)) {
+      const lines = marker.split(/\r?\n/);
+      if (!lines.includes(`OpenFARS-Operation: ${input.operationId}`) ||
+        (sourceMarker ? !lines.includes(sourceMarker) : lines.some((line) => line.startsWith("OpenFARS-Source: "))) ||
+        (seed && (await this.command(this.repositoryPath, ["rev-parse", `${existing}^{tree}`], input.signal)).stdout.trim() !== seed.tree)) {
         throw new GitInputError(
           "Existing main branch was not created by this initialization operation"
         );
@@ -300,16 +316,18 @@ export class LocalCollaborationGitService {
     const title = oneLine(input.title, this.projectId);
     const readme = `# ${title}\n\nInitialized by OpenFARS collaboration Git service.\n`;
     const gitignore = "# All project workspace files are versioned.\n";
-    const readmeBlob = await this.hashBlob(readme, input.signal);
-    const ignoreBlob = await this.hashBlob(gitignore, input.signal);
-    const tree = await this.mktree([
-      `100644 blob ${ignoreBlob}\t.gitignore`,
-      `100644 blob ${readmeBlob}\tREADME.md`
-    ], input.signal);
+    const tree = seed?.tree ?? await (async () => {
+      const readmeBlob = await this.hashBlob(readme, input.signal);
+      const ignoreBlob = await this.hashBlob(gitignore, input.signal);
+      return this.mktree([
+        `100644 blob ${ignoreBlob}\t.gitignore`,
+        `100644 blob ${readmeBlob}\tREADME.md`
+      ], input.signal);
+    })();
     const commit = await this.commitTree(
       tree,
       [],
-      `Initialize ${title}\n\nOpenFARS-Operation: ${input.operationId}`,
+      `Initialize ${title}\n\nOpenFARS-Operation: ${input.operationId}${sourceMarker ? `\n${sourceMarker}` : ""}`,
       input.signal
     );
     await this.command(
@@ -858,7 +876,7 @@ export class LocalCollaborationGitService {
       await verify();
       const activationBase = await this.requiredRefHead(this.executionBaseRef(execution.id), signal);
       const directBaseHead = await this.requiredRefHead(`refs/heads/${this.remoteMergeTarget(directBase)}`, signal);
-      const gitDirectory = (await this.command(worktree, ["rev-parse", "--absolute-git-dir"], signal)).stdout.trim();
+      const gitDirectory = path.normalize((await this.command(worktree, ["rev-parse", "--absolute-git-dir"], signal)).stdout.trim());
       if (!isWithin(gitDirectory, this.repositoryPath) || await fs.realpath(gitDirectory) !== gitDirectory) throw new GitPathViolationError("Revert metadata escaped the bound repository");
       return revertGit({ projectId: this.projectId, execution, activationBase, directBaseHead,
         markerPath: path.join(gitDirectory, "openfars-revert.json"), store: this.operationStore, request, attemptId, source, verify,

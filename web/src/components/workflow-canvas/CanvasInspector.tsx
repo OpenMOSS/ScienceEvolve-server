@@ -1,3 +1,4 @@
+import { AgentPromptPanels } from "./AgentPromptPanels";
 import { ArrowLeft, Eye, FileText, Github, Globe2, LockKeyhole, Pencil, Plus, Settings2, Trash2, X } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent, type RefObject } from "react";
 import type {
@@ -180,7 +181,7 @@ export function CanvasInspector({
           <div className="canvas-result-presets" role="group" aria-label="画布结果形式">
             {RESULT_FORMAT_PRESETS.map((preset) => {
               const checked = resultFormat.presets.includes(preset);
-              return <label className={checked ? "is-selected" : ""} key={preset}>
+              return <label className={`canvas-result-option${checked ? " is-selected" : ""}`} key={preset}>
                 <input type="checkbox" checked={checked} disabled={globalReadOnly} onChange={() => commitGlobal((draft) => {
                   const current = draft.resultFormat ?? { presets: [], custom: "" };
                     draft.resultFormat = {
@@ -195,7 +196,7 @@ export function CanvasInspector({
             </label>;
             })}
           </div>
-          <label className={`canvas-result-option${resultFormat.none ? " is-selected" : ""}`}>
+          <label className={`canvas-result-option canvas-result-none${resultFormat.none ? " is-selected" : ""}`}>
             <input type="checkbox" checked={resultFormat.none === true} disabled={globalReadOnly} onChange={(event) => commitGlobal((draft) => {
               const current = draft.resultFormat ?? { presets: [], custom: "" };
               draft.resultFormat = event.target.checked
@@ -389,7 +390,8 @@ export function CanvasInspector({
           <div className="canvas-derived-route" role="status"><span>协议与路由</span><strong>{selectedGateway ? protocolLabel(selectedGateway.protocol) : "选择网关后显示"}</strong><small>{selectedGateway && selectedHarness?.nativeProtocol && selectedHarness.nativeProtocol !== selectedGateway.protocol ? `已启用自动路由：${protocolLabel(selectedHarness.nativeProtocol)} → ${protocolLabel(selectedGateway.protocol)}` : selectedGateway && selectedHarness?.nativeProtocol ? "直连" : selectedGateway ? "Harness 目录待确认" : "尚未推导"}</small>{combinationTest?.status !== undefined && combinationTest.status !== "passed" && <small className="field-error gateway-combination-error" role="alert">{combinationTest.status === "failed" ? `当前 Harness / 网关 / model 组合验证失败${combinationTest.error ? `：${combinationTest.error}` : ""}；仍可启动，但运行可能失败。` : "当前 Harness / 网关 / model 组合尚未验证；仍可启动，但运行可能失败。"}</small>}</div>
           <label><span>职责说明</span><DraftTextarea key={node.name} draftPath={["orchestration", "agents", String(orchestration.agents.findIndex(item => item.name === node.name)), "description"]} value={roleDescription} onCommit={(value) => onDescriptionChange?.(value)} rows={3} maxLength={180} disabled={readOnly} /></label>
         </section>
-        <section className="form-section"><h3 className="section-title"><FileText size={14} />Agent 指令</h3><DraftTextarea key={node.name} draftPath={["agents", node.name, "instructions"]} value={agent.instructions} onCommit={(value) => onAgentPatch?.({ instructions: value })} rows={4} maxLength={20_000} disabled={readOnly} agentId={node.name} onToolsPatch={onAgentPatch} toolApplyNotice={toolRecommendationApplyNotice} /></section>
+        <AgentPromptPanels key={node.name} agentId={node.name} agent={{ ...agent, harness: selectedHarnessId }} />
+        <section className="form-section"><h3 className="section-title"><FileText size={14} />用户 Prompt</h3><DraftTextarea key={node.name} draftPath={["agents", node.name, "instructions"]} value={agent.instructions} onCommit={(value) => onAgentPatch?.({ instructions: value })} rows={4} maxLength={20_000} disabled={readOnly} agentId={node.name} onToolsPatch={onAgentPatch} toolApplyNotice={toolRecommendationApplyNotice} /></section>
         <section className="form-section agent-runtime-section">
           <h3 className="section-title"><span>Skill</span><small><SkillCount agent={agent} /> 项</small></h3>
           <SkillCollection

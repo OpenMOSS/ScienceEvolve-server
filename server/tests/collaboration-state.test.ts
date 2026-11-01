@@ -1245,6 +1245,29 @@ describe("CollaborationStateDatabase writer authority", () => {
 });
 
 describe("Writer lease acquisition errors", () => {
+  it.each(["renew", "release", "mutation"] as const)("preserves the original SQLite error after automatic rollback during %s", async operation => {
+    const fixture = await stateFixture();
+    const inspect = new DatabaseSync(fixture.databasePath);
+    try {
+      const before = inspect.prepare("SELECT * FROM writer_service_lease").get();
+      const table = operation === "mutation" ? "project_heads" : "writer_service_lease";
+      const event = operation === "mutation" ? "INSERT" : "UPDATE";
+      inspect.exec(`CREATE TRIGGER reject_transaction BEFORE ${event} ON ${table}
+        BEGIN SELECT RAISE(ROLLBACK, 'original SQLite transaction failure'); END`);
+      const invoke = () => operation === "renew" ? fixture.database.renewWriterLease()
+        : operation === "release" ? fixture.database.relinquishWriterLease() : createProject(fixture.database);
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const error = (() => { try { invoke(); } catch (error) { return error; } })();
+        expect(error).toMatchObject({ message: "original SQLite transaction failure", code: "ERR_SQLITE_ERROR", errcode: 1811 });
+        expect(inspect.prepare("SELECT * FROM writer_service_lease").get()).toEqual(before);
+        expect(() => fixture.database.assertWriterLeaseHeld()).not.toThrow();
+      }
+      if (operation === "mutation") expect(inspect.prepare("SELECT count(*) AS count FROM project_heads").get()).toMatchObject({ count: 0 });
+      inspect.exec("DROP TRIGGER reject_transaction");
+      expect(() => invoke()).not.toThrow();
+    } finally { inspect.close(); }
+  });
+
   it("preserves the SQLite failure when lease acquisition has already rolled back its transaction", async () => {
     const fixture = await stateFixture();
     fixture.database.close();

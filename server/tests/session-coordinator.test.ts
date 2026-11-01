@@ -82,6 +82,26 @@ function workerRequest(
 }
 
 describe("SessionCoordinator", () => {
+  it("continues a durable Session without allocating or changing its identity", () => {
+    const guarded = { ...adapter, createSession: () => { throw new Error("must not allocate"); } };
+    expect(new SessionCoordinator().resume(guarded, validSession)).toEqual({
+      session: { ...validSession, resumedAt: expect.any(String) },
+      resumed: true,
+      replaced: false
+    });
+    expect(validSession).not.toHaveProperty("resumedAt");
+  });
+
+  it.each([
+    { harnessId: "other" }, { adapterVersion: "other" },
+    { nativeId: "rejected" }, { durable: false }
+  ])("preserves an incompatible original Session without allocating a fallback: %j", override => {
+    const guarded = { ...adapter, createSession: () => { throw new Error("must not allocate"); } };
+    expect(() => new SessionCoordinator().resume(guarded, { ...validSession, ...override })).toThrow(
+      expect.objectContaining({ code: "SESSION_RESUME_FAILED", retryable: false })
+    );
+  });
+
   it("makes Main durable and migrates a valid legacy ID", async () => {
     const prepared = await new SessionCoordinator().prepare(adapter, {
       ...request(), resumeThreadId: "fixture:native-old"

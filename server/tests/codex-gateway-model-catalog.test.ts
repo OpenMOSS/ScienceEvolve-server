@@ -31,7 +31,19 @@ describe("Codex external gateway model catalog", () => {
     }]);
   });
 
-  it("does not inspect the executable for a model outside the affected family", async () => {
-    expect(await prepareCodexGatewayModelCatalog("missing", "gpt-5.5", os.tmpdir())).toBeUndefined();
+  it("keeps an ordinary installed model unchanged after inspecting its capabilities", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "codex-ordinary-catalog-")); roots.push(root);
+    const executable = path.join(root, "catalog.mjs");
+    await fs.writeFile(executable, 'console.log(JSON.stringify({models:[{slug:"ordinary-model",use_responses_lite:false,tool_mode:null}]}));');
+    expect(await prepareCodexGatewayModelCatalog(executable, "ordinary-model", root)).toBeUndefined();
+  });
+  it("uses an ordinary tool-loop template for an unknown gateway slug while preserving the selected name", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "codex-unknown-catalog-")); roots.push(root);
+    const executable = path.join(root, "catalog.mjs");
+    await fs.writeFile(executable, 'console.log(JSON.stringify({models:[{slug:"bundled-code-only",use_responses_lite:true,tool_mode:"code_mode_only"},{slug:"bundled-ordinary",use_responses_lite:false,tool_mode:null}]}));');
+    const output = await prepareCodexGatewayModelCatalog(executable, "external-model-name", root);
+    expect(JSON.parse(await fs.readFile(output!, "utf8")).models).toEqual([expect.objectContaining({
+      slug: "external-model-name", display_name: "external-model-name", use_responses_lite: false, tool_mode: null
+    })]);
   });
 });

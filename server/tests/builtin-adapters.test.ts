@@ -86,12 +86,12 @@ const lineValue = (prefix, suffix) => {
     ? line.slice(prefix.length, -suffix.length)
     : "";
 };
-const inboxPath = lineValue("Current task Inbox: ", ". Its exact current instructions are included below; use the context index for background and do not reload unchanged material.") || lineValue("Current task Inbox: ", ". Open it for your assigned task; use the context index for background records and read details only when needed.") || lineValue("Read the invocation Inbox at ", ".");
+const inboxPath = lineValue("Current task Inbox: ", ". Its exact current instructions are included below; use the context index for background and do not reload unchanged material.") || lineValue("Current task Inbox: ", ". Open it for your assigned task; use the context index for background records and read details only when needed.") || lineValue("Read the invocation Inbox at ", ".") || (prompt.includes("项目入口：") && process.env.SCIENCEEVOLVE_INVOCATION_ID ? process.cwd() + "/.scienceevolve/inbox/" + process.env.SCIENCEEVOLVE_INVOCATION_ID + ".md" : "");
 const memoryPath =
   lineValue("Persistent project memory: ", ". Consult relevant portions when needed; do not reload unchanged memory or entire histories by default.") ||
   lineValue("Read persistent project memory at ", " before acting.") ||
   lineValue("Read persistent Agent memory at ", " before acting.") ||
-  lineValue("Read persistent Agent memory at ", ".");
+  lineValue("Read persistent Agent memory at ", ".") || (prompt.includes("项目入口：") && process.env.SCIENCEEVOLVE_INVOCATION_ID ? process.cwd() + "/Memory.md" : "");
 const inspireProbe = process.env.SCIENCEEVOLVE_AGENT_PERMISSION === "compute"
   ? spawnSync("inspire", ["job", "create", "--name", "claude-compute-probe", "--workspace", "fixture", "--group", "H100", "--quota", "1,1,1", "--nodes", "1", "--command", "true"], { encoding: "utf8" })
   : null;
@@ -188,11 +188,11 @@ const lineValue = (prefix, suffix) => {
     ? line.slice(prefix.length, -suffix.length)
     : "";
 };
-const inboxPath = lineValue("Current task Inbox: ", ". Its exact current instructions are included below; use the context index for background and do not reload unchanged material.") || lineValue("Current task Inbox: ", ". Open it for your assigned task; use the context index for background records and read details only when needed.") || lineValue("Read the invocation Inbox at ", ".");
+const inboxPath = lineValue("Current task Inbox: ", ". Its exact current instructions are included below; use the context index for background and do not reload unchanged material.") || lineValue("Current task Inbox: ", ". Open it for your assigned task; use the context index for background records and read details only when needed.") || lineValue("Read the invocation Inbox at ", ".") || (prompt.includes("项目入口：") && process.env.SCIENCEEVOLVE_INVOCATION_ID ? process.cwd() + "/.scienceevolve/inbox/" + process.env.SCIENCEEVOLVE_INVOCATION_ID + ".md" : "");
 const memoryPath =
   lineValue("Persistent project memory: ", ". Consult relevant portions when needed; do not reload unchanged memory or entire histories by default.") ||
   lineValue("Read persistent project memory at ", " before acting.") ||
-  lineValue("Read persistent Agent memory at ", " before acting.");
+  lineValue("Read persistent Agent memory at ", " before acting.") || (prompt.includes("项目入口：") && process.env.SCIENCEEVOLVE_INVOCATION_ID ? process.cwd() + "/Memory.md" : "");
 process.on("SIGTERM", () => {
   fs.writeFileSync(${JSON.stringify(terminated)}, "terminated\\n");
   process.exit(0);
@@ -283,7 +283,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { zstdCompressSync } from "node:zlib";
 const args = process.argv.slice(2);
-const patchIndex = args.indexOf("--patch");
+const patchIndex = args.lastIndexOf("--patch");
 const patch = patchIndex >= 0 ? fs.readFileSync(args[patchIndex + 1], "utf8") : "";
 let pending = "";
 let nextEventSeq = 0;
@@ -359,15 +359,15 @@ const handle = (request) => {
       ? line.slice(prefix.length, -suffix.length)
       : "";
   };
-  const inboxPath = prompt ? lineValue("Current task Inbox: ", ". Its exact current instructions are included below; use the context index for background and do not reload unchanged material.") || lineValue("Current task Inbox: ", ". Open it for your assigned task; use the context index for background records and read details only when needed.") || lineValue("Read the invocation Inbox at ", ".") : "";
+  const inboxPath = prompt ? lineValue("Current task Inbox: ", ". Its exact current instructions are included below; use the context index for background and do not reload unchanged material.") || lineValue("Current task Inbox: ", ". Open it for your assigned task; use the context index for background records and read details only when needed.") || lineValue("Read the invocation Inbox at ", ".") || (prompt.includes("项目入口：") && process.env.SCIENCEEVOLVE_INVOCATION_ID ? process.cwd() + "/.scienceevolve/inbox/" + process.env.SCIENCEEVOLVE_INVOCATION_ID + ".md" : "") : "";
   const memoryPath = prompt
     ? lineValue("Persistent project memory: ", ". Consult relevant portions when needed; do not reload unchanged memory or entire histories by default.") ||
       lineValue("Read persistent project memory at ", " before acting.") ||
-      lineValue("Read persistent Agent memory at ", " before acting.")
+      lineValue("Read persistent Agent memory at ", " before acting.") || (prompt.includes("项目入口：") && process.env.SCIENCEEVOLVE_INVOCATION_ID ? process.cwd() + "/Memory.md" : "")
     : "";
   fs.appendFileSync(${JSON.stringify(capture)}, JSON.stringify({
     args,
-    patch: fs.readFileSync(args[args.indexOf("--patch") + 1], "utf8"),
+    patch: fs.readFileSync(args[args.lastIndexOf("--patch") + 1], "utf8"),
     permissionMode: process.env.DSH_PERMISSION_MODE ?? null,
     request,
     patch,
@@ -770,7 +770,10 @@ describe("built-in Harness Adapters", () => {
     const raw = await fs.readFile(fake.capture, "utf8"), capture = JSON.parse(raw.trim().split("\n")[0]);
     expect(raw).toContain("openfars-project-explainer"); expect(raw).toContain(url);
     expect(raw).not.toContain("scienceevolve-workspace"); expect(raw).not.toContain("scienceevolve-control");
-    if (harness === "pi") { expect(capture.args).toContain("--no-tools"); expect(capture.args).toContain("--extension"); }
+    if (harness === "pi") {
+      expect(capture.args).toContain("--no-builtin-tools"); expect(capture.args).not.toContain("--no-tools");
+      expect(capture.args).toContain("--extension");
+    }
     if (harness === "dsh") expect(capture.patch).toContain("- id: tool-fs\n  disabled: true");
     if (harness === "codex") expect(capture.args).toEqual(expect.arrayContaining(["-s", "read-only", "shell_tool", "browser_use"]));
     await expect(runtime.runExplainer({ ...input, assistantMcp: { url: "https://external.example/mcp" } }, new AbortController().signal)).rejects.toThrow();
@@ -788,6 +791,10 @@ describe("built-in Harness Adapters", () => {
     await fs.writeFile(executable, `#!/usr/bin/env node
 import fs from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
+if (process.argv[2] === "debug" && process.argv[3] === "models") {
+  console.log(JSON.stringify({ models: [{ slug: "fixture-model", use_responses_lite: false, tool_mode: null }] }));
+  process.exit(0);
+}
 const shell = spawnSync("bash", ["-c", 'printf "%s" "$HTTP_PROXY|$HTTPS_PROXY|$ALL_PROXY|$BASH_ENV|$OPENFARS_PROXY_ENV_SENTINEL"'], { encoding: "utf8" });
 fs.appendFileSync(${JSON.stringify(capturePath)}, JSON.stringify({ http: process.env.HTTP_PROXY, noProxy: process.env.NO_PROXY,
   startup: process.env.BASH_ENV, shell: shell.stdout, shellStatus: shell.status, args: process.argv.slice(2) }) + "\\n");
@@ -1420,7 +1427,8 @@ child.on("exit", code => process.exit(code ?? 1));
       )).toBe(false);
       expect(capture.inboxPath).toContain(`${path.sep}.scienceevolve${path.sep}inbox${path.sep}`);
       expect(capture.memoryPath).toMatch(/Memory\.md$/);
-      expect(capture.prompt).toContain(capture.inboxPath);
+      expect(capture.prompt).toContain(capture.inbox);
+      expect(capture.prompt).not.toContain("Current task Inbox:");
       expect(capture.emittedSession).toBe(capture.requestedSession);
     }
     expect(captures.map((item) => item.inbox)).toEqual([
@@ -1478,7 +1486,7 @@ child.on("exit", code => process.exit(code ?? 1));
     expect(JSON.stringify(officialEvents.mock.calls)).toContain("read-9");
   });
 
-  it("replaces a resumed Claude Session when official stream identity disagrees", async () => {
+  it("preserves a resumed Claude Session and stops after repeated identity mismatches", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-claude-resume-id-"));
     roots.push(root);
     const fake = await fakeClaudeExecutable(root, "resume-mismatch");
@@ -1505,15 +1513,14 @@ child.on("exit", code => process.exit(code ?? 1));
     const traces: string[] = [];
     request.onSessionStarted = onSessionStarted;
 
-    const result = await runtime.run(
+    await expect(runtime.run(
       request,
       (_type, message) => { traces.push(message); },
       new AbortController().signal
-    );
+    )).rejects.toMatchObject({ code: "SESSION_RESUME_FAILED", retryable: false, details: { recoveryLimit: 1 } });
 
-    expect(result.handoff).toBe("Fixture complete.");
     expect(traces).toContain(
-      "Native session resume failed; retrying once with a same-Harness replacement"
+      "Native session recovery retrying the original Session"
     );
     const captures = (await fs.readFile(fake.capture, "utf8"))
       .trim()
@@ -1532,12 +1539,12 @@ child.on("exit", code => process.exit(code ?? 1));
       "--resume",
       previousSession.nativeId
     ]));
-    expect(captures[1]?.args).toContain("--session-id");
-    expect(captures[1]?.emittedSession).toBe(captures[1]?.requestedSession);
+    expect(captures[1]?.args).toEqual(expect.arrayContaining(["--resume", previousSession.nativeId]));
+    expect(captures[1]?.requestedSession).toBe(previousSession.nativeId);
     expect(onSessionStarted).toHaveBeenCalledWith(expect.objectContaining({
       harnessId: "claude-code",
-      generation: 3,
-      nativeId: captures[1]?.requestedSession
+      generation: 2,
+      nativeId: previousSession.nativeId
     }));
   });
 
@@ -1936,8 +1943,9 @@ child.on("exit", code => process.exit(code ?? 1));
         `${path.sep}.scienceevolve${path.sep}inbox${path.sep}`
       );
       expect(capture.memoryPath).toMatch(/Memory\.md$/);
-      expect(capture.prompt).toContain(capture.inboxPath);
-      expect(capture.prompt).toContain(capture.memoryPath);
+      expect(capture.prompt).toContain(capture.inbox);
+      expect(capture.prompt).not.toContain("Current task Inbox:");
+      expect(capture.prompt).not.toContain("Persistent project memory:");
     }
     expect(captures.map((capture) => capture.inbox)).toEqual([
       "main authoritative inbox\n",
@@ -2063,8 +2071,9 @@ child.on("exit", code => process.exit(code ?? 1));
         `${path.sep}.scienceevolve${path.sep}inbox${path.sep}`
       );
       expect(capture.memoryPath).toMatch(/Memory\.md$/);
-      expect(capture.prompt).toContain(capture.inboxPath);
-      expect(capture.prompt).toContain(capture.memoryPath);
+      expect(capture.prompt).toContain(capture.inbox);
+      expect(capture.prompt).not.toContain("Current task Inbox:");
+      expect(capture.prompt).not.toContain("Persistent project memory:");
     }
     expect(promptCalls.map((capture) => capture.inbox)).toEqual([
       "main authoritative inbox\n",
@@ -2261,7 +2270,7 @@ child.on("exit", code => process.exit(code ?? 1));
       .resolves.toMatchObject({ handoff: "DSH delayed fixture complete.", threadId: `dsh:${session!.nativeId}` });
   });
 
-  it("replaces a DSH session immediately after a turn inactivity timeout", async () => {
+  it("resumes the same DSH session after a turn inactivity timeout", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-dsh-turn-timeout-recovery-"));
     roots.push(root);
     const fake = await fakeDshExecutable(root, "turn-timeout-once");
@@ -2283,15 +2292,16 @@ child.on("exit", code => process.exit(code ?? 1));
     });
     expect(onTrace).toHaveBeenCalledWith(
       "status",
-      expect.stringContaining("DSH turn inactivity deadline reached"),
+      "Native session recovery retrying the original Session",
       expect.objectContaining({
         errorCode: "INVOCATION_TIMED_OUT",
-        replacementGeneration: 1
+        sessionGeneration: 0,
+        recoveryStrategy: "native-session-resume"
       })
     );
   });
 
-  it("replaces a resumed DSH session that reaches idle without a handoff", async () => {
+  it("preserves a resumed DSH session that repeatedly reaches idle without a handoff", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-dsh-resume-no-handoff-"));
     roots.push(root);
     const fake = await fakeDshExecutable(root, "resume-no-handoff");
@@ -2313,37 +2323,21 @@ child.on("exit", code => process.exit(code ?? 1));
     const onSessionStarted = vi.fn();
     const onTrace = vi.fn();
     secondRequest.onSessionStarted = onSessionStarted;
-    const result = await runtime.run(
+    await expect(runtime.run(
       secondRequest,
       onTrace,
       new AbortController().signal
-    );
+    )).rejects.toMatchObject({ code: "SESSION_RESUME_FAILED", retryable: false, details: { recoveryLimit: 1 } });
 
-    const replacement = onSessionStarted.mock.calls
-      .map(([session]) => session as SessionRef)
-      .find((session) => session.generation === persistedSession!.generation + 1)!;
-    expect(replacement).toMatchObject({
-      harnessId: "dsh",
-      generation: persistedSession!.generation + 1,
-      durable: true
-    });
-    expect(replacement.nativeId).not.toBe(persistedSession!.nativeId);
-    expect(result).toMatchObject({
-      handoff: "DSH fixture complete.",
-      threadId: `dsh:${replacement.nativeId}`
-    });
-    expect(onTrace).toHaveBeenCalledWith(
-      "status",
-      expect.stringContaining("Native session resume failed"),
-      expect.objectContaining({
-        errorCode: "SESSION_RESUME_FAILED",
-        harness: "dsh",
-        replacementGeneration: replacement.generation
-      })
-    );
+    expect(onSessionStarted).toHaveBeenCalledOnce();
+    expect(onSessionStarted).toHaveBeenCalledWith(expect.objectContaining({
+      nativeId: persistedSession!.nativeId, generation: persistedSession!.generation
+    }));
+    expect(onTrace).toHaveBeenCalledWith("status", "Native session recovery retrying the original Session",
+      expect.objectContaining({ errorCode: "SESSION_RESUME_FAILED", recoveryStrategy: "native-session-resume" }));
   });
 
-  it("replaces a DSH session whose durable artifact is missing without silently recreating that ID", async () => {
+  it("preserves a DSH Session whose durable artifact is missing without creating another identity", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-dsh-resume-"));
     roots.push(root);
     const fake = await fakeDshExecutable(root);
@@ -2380,43 +2374,18 @@ child.on("exit", code => process.exit(code ?? 1));
     const onSessionStarted = vi.fn();
     const onTrace = vi.fn();
     secondRequest.onSessionStarted = onSessionStarted;
-    const result = await runtime.run(
+    await expect(runtime.run(
       secondRequest,
       onTrace,
       new AbortController().signal
-    );
+    )).rejects.toMatchObject({ code: "SESSION_RESUME_FAILED", retryable: false, details: { recoveryLimit: 1 } });
 
-    const replacement = onSessionStarted.mock.calls
-      .map(([session]) => session as SessionRef)
-      .find((session) => session.generation === persistedSession!.generation + 1)!;
-    expect(replacement).toMatchObject({
-      harnessId: "dsh",
-      generation: 1,
-      durable: true
-    });
-    expect(replacement.nativeId).not.toBe(persistedSession!.nativeId);
-    expect(result).toEqual({
-      handoff: "DSH fixture complete.",
-      threadId: `dsh:${replacement.nativeId}`
-    });
+    expect(onSessionStarted).toHaveBeenCalledOnce();
+    expect(onSessionStarted).toHaveBeenCalledWith(expect.objectContaining({
+      nativeId: persistedSession!.nativeId, generation: persistedSession!.generation
+    }));
     await expect(fs.lstat(oldArtifact)).rejects.toMatchObject({ code: "ENOENT" });
-    const replacementArtifact = dshSessionArtifactPath(
-      dshHome,
-      secondRequest.workspacePath,
-      replacement.nativeId
-    );
-    const replacementStat = await fs.lstat(replacementArtifact);
-    expect(replacementStat.isFile()).toBe(true);
-    expect(replacementStat.isSymbolicLink()).toBe(false);
-    expect(onTrace).toHaveBeenCalledWith(
-      "status",
-      expect.stringContaining("Native session resume failed"),
-      expect.objectContaining({
-        errorCode: "SESSION_RESUME_FAILED",
-        harness: "dsh",
-        replacementGeneration: 1
-      })
-    );
+    expect(secondRequest.project.agentSessions.main).toEqual(persistedSession);
 
     const calls = (await fs.readFile(fake.capture, "utf8"))
       .trim()
@@ -2427,11 +2396,11 @@ child.on("exit", code => process.exit(code ?? 1));
     expect(calls
       .filter((call) => call.request.method === "session/prompt")
       .map((call) => call.request.params?.sessionId)
-    ).toEqual([persistedSession!.nativeId, replacement.nativeId]);
+    ).toEqual([persistedSession!.nativeId]);
   });
 
   it.each(["wrong-workspace", "invalid-zstd-magic"] as const)(
-    "replaces a DSH session whose official artifact has %s",
+    "preserves and reports a DSH session whose official artifact has %s",
     async (damage) => {
       const root = await fs.mkdtemp(path.join(os.tmpdir(), `openfars-dsh-${damage}-`));
       roots.push(root);
@@ -2477,18 +2446,14 @@ child.on("exit", code => process.exit(code ?? 1));
       secondRequest.project.agentSessions = { main: persistedSession! };
       const started = vi.fn();
       secondRequest.onSessionStarted = started;
-      const result = await runtime.run(
-        secondRequest,
-        () => undefined,
-        new AbortController().signal
-      );
-
-      const replacement = started.mock.calls
-        .map(([session]) => session as SessionRef)
-        .find((session) => session.generation === persistedSession!.generation + 1);
-      expect(replacement).toMatchObject({ harnessId: "dsh", durable: true });
-      expect(replacement?.nativeId).not.toBe(persistedSession!.nativeId);
-      expect(result.threadId).toBe(`dsh:${replacement!.nativeId}`);
+      const damagedBytes = await fs.readFile(artifact);
+      await expect(runtime.run(secondRequest, () => undefined, new AbortController().signal))
+        .rejects.toMatchObject({ code: "SESSION_RESUME_FAILED", retryable: false });
+      expect(started).toHaveBeenCalledOnce();
+      expect(started).toHaveBeenCalledWith(expect.objectContaining({
+        nativeId: persistedSession!.nativeId, generation: persistedSession!.generation
+      }));
+      expect(await fs.readFile(artifact)).toEqual(damagedBytes);
     }
   );
 
@@ -2523,17 +2488,16 @@ child.on("exit", code => process.exit(code ?? 1));
     secondRequest.project.agentSessions = { main: persistedSession! };
     const started = vi.fn();
     secondRequest.onSessionStarted = started;
-    const result = await runtime.run(
+    await expect(runtime.run(
       secondRequest,
       () => undefined,
       new AbortController().signal
-    );
+    )).rejects.toMatchObject({ code: "SESSION_RESUME_FAILED", retryable: false, details: { recoveryLimit: 1 } });
 
-    const replacement = started.mock.calls
-      .map(([session]) => session as SessionRef)
-      .find((session) => session.generation === persistedSession!.generation + 1);
-    expect(replacement).toMatchObject({ harnessId: "dsh", durable: true });
-    expect(result.threadId).toBe(`dsh:${replacement!.nativeId}`);
+    expect(started).toHaveBeenCalledOnce();
+    expect(started).toHaveBeenCalledWith(expect.objectContaining({
+      nativeId: persistedSession!.nativeId, generation: persistedSession!.generation
+    }));
     expect((await fs.lstat(sessionDirectory)).isSymbolicLink()).toBe(true);
   });
 
@@ -2614,7 +2578,7 @@ child.on("exit", code => process.exit(code ?? 1));
     expect(JSON.stringify(officialEvents.mock.calls)).not.toContain("must not be emitted");
   });
 
-  it("replaces a resumed DSH session when the typed SDK stream reports another identity", async () => {
+  it("preserves a resumed DSH session when the typed SDK repeatedly reports another identity", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-dsh-identity-"));
     roots.push(root);
     const fake = await fakeDshExecutable(root, "resume-identity-mismatch");
@@ -2636,20 +2600,17 @@ child.on("exit", code => process.exit(code ?? 1));
     const traces: string[] = [];
     const started = vi.fn();
     secondRequest.onSessionStarted = started;
-    const result = await runtime.run(
+    await expect(runtime.run(
       secondRequest,
       (_type, message) => { traces.push(message); },
       new AbortController().signal
-    );
+    )).rejects.toMatchObject({ code: "SESSION_RESUME_FAILED", retryable: false, details: { recoveryLimit: 1 } });
 
-    const replacement = started.mock.calls
-      .map(([session]) => session as SessionRef)
-      .find((session) => session.generation === persistedSession!.generation + 1);
-    expect(replacement).toMatchObject({ harnessId: "dsh", durable: true });
-    expect(result.threadId).toBe(`dsh:${replacement!.nativeId}`);
-    expect(traces).toContain(
-      "Native session resume failed; retrying once with a same-Harness replacement"
-    );
+    expect(started).toHaveBeenCalledOnce();
+    expect(started).toHaveBeenCalledWith(expect.objectContaining({
+      nativeId: persistedSession!.nativeId, generation: persistedSession!.generation
+    }));
+    expect(traces).toContain("Native session recovery retrying the original Session");
     const promptCalls = (await fs.readFile(fake.capture, "utf8"))
       .trim()
       .split("\n")
@@ -2660,7 +2621,7 @@ child.on("exit", code => process.exit(code ?? 1));
     expect(promptCalls.map((entry) => entry.request.params?.sessionId)).toEqual([
       persistedSession!.nativeId,
       persistedSession!.nativeId,
-      replacement!.nativeId
+      persistedSession!.nativeId
     ]);
   }, 10_000);
 
@@ -2709,7 +2670,7 @@ child.on("exit", code => process.exit(code ?? 1));
     ))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("replaces an unresumable Pi session once without switching Harness", async () => {
+  it("preserves an unresumable Pi Session without launching a replacement", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-pi-resume-"));
     roots.push(root);
     const fake = await fakePiResumeExecutable(root);
@@ -2745,24 +2706,17 @@ child.on("exit", code => process.exit(code ?? 1));
     const onSessionStarted = vi.fn();
     request.onSessionStarted = onSessionStarted;
 
-    const result = await runtime.run(
+    await expect(runtime.run(
       request,
       () => undefined,
       new AbortController().signal
-    );
+    )).rejects.toMatchObject({ code: "SESSION_RESUME_FAILED", retryable: false, details: { recoveryLimit: 1 } });
 
-    expect(result.handoff).toBe("Pi replacement complete.");
-    const captures = (await fs.readFile(fake.capture, "utf8"))
-      .trim()
-      .split("\n")
-      .map((line) => (JSON.parse(line) as { args: string[] }).args);
-    expect(captures).toHaveLength(1);
-    expect(captures[0]).not.toContain(previousNativeId);
-    expect(captures[0]?.join(" ")).toMatch(/session-3-[0-9a-f-]+\.jsonl/);
+    await expect(fs.access(fake.capture)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(fs.access(previousNativeId)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(onSessionStarted).toHaveBeenCalledOnce();
     expect(onSessionStarted).toHaveBeenCalledWith(expect.objectContaining({
-      harnessId: "pi",
-      generation: 3,
-      durable: true
+      harnessId: "pi", generation: 2, nativeId: previousNativeId, durable: true
     }));
   });
 
@@ -2806,7 +2760,8 @@ child.on("exit", code => process.exit(code ?? 1));
     ]);
     expect(started).toHaveBeenCalledWith(expect.objectContaining({
       harnessId: "pi",
-      generation: persistedSession!.generation + 1,
+      generation: persistedSession!.generation,
+      nativeId: persistedSession!.nativeId,
       durable: true
     }));
     const captures = (await fs.readFile(fake.capture, "utf8"))
@@ -2863,24 +2818,18 @@ child.on("exit", code => process.exit(code ?? 1));
     const onSessionStarted = vi.fn();
     request.onSessionStarted = onSessionStarted;
 
-    const result = await runtime.run(
+    await expect(runtime.run(
       request,
       () => undefined,
       new AbortController().signal
-    );
+    )).rejects.toMatchObject({ code: "SESSION_RESUME_FAILED", retryable: false, details: { recoveryLimit: 1 } });
 
-    expect(result.handoff).toBe("Pi replacement complete.");
     expect(await fs.readFile(outside, "utf8")).toBe(outsideContents);
-    const captures = (await fs.readFile(fake.capture, "utf8"))
-      .trim()
-      .split("\n")
-      .map((line) => (JSON.parse(line) as { args: string[] }).args);
-    expect(captures).toHaveLength(1);
-    expect(captures[0]).not.toContain(linkedSession);
+    expect((await fs.lstat(linkedSession)).isSymbolicLink()).toBe(true);
+    await expect(fs.access(fake.capture)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(onSessionStarted).toHaveBeenCalledOnce();
     expect(onSessionStarted).toHaveBeenCalledWith(expect.objectContaining({
-      harnessId: "pi",
-      generation: 5,
-      durable: true
+      harnessId: "pi", generation: 4, nativeId: linkedSession, durable: true
     }));
   });
 });

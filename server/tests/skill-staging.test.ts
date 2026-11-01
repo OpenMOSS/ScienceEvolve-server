@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -21,6 +21,19 @@ async function createSkill(library: string, name: string, body = name): Promise<
 }
 
 describe("stageInvocationSkills", () => {
+  it("does not resolve or delete 899 library entries when the managed cache is empty", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-empty-skill-cache-")); roots.push(root);
+    const library = path.join(root, "unselected-library");
+    const workspace = path.join(root, "workspace"); await fs.mkdir(workspace);
+    const paths = Array.from({ length: 899 }, (_, index) => path.join(library, `skill-${index}`, "SKILL.md"));
+    const realpath = vi.spyOn(fs, "realpath"), remove = vi.spyOn(fs, "rm");
+    try {
+      expect(await stageInvocationSkills([], [], workspace, paths, "idea")).toEqual({ skillPaths: [], autoSkillPaths: [] });
+      expect(realpath.mock.calls.some(([value]) => String(value).startsWith(library))).toBe(false);
+      expect(remove).not.toHaveBeenCalled();
+    } finally { realpath.mockRestore(); remove.mockRestore(); }
+  });
+
   it("copies fixed/automatic Skills and support dependencies into the workspace", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-skills-"));
     roots.push(root);

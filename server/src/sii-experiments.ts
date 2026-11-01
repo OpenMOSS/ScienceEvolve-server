@@ -119,6 +119,8 @@ interface Options {
   noProxy?: string[];
   workspaceRoot: string;
   knowledgeRoot: string;
+  /** Trusted SDK host binding, never accepted from workflow or Agent input. */
+  resolveProjectWorkspace?: (projectId: string) => Promise<string | undefined>;
   refreshMs?: number;
   runJson?: RunJson;
   accountReader?: () => Promise<string>;
@@ -228,6 +230,11 @@ export class SiiExperimentService {
   private readonly events = new EventEmitter();
   private readonly queues = new Map<string, Promise<unknown>>();
   private readonly bindings = new Map<string, SiiMcpBinding>();
+  private readonly activeCalls = new Set<Promise<unknown>>();
+  private readonly activeMutations = new Set<Promise<unknown>>();
+  private mutationsClosed = false;
+  private stopping?: Promise<void>;
+  private starting?: Promise<void>;
   private server?: http.Server;
   private port?: number;
   private timer?: NodeJS.Timeout;
@@ -281,6 +288,7 @@ export class SiiExperimentService {
   }
 
   async start(): Promise<void> {
+    this.controller.signal.throwIfAborted();
     if (this.server) return;
     this.server = http.createServer(async (req, res) => {
       const binding = this.bindings.get(req.url ?? "");
@@ -298,36 +306,60 @@ export class SiiExperimentService {
       try { await server.connect(transport); await transport.handleRequest(req, res); }
       catch { if (!res.headersSent) res.writeHead(500).end(); }
     });
-    await new Promise<void>((resolve, reject) => { this.server!.once("error", reject); this.server!.listen(0, "127.0.0.1", () => resolve()); });
+    this.starting = new Promise<void>((resolve, reject) => { this.server!.once("error", reject); this.server!.listen(0, "127.0.0.1", () => resolve()); });
+    await this.starting;
+    this.controller.signal.throwIfAborted();
     this.port = (this.server.address() as { port: number }).port;
     this.timer = setInterval(() => { void this.refreshNow(); }, this.interval);
     this.timer.unref();
     void this.refreshNow();
   }
 
-  async stop(): Promise<void> {
+  stop(): Promise<void> {
+    if (this.stopping) return this.stopping;
     clearInterval(this.timer);
     this.controller.abort();
     this.events.emit("changed");
-    await this.refresh;
     for (const binding of this.bindings.values()) binding.close();
     this.bindings.clear();
-    this.server?.closeAllConnections();
-    if (this.server) await new Promise<void>(resolve => this.server!.close(() => resolve()));
-    this.server = undefined;
+    this.stopping = (async () => {
+      await Promise.allSettled([this.starting]);
+      this.server?.closeAllConnections();
+      if (this.server) await new Promise<void>(resolve => this.server!.close(() => resolve()));
+      this.server = undefined;
+      // Accepted calls may still persist an ambiguous submission after abort.
+      // Drain their complete lifetime before sealing mutation admission.
+      await Promise.allSettled([this.refresh, ...this.activeCalls]);
+      this.mutationsClosed = true;
+      await Promise.allSettled([...this.activeMutations, ...this.queues.values()]);
+    })();
+    return this.stopping;
+  }
+
+  async trackCall<T>(operation: () => Promise<T>): Promise<T> {
+    this.controller.signal.throwIfAborted();
+    const call = Promise.resolve().then(operation);
+    this.activeCalls.add(call);
+    try { return await call; } finally { this.activeCalls.delete(call); }
   }
 
   async bind(request: AgentRunRequest, signal: AbortSignal, filesystem?: SiiFilesystemInput): Promise<SiiMcpBinding> {
+    this.controller.signal.throwIfAborted();
     if (!canUseSiiExperiments(request)) throw new Error("SII MCP requires explicit experimentMcp selection on a business Worker turn");
     if (!/^prj_[a-f0-9]{32}$/.test(request.project.id)) throw new Error("Invalid SII project id");
     const projectPath = await fs.realpath(path.join(this.options.projectsRoot, request.project.id));
     const [actual, physical] = await Promise.all([fs.stat(request.projectPath), fs.stat(projectPath)]);
     if (!within(projectPath, await fs.realpath(this.options.projectsRoot)) || !actual.isDirectory() || actual.dev !== physical.dev || actual.ino !== physical.ino) throw new Error("Invalid SII project directory");
     const workspace = await fs.realpath(request.workspacePath);
-    if (!within(workspace, await fs.realpath(this.options.workspaceRoot))) throw new Error("SII workspace is outside the configured storage root");
+    const selectedWorkspace = request.project.git?.enabled !== true
+      ? await this.options.resolveProjectWorkspace?.(request.project.id) : undefined;
+    if (selectedWorkspace && (!path.isAbsolute(selectedWorkspace) || await fs.realpath(selectedWorkspace) !== selectedWorkspace))
+      throw new Error("Selected SII workspace is not canonical");
+    if (!within(workspace, await fs.realpath(this.options.workspaceRoot)) && workspace !== selectedWorkspace)
+      throw new Error("SII workspace is outside the configured storage root");
     const executionWorktree = request.executionContext?.role !== "leader"
       ? request.executionContext?.executionWorktree : undefined;
-    const expected = await fs.realpath(executionWorktree ?? path.join(projectPath, "workspaces"));
+    const expected = await fs.realpath(executionWorktree ?? selectedWorkspace ?? path.join(projectPath, "workspaces"));
     const legacyWorkspace = request.project.git?.enabled !== true
       ? path.join(projectPath, "workspaces", request.agent, "shared") : undefined;
     if (workspace !== expected && workspace !== legacyWorkspace) throw new Error("SII workspace does not match this task's assigned directory");
@@ -341,6 +373,7 @@ export class SiiExperimentService {
       ownedMemoryPath: filesystem?.ownedMemoryPath ?? (request.project.git?.enabled && executionWorktree
         ? path.join(workspace, "agent-memory", request.agent, "Memory.md") : path.join(workspace, "Memory.md"))
     });
+    this.controller.signal.throwIfAborted();
     if (!this.server) await this.start();
     const route = `/sii/${randomUUID()}`;
     const binding = new SiiMcpBinding(this, { ...request, projectPath, workspacePath: workspace }, signal,
@@ -399,6 +432,13 @@ export class SiiExperimentService {
   }
 
   async mutate<T>(projectPath: string, operation: (doc: Document) => Promise<T> | T): Promise<T> {
+    if (this.mutationsClosed) throw new Error("SII experiment service is stopped");
+    const mutation = this.mutateDocument(projectPath, operation);
+    this.activeMutations.add(mutation);
+    try { return await mutation; } finally { this.activeMutations.delete(mutation); }
+  }
+
+  private async mutateDocument<T>(projectPath: string, operation: (doc: Document) => Promise<T> | T): Promise<T> {
     projectPath = await fs.realpath(projectPath);
     const previous = this.queues.get(projectPath) ?? Promise.resolve();
     const job = previous.catch(() => undefined).then(async () => {
@@ -413,6 +453,7 @@ export class SiiExperimentService {
   }
 
   refreshNow(): Promise<void> {
+    if (this.controller.signal.aborted) return Promise.resolve();
     if (this.refresh) return this.refresh;
     this.refresh = this.refreshAll().catch(error => { if (!this.controller.signal.aborted) console.warn("SII experiment monitor:", redactTrace(String(error))); }).finally(() => { this.refresh = undefined; });
     return this.refresh;
@@ -582,6 +623,10 @@ export class SiiMcpBinding {
   }
 
   async call(name: string, input: Record<string, any>): Promise<unknown> {
+    return this.service.trackCall(() => this.callActive(name, input));
+  }
+
+  private async callActive(name: string, input: Record<string, any>): Promise<unknown> {
     this.signal.throwIfAborted();
     if (this.closed || !this.active) throw new Error("SII capability is not attached to an active Agent turn");
     if (!canUseSiiExperiments(this.request)) throw new Error("SII capability is not selected for this current Worker turn");

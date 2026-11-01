@@ -11,6 +11,8 @@ import {
 } from "./WorkflowCanvasRuntime";
 
 vi.mock("../../api", () => ({
+  getCatalog: vi.fn(async () => ({ mainSystemPrompt: "FIXED_MAIN_SYSTEM", defaultHarnessId: "codex", harnesses: [] })),
+  getHarnessPrompt: vi.fn(async () => ({ status: "source-unavailable", reason: "Native source unavailable in runtime fixture" })),
   ensureExecutionSummary: vi.fn(async () => ({ invocationId: "inv_idea", status: "completed", text: "已完成实验，等待复核。" })),
   getGitHubRepositoryStatus: vi.fn(async () => ({ exists: true, observedAt: "2026-09-24T00:00:00.000Z" })),
   getProjectGitGraph: vi.fn(async () => ({

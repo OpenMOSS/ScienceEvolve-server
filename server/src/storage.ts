@@ -21,7 +21,7 @@ import { isDeepStrictEqual } from "node:util";
 import path from "node:path";
 import { AgentContextSources, publishAgentContextIndex, type AgentContextSource, type AgentContextIndex } from "./agent-context-index.js";
 import readline from "node:readline";
-import { MAIN_AGENT_ORCHESTRATION_CURRENT_FILE } from "./main-workflow-files.js";
+import { MAIN_AGENT_ORCHESTRATION_CURRENT_FILE, MAIN_AGENT_ORCHESTRATION_FILE } from "./main-workflow-files.js";
 import { ProjectFileBrowser } from "./project-file-browser.js";
 import type {
   AgentName,
@@ -297,6 +297,8 @@ function orderedRing<T>(ring: T[], total: number, capacity: number): T[] {
 
 export interface ProjectStorageOptions {
   projectDirectoryAliases?: Readonly<Record<string, string>>;
+  /** Trusted SDK host binding only; never supplied by workflow/HTTP input. */
+  workspaceResolver?: (projectId: string) => Promise<string | undefined>;
 }
 
 export class ProjectStorage {
@@ -313,6 +315,8 @@ export class ProjectStorage {
   private readonly workspacePreparations = new Map<string, Promise<string>>();
   private readonly artifactCatalogReads = new Map<string, Promise<ArtifactListItem[]>>();
   private readonly workflowReferenceWrites = new Map<string, Promise<void>>();
+  private readonly workspaceRoots = new Map<string, string>();
+  private readonly workspaceResolver?: ProjectStorageOptions["workspaceResolver"];
   private readonly directoryAliases: Readonly<Record<string, string>>;
   private readonly aliasIdentities = new Map<string, { dev: bigint; ino: bigint }>();
   private aliasesVerified = false;
@@ -323,6 +327,7 @@ export class ProjectStorage {
     options: ProjectStorageOptions = {}
   ) {
     this.directoryAliases = validateProjectDirectoryAliases(options.projectDirectoryAliases ?? {});
+    this.workspaceResolver = options.workspaceResolver;
   }
 
   private readProjectStateSource(): ProjectStateDocumentStore["source"] {
@@ -1311,14 +1316,11 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
     projectId: string,
     fileName: string,
     document: unknown,
-    isCurrent?: () => boolean
+    isCurrent?: () => boolean,
+    invocationId = "inv_agent_orchestration_snapshot"
   ): Promise<string> {
-    const workspace = await fs.realpath(await this.roleWorkspace(
-      projectId,
-      SYSTEM_CONTROLLER_AGENT,
-      "inv_agent_orchestration_snapshot"
-    ));
-    const filePath = path.join(workspace, safeRelativePath(fileName));
+    const filePath = await this.mainAgentOrchestrationSnapshotPath(projectId, fileName, invocationId);
+    const workspace = path.dirname(filePath);
     this.assertDescendant(workspace, filePath, "Main Agent orchestration snapshot");
     const currentPath = path.join(workspace, MAIN_AGENT_ORCHESTRATION_CURRENT_FILE);
     if (filePath === currentPath) throw new Error("Main's draft and current configuration reference must be separate files");
@@ -1337,7 +1339,7 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
   /** Update the authoritative read reference after publication/recovery without
    * creating, reading, replacing or rebasing Main's authoring file. */
   async writeMainAgentOrchestrationCurrentSnapshot(projectId: string, document: unknown, isCurrent?: () => boolean): Promise<void> {
-    const workspace = await fs.realpath(await this.roleWorkspace(projectId, SYSTEM_CONTROLLER_AGENT, "inv_workflow_current_snapshot"));
+    const workspace = path.dirname(await this.mainAgentOrchestrationSnapshotPath(projectId, MAIN_AGENT_ORCHESTRATION_FILE, "inv_workflow_current_snapshot"));
     await this.writeMainWorkflowCurrentReference(workspace, `${JSON.stringify(document, null, 2)}\n`, isCurrent);
   }
 
@@ -1384,6 +1386,37 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
     } catch (error) {
       if (error !== staleReference) throw error;
     }
+  }
+
+  /** Only the trusted external-workspace host uses an isolated proposal path. */
+  private async mainAgentOrchestrationSnapshotPath(projectId: string, fileName: string, invocationId: string): Promise<string> {
+    this.assertInvocationId(invocationId);
+    const workspace = await this.roleWorkspace(projectId, SYSTEM_CONTROLLER_AGENT, invocationId);
+    const selected = await this.workspaceResolver?.(projectId);
+    let directory = workspace;
+    if (selected !== undefined) {
+      for (const segment of [".scienceevolve", "management", projectId, "proposal"]) {
+        directory = path.join(directory, segment);
+        await fs.mkdir(directory, { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => {
+          if (error.code !== "EEXIST") throw error;
+        });
+        const info = await fs.lstat(directory);
+        if (!info.isDirectory() || info.isSymbolicLink() || await fs.realpath(directory) !== directory) {
+          throw new Error("Workflow proposal directory must be a pinned real directory");
+        }
+      }
+    }
+    const filePath = path.join(directory, safeRelativePath(fileName));
+    this.assertDescendant(directory, filePath, "Main Agent orchestration snapshot");
+    return filePath;
+  }
+
+  async readMainAgentOrchestrationSnapshot(projectId: string, fileName: string, invocationId: string): Promise<Buffer> {
+    const filePath = await this.mainAgentOrchestrationSnapshotPath(projectId, fileName, invocationId);
+    const info = await fs.lstat(filePath);
+    if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.size > 4 * 1024 * 1024 ||
+        await fs.realpath(filePath) !== filePath) throw new Error("Workflow proposal must be a bounded private regular file");
+    return fs.readFile(filePath);
   }
 
   async writeHandoff(
@@ -1697,17 +1730,18 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
   }
 
   private async prepareProjectWorkspace(projectId: string): Promise<string> {
-    const workspace = path.join(this.projectDir(projectId), "workspaces");
-    await fs.mkdir(workspace, { recursive: true });
-    const inputFolder = path.join(workspace, "user_inputs");
-    await fs.mkdir(inputFolder, { recursive: true });
+    const selected = await this.workspaceResolver?.(projectId);
+    const workspace = selected ?? path.join(this.projectDir(projectId), "workspaces");
+    if (selected === undefined) await fs.mkdir(workspace, { recursive: true });
     const projectRoot = await fs.realpath(this.projectDir(projectId));
     const realWorkspace = await fs.realpath(workspace);
-    this.assertDescendant(projectRoot, realWorkspace, "Project workspace");
+    if (selected === undefined) this.assertDescendant(projectRoot, realWorkspace, "Project workspace");
+    else if (!path.isAbsolute(selected) || selected !== realWorkspace) throw new Error("Selected workspace is not canonical");
+    this.workspaceRoots.set(projectRoot, realWorkspace);
+    const inputFolder = path.join(realWorkspace, "user_inputs");
+    await fs.mkdir(inputFolder).catch((error: NodeJS.ErrnoException) => { if (error.code !== "EEXIST") throw error; });
     const inputEntry = await fs.lstat(inputFolder);
-    if (!inputEntry.isDirectory() || inputEntry.isSymbolicLink()) {
-      throw new Error("Project user_inputs must be a regular directory");
-    }
+    if (!inputEntry.isDirectory() || inputEntry.isSymbolicLink()) throw new Error("Project user_inputs must be a regular directory");
     this.assertDescendant(realWorkspace, await fs.realpath(inputFolder), "Project user_inputs");
     const memoryPath = path.join(workspace, WORKSPACE_MEMORY_FILE);
     const memory = [
@@ -1828,7 +1862,7 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
     );
     const projectRoot = await fs.realpath(this.projectDir(projectId));
     const realRoot = await fs.realpath(root);
-    this.assertDescendant(projectRoot, realRoot, "Project workspace");
+    this.assertWorkspaceBoundary(projectRoot, realRoot);
 
     const trimmedDirectory = requestedDirectory.trim();
     const relativeDirectory = trimmedDirectory
@@ -2079,7 +2113,7 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
     const root = await this.roleWorkspace(projectId, role, "inv_artifact_read");
     const projectRoot = await fs.realpath(this.projectDir(projectId));
     const realRoot = await fs.realpath(root);
-    this.assertDescendant(projectRoot, realRoot, "Project workspace");
+    this.assertWorkspaceBoundary(projectRoot, realRoot);
     let relativePath = this.normalizeWorkspaceArtifactPath(
       requestedPath,
       projectRoot,
@@ -2167,6 +2201,12 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
     };
   }
 
+  private assertWorkspaceBoundary(projectRoot: string, realRoot: string): void {
+    if (this.workspaceRoots.get(projectRoot) !== realRoot) {
+      this.assertDescendant(projectRoot, realRoot, "Project workspace");
+    }
+  }
+
   private normalizeWorkspaceArtifactPath(
     requestedPath: string,
     projectRoot: string,
@@ -2200,9 +2240,9 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
       error.code = "ENOENT";
       throw error;
     }
-    // Keep projectRoot in the signature as an explicit reminder that the
-    // resolved workspace root must remain inside the current project boundary.
-    this.assertDescendant(projectRoot, realRoot, "Project workspace");
+    // A trusted SDK host may bind a canonical external workspace. Individual
+    // file paths must still stay inside that exact registered workspace.
+    this.assertWorkspaceBoundary(projectRoot, realRoot);
     return normalized;
   }
 
@@ -2214,7 +2254,7 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
     const root = await this.roleWorkspace(projectId, role, "inv_workspace_read");
     const projectRoot = await fs.realpath(this.projectDir(projectId));
     const realRoot = await fs.realpath(root);
-    this.assertDescendant(projectRoot, realRoot, "Project workspace");
+    this.assertWorkspaceBoundary(projectRoot, realRoot);
     const relativePath = safeRelativePath(requestedPath);
     const candidate = path.resolve(realRoot, relativePath);
     this.assertDescendant(realRoot, candidate, "Project workspace file");
@@ -2663,7 +2703,7 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
     _includeArtifactContents = false
   ): Promise<{ text: string; index?: AgentContextIndex }> {
     const projectDir = await fs.realpath(this.projectDir(state.id));
-    const workspaceDir = path.join(projectDir, "workspaces");
+    const workspaceDir = await this.workspaceResolver?.(state.id) ?? path.join(projectDir, "workspaces");
     let cursor = fullSync ? 0 : Math.max(0, Math.floor(afterSeq));
     let effectiveFullSync = fullSync;
     let events = await this.readEvents(state.id, cursor, Number.MAX_SAFE_INTEGER);

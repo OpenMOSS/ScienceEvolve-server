@@ -37,7 +37,7 @@ export function restoreAgentConfiguration(configuration: ScopedAgentConfiguratio
   return Object.fromEntries(Object.entries(configuration.agents).map(([id, config]) => {
     const { proxy: _legacyProxy, ...activeConfig } = config as typeof config & { proxy?: unknown };
     const before = current[id];
-    const sameRoute = before && before.model === config.model && before.gatewayId === config.gatewayId &&
+    const sameRoute = before && before.model === config.model && before.gatewayId === config.gatewayId && before.nativeCodexProfileId === config.nativeCodexProfileId &&
       (before.harness ?? DEFAULT_HARNESS_ID) === (config.harness ?? DEFAULT_HARNESS_ID) && before.gatewayReasoningOption === config.gatewayReasoningOption;
     return [id, { ...structuredClone(activeConfig), ...(sameRoute && before.gatewaySnapshot ? { gatewaySnapshot: structuredClone(before.gatewaySnapshot) } : {}) }];
   }));

@@ -22,6 +22,7 @@ import {
 } from "./errors.js";
 import { GitHubUserProvider } from "./github-provider.js";
 import { LocalCollaborationGitService } from "./local-git.js";
+import { redactTrace } from "../utils.js";
 import {
   childOperationId,
   finalizeOperation,
@@ -70,7 +71,11 @@ type InitialPushOutcome =
   | { kind: "timed-out" };
 
 function safeError(error: unknown): string {
-  if (error instanceof CollaborationGitError) return `${error.code}: ${error.message}`.slice(0, 1_000);
+  // Keep the trusted error code separate from assignment-shaped text. In
+  // particular, "...FOR_AUTHORIZATION: ..." is correctly detected as a
+  // credential assignment by the durable-record guard. Do not weaken that
+  // guard to accommodate a diagnostic; redact the message before saving it.
+  if (error instanceof CollaborationGitError) return `[${error.code}] ${redactTrace(error.message)}`.slice(0, 1_000);
   return "GIT_INITIALIZATION_FAILED: Git initialization failed";
 }
 

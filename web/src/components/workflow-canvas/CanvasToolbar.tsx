@@ -1,4 +1,4 @@
-import { CornerUpLeft, CornerUpRight, GitBranch, Maximize, MoreHorizontal, Network, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, CornerUpLeft, CornerUpRight, Eye, GitBranch, Maximize, MoreHorizontal, Network, Plus, Trash2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export interface CanvasToolbarProps {
@@ -151,12 +151,13 @@ export function CanvasToolbar({
   return (
     <div ref={toolbarRef} className="canvas-toolbar" aria-label="画布工具栏">
       <div ref={toolbarLeadRef} className="toolbar-group">
-        {onAddAgent && <button type="button" className="toolbar-button" onClick={onAddAgent} disabled={editDisabled}><Plus size={16} /><span>{addAgentLabel}</span></button>}
-        {onToggleConnect && <button type="button" className={`toolbar-button ${connecting ? "is-connecting" : ""}`} onClick={onToggleConnect} disabled={editDisabled} aria-pressed={connecting}><span aria-hidden="true">→</span><span>拖拽连线</span></button>}
+        {readOnly && <span className="toolbar-readonly-label"><Eye size={13} />只读预览</span>}
+        {onAddAgent && <button type="button" className="toolbar-button" aria-label={addAgentLabel} title={addAgentLabel} onClick={onAddAgent} disabled={editDisabled}><Plus size={16} /><span>{addAgentLabel}</span></button>}
+        {onToggleConnect && <button type="button" className={`toolbar-button ${connecting ? "is-connecting" : ""}`} aria-label="拖拽连线" title="拖拽连线" onClick={onToggleConnect} disabled={editDisabled} aria-pressed={connecting}><ArrowRight size={16} /><span>拖拽连线</span></button>}
         <span className="toolbar-separator" aria-hidden="true" />
         <div className="edge-type-toggle" aria-label="新连接类型">
-          <button type="button" className={`edge-type-button ${edgeKind === "strong" ? "active" : ""}`} data-edge-type="strong" aria-pressed={edgeKind === "strong"} disabled={editDisabled} onClick={() => onEdgeKindChange?.("strong")}>强边</button>
-          <button type="button" className={`edge-type-button ${edgeKind === "weak" ? "active" : ""}`} data-edge-type="weak" aria-pressed={edgeKind === "weak"} disabled={editDisabled} onClick={() => onEdgeKindChange?.("weak")}>弱边</button>
+          <button type="button" className={`edge-type-button ${edgeKind === "strong" ? "active" : ""}`} title="强边：下游节点必须执行" data-edge-type="strong" aria-pressed={edgeKind === "strong"} disabled={editDisabled} onClick={() => onEdgeKindChange?.("strong")}>强边</button>
+          <button type="button" className={`edge-type-button ${edgeKind === "weak" ? "active" : ""}`} title="弱边：下游节点可按需执行" data-edge-type="weak" aria-pressed={edgeKind === "weak"} disabled={editDisabled} onClick={() => onEdgeKindChange?.("weak")}>弱边</button>
         </div>
         <span className="edge-mode-note">强边必经 · 弱边可选</span>
       </div>
@@ -170,13 +171,13 @@ export function CanvasToolbar({
         <button type="button" className="icon-button toolbar-icon" title="缩小画布" aria-label="缩小画布" onClick={onZoomOut} disabled={layoutBusy}>−</button>
         <button type="button" className="zoom-reset-button" title="重置缩放" aria-label="重置缩放" onClick={onResetZoom} disabled={layoutBusy}>{Math.round(zoom * 100)}%</button>
         <button type="button" className="icon-button toolbar-icon" title="放大画布" aria-label="放大画布" onClick={onZoomIn} disabled={layoutBusy}>+</button>
-        {onClear && <button type="button" className="icon-button toolbar-icon" title="清空画布" aria-label="清空画布" onClick={onClear} disabled={editDisabled}><Trash2 size={15} /></button>}
-        {onUndo && <><span className="toolbar-separator" aria-hidden="true" /><button type="button" className="toolbar-button compact-command" title="撤销最近一次操作" aria-label="撤销" onClick={onUndo} disabled={editDisabled || !canUndo}><CornerUpLeft size={15} /><span>撤销</span></button></>}
-        {onRedo && <button type="button" className="icon-button toolbar-icon" title="重做最近撤销的操作" aria-label="重做" onClick={onRedo} disabled={editDisabled || !canRedo}><CornerUpRight size={15} /></button>}
+        {onClear && <button type="button" className="icon-button toolbar-icon toolbar-edit-control" title="清空画布" aria-label="清空画布" onClick={onClear} disabled={editDisabled}><Trash2 size={15} /></button>}
+        {onUndo && <><span className="toolbar-separator toolbar-edit-control" aria-hidden="true" /><button type="button" className="toolbar-button compact-command toolbar-edit-control" title="撤销最近一次操作" aria-label="撤销" onClick={onUndo} disabled={editDisabled || !canUndo}><CornerUpLeft size={15} /><span>撤销</span></button></>}
+        {onRedo && <button type="button" className="icon-button toolbar-icon toolbar-edit-control" title="重做最近撤销的操作" aria-label="重做" onClick={onRedo} disabled={editDisabled || !canRedo}><CornerUpRight size={15} /></button>}
         {(onTidy || onLayered || onFit) && <div className={`layout-control ${layoutCollapsed ? "is-collapsed" : ""}`} aria-label="布局操作" ref={layoutMenuRef}>
           <div className="layout-direct-actions">
-            {onTidy && <button type="button" className="toolbar-button compact-command layout-action-button layout-primary" onClick={onTidy} disabled={editDisabled} title="整理重叠、过短连线和轻微错位" aria-label="智能整理布局"><Network size={15} /><span>智能整理</span></button>}
-            {onLayered && <button type="button" className="toolbar-button compact-command layout-action-button" onClick={onLayered} disabled={editDisabled} title="依次执行分层重排、智能整理和适应画布" aria-label="依次执行分层重排、智能整理和适应画布"><GitBranch size={15} /><span>分层重排</span></button>}
+            {onTidy && <button type="button" className="toolbar-button compact-command layout-action-button layout-primary toolbar-edit-control" onClick={onTidy} disabled={editDisabled} title="整理重叠、过短连线和轻微错位" aria-label="智能整理布局"><Network size={15} /><span>智能整理</span></button>}
+            {onLayered && <button type="button" className="toolbar-button compact-command layout-action-button toolbar-edit-control" onClick={onLayered} disabled={editDisabled} title="依次执行分层重排、智能整理和适应画布" aria-label="依次执行分层重排、智能整理和适应画布"><GitBranch size={15} /><span>分层重排</span></button>}
             {onFit && <button type="button" className="toolbar-button compact-command layout-action-button" onClick={onFit} disabled={fitDisabled} title="缩放并居中显示全部流程" aria-label="适应画布"><Maximize size={15} /><span>适应画布</span></button>}
           </div>
           <button
@@ -190,8 +191,8 @@ export function CanvasToolbar({
             onClick={() => setLayoutMenuOpen((open) => !open)}
           ><MoreHorizontal size={15} /></button>
           {layoutMenuOpen && <div className="layout-menu" role="menu">
-            {onTidy && <button type="button" role="menuitem" onClick={() => runLayout(onTidy)} disabled={editDisabled}><Network size={15} /><span><strong>智能整理</strong></span></button>}
-            {onLayered && <button type="button" role="menuitem" onClick={() => runLayout(onLayered)} disabled={editDisabled}><GitBranch size={15} /><span><strong>分层重排</strong></span></button>}
+            {onTidy && <button type="button" role="menuitem" className="toolbar-edit-control" onClick={() => runLayout(onTidy)} disabled={editDisabled}><Network size={15} /><span><strong>智能整理</strong></span></button>}
+            {onLayered && <button type="button" role="menuitem" className="toolbar-edit-control" onClick={() => runLayout(onLayered)} disabled={editDisabled}><GitBranch size={15} /><span><strong>分层重排</strong></span></button>}
             {onFit && <button type="button" role="menuitem" onClick={() => runLayout(onFit)} disabled={fitDisabled}><Maximize size={15} /><span><strong>适应画布</strong></span></button>}
           </div>}
         </div>}

@@ -117,7 +117,8 @@ describe("Harness architecture boundaries", () => {
         codexRunnerImporters.push(relativeServerSource(file));
       }
     }
-    expect(adapterImporters.sort()).toEqual(["harness-runtime/runtime.ts"]);
+    // Prompt inspection composes read-only source readers; it cannot start an execution.
+    expect(adapterImporters.sort()).toEqual(["harness-runtime/prompt-catalog.ts", "harness-runtime/runtime.ts"]);
     expect(codexRunnerImporters.sort()).toEqual([
       "harness-runtime/adapters/codex-adapter.ts",
       // The resident Codex launch is also Adapter-owned translation; product

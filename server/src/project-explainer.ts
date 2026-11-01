@@ -147,7 +147,7 @@ export class ProjectExplainerService implements ProjectExplainerPort, ProjectExp
       evidence: async state => redactTrace(await storage.buildContextIndex(state, 0, true, true)),
       catalog: async () => {
         const [catalog, gateways, skills, accounts] = await Promise.all([
-          this.runtime.harnessCatalog(), this.gatewayStore?.list() ?? [], options.assistant!.skills.list(true), options.assistant!.accounts?.() ?? []
+          this.runtime.harnessCatalog(), this.gatewayStore?.list() ?? [], options.assistant!.skills.list(), options.assistant!.accounts?.() ?? []
         ]);
         const defaultId = await this.gatewayStore?.defaultGatewayId();
         gateways.sort((left, right) => Number(right.id === defaultId) - Number(left.id === defaultId));

@@ -475,7 +475,7 @@ describe("public Main orchestration state machine", () => {
           resumeThreadId: "worker-session", skillPaths: [], autoSkillPaths: [],
           control: { candidates: ["alternative", "finish_worker"] }, terminalControlRepair: { originalHandoff }
         });
-        expect(request.availableSkillPaths.length).toBeGreaterThan(0);
+        expect(request.availableSkillPaths).toEqual([]);
         expect(await fs.readFile(path.join(request.workspacePath, "submission.py"), "utf8")).toBe("answer = 42\n");
         if (repairOutcome === "omits-route") return { handoff: "Still missing the route." };
         if (repairOutcome === "throws") throw new Error("Worker repair failed before choosing a route.");
@@ -917,8 +917,8 @@ describe("public Main orchestration state machine", () => {
             "first reconfiguration"
           );
           const inbox = await fs.readFile(request.inboxPath, "utf8");
-          expect(inbox).toContain("Historical accepted Main action (already applied");
-          expect(inbox).toContain('"tool":"apply_workflow"');
+          expect(inbox).not.toContain("Historical accepted Main action (already applied");
+          expect(request.project.pendingMainDecision?.reason).toBe("workflow-reconfigured");
         }
         document.orchestration.resultFormat.custom = index === 0
           ? "first reconfiguration"
@@ -1140,12 +1140,8 @@ describe("public Main orchestration state machine", () => {
           canReconfigure: true,
           canComplete: false
         });
-        expect(await fs.readFile(request.inboxPath, "utf8")).toContain(
-          "## Dynamic Workflow reconfiguration"
-        );
-        expect(await fs.readFile(request.inboxPath, "utf8")).toContain(
-          "apply_workflow` with path `workflow.json"
-        );
+        expect(await fs.readFile(request.inboxPath, "utf8")).not.toContain("## Dynamic Workflow reconfiguration");
+        expect(await fs.readFile(path.join(request.workspacePath, "workflow.json"), "utf8")).toContain("editingInstructions");
         return mainResult(
           request,
           decision("obsolete", "Run the existing role before deciding whether it can be removed."),
@@ -2326,8 +2322,8 @@ describe("public Main orchestration state machine", () => {
           };
         }
         const inbox = await fs.readFile(request.inboxPath, "utf8");
-        expect(inbox).toContain("project.published-artifacts");
-        expect(inbox).toContain("scienceevolve_read_published_artifact");
+        expect(inbox).not.toContain("project.published-artifacts");
+        expect(inbox).not.toContain("scienceevolve_read_published_artifact");
         expect(inbox).toContain("cross-check-source.md");
         expect(inbox).not.toContain("Exact peer evidence: 54 + 108 = 162.");
         expect(await fs.readFile(path.join(request.workspacePath, "cross-check-source.md"), "utf8")).toContain("Exact peer evidence: 54 + 108 = 162.");
@@ -2336,7 +2332,7 @@ describe("public Main orchestration state machine", () => {
 
       mainTurn += 1;
       const next = mainTurn === 1
-        ? decision("worker", "Cross-check the published peer evidence.")
+        ? decision("worker", "Cross-check the published peer evidence in cross-check-source.md.")
         : decision("finish", "The downstream cross-check is complete.");
       if (mainTurn === 2) {
         next.display = {
@@ -2961,10 +2957,10 @@ describe("public Main orchestration state machine", () => {
           generation: 0
         });
         const inbox = await fs.readFile(request.inboxPath, "utf8");
-        expect(inbox).toContain("Main context mode: incremental (after event #");
-        expect(inbox).toContain("Persist and expose a same-Harness replacement without provider-specific parsing.");
+        expect(inbox).not.toContain("Main context mode: incremental (after event #");
+        expect(await fs.readFile(path.join(request.projectPath, "request.md"), "utf8")).toContain("Persist and expose a same-Harness replacement without provider-specific parsing.");
         expect(inbox).toContain("Continue with replacement.");
-        expect(inbox).toContain("project.history.handoffs");
+        expect(inbox).not.toContain("project.history.handoffs");
       }
       return mainResult(
         request,
@@ -3160,9 +3156,9 @@ describe("public Main orchestration state machine", () => {
         workerTurn += 1;
         if (workerTurn === 2) {
           const inbox = await fs.readFile(request.inboxPath, "utf8");
-          expect(inbox).toContain("## Current user requirement updates");
+          expect(inbox).not.toContain("## Current user requirement updates");
           expect(inbox).toContain(update);
-          expect(inbox).toContain("authoritative for this assignment");
+          expect(inbox).toContain("来源：main");
           expect(request.project.userInputs).toEqual([]);
         }
         return { handoff: workerResult("worker").markdown };
@@ -3172,7 +3168,7 @@ describe("public Main orchestration state machine", () => {
       return mainResult(
         request,
         mainTurn === 1 || mainTurn === 3
-          ? decision("worker", `Worker assignment ${mainTurn}.`)
+          ? decision("worker", `Worker assignment ${mainTurn}.${mainTurn === 3 ? " " + update : ""}`)
           : decision("finish", `Main completed turn ${mainTurn}.`)
       );
     });
@@ -3204,17 +3200,20 @@ describe("public Main orchestration state machine", () => {
 
   it.each([
     ["HARNESS_CONTRACT_VIOLATION", "adapter"],
+    ["HARNESS_CONFIGURATION_INVALID", "adapter"],
+    ["SESSION_RESUME_FAILED", "adapter"],
+    ["PROTOCOL_RECOVERY_EXHAUSTED", "gateway"],
     ["MODEL_CONTEXT_LIMIT_EXCEEDED", "gateway"]
-  ] as const)("retains automatic recovery after a non-retryable %s invocation and persists safe classification", async (code, source) => {
+  ] as const)("stops automatic recovery after a non-retryable %s invocation and persists safe classification", async (code, source) => {
     const leakedApiKey = "sk-nonretryable-secret123456";
     let attempts = 0;
-    const { orchestrator } = await harness(async () => {
+    const { orchestrator, runner, root } = await harness(async () => {
       attempts += 1;
       throw new HarnessRuntimeError(
         code,
         `Official event contract failed with api_key=${leakedApiKey}`,
         { harnessId: "fixture-harness" },
-        { source }
+        { source, retryable: false }
       );
     });
 
@@ -3229,7 +3228,7 @@ describe("public Main orchestration state machine", () => {
     const paused = await orchestrator.getProject(project.id);
     expect(attempts).toBe(1);
     expect(paused).toMatchObject({
-      status: "retrying",
+      status: "interrupted",
       phase: "harness-recovery-required",
       queuedAgent: "main",
       workerFailureCounts: { main: 1 },
@@ -3256,14 +3255,25 @@ describe("public Main orchestration state machine", () => {
       errorCode: code,
       errorSource: source,
       retryable: false,
-      automaticRetry: true,
+      automaticRetry: false,
+      userActionRequired: true,
       harnessRecoveryRequired: true
     });
     expect(JSON.stringify({ paused, events })).not.toContain(leakedApiKey);
     await orchestrator.shutdown();
+    const restarted = new Orchestrator(new ProjectStorage(root, new EventHub()), new SkillCatalog([builtinSkillRoot]), runner,
+      { retryBaseMs: 1, retryMaxMs: 1, agentConcurrency: 2 });
+    liveOrchestrators.push(restarted);
+    await restarted.initialize(); await restarted.waitForIdle(project.id);
+    expect((await restarted.getProject(project.id))).toMatchObject({ status: "interrupted", phase: "harness-recovery-required" });
+    expect(attempts).toBe(1);
+    await restarted.resume(project.id); await restarted.waitForIdle(project.id);
+    expect(attempts).toBe(2);
+    expect((await restarted.getProject(project.id))).toMatchObject({ status: "interrupted", phase: "harness-recovery-required" });
+    await restarted.shutdown();
   });
 
-  it.each(["codex", "claude-code", "pi", "dsh"])("automatically recovers %s after its fast protocol recovery is exhausted", async harnessId => {
+  it.each(["codex", "claude-code", "pi", "dsh"])("preserves the %s task after exhausted correction and resumes it only on explicit request", async harnessId => {
     let attempts = 0;
     const { orchestrator, runner } = await harness(async request => {
       attempts += 1;
@@ -3274,6 +3284,10 @@ describe("public Main orchestration state machine", () => {
       const project = await orchestrator.createProject({ title: "Transient Gateway failure",
         requirement: "Continue the original task after automatic protocol recovery.", orchestration: mainOnlyOrchestration(),
         agents: { main: { harness: harnessId, skills: [], autoSkills: [] } } });
+      await waitForRuntimePhase(orchestrator, project.id, "harness-recovery-required");
+      expect(attempts).toBe(1);
+      expect(await orchestrator.getProject(project.id)).toMatchObject({ status: "interrupted", phase: "harness-recovery-required" });
+      await orchestrator.resume(project.id);
       await orchestrator.waitForIdle(project.id);
       expect(attempts).toBe(2);
       expect(await orchestrator.getProject(project.id)).toMatchObject({ status: "completed",
@@ -3281,8 +3295,7 @@ describe("public Main orchestration state machine", () => {
       expect(runner.calls[0]!.taskSessionId).toBe(runner.calls[1]!.taskSessionId);
       const events = await (orchestrator as unknown as { storage: ProjectStorage }).storage.readEvents(project.id);
       expect(events.find(event => event.type === "agent.failed")?.data).toMatchObject({
-        errorCode: "PROTOCOL_RECOVERY_EXHAUSTED", automaticRetry: true, userActionRequired: false,
-        transportRecoveryAttempt: 1 });
+        errorCode: "PROTOCOL_RECOVERY_EXHAUSTED", automaticRetry: false, userActionRequired: true });
       expect(events.some(event => event.type === "project.status" && event.data?.status === "paused")).toBe(false);
     } finally { await orchestrator.shutdown(); }
   });
@@ -3524,7 +3537,7 @@ describe("public Main orchestration state machine", () => {
           }
         }
       });
-      expect(request.availableSkillPaths.length).toBeGreaterThan(0);
+      expect(request.availableSkillPaths).toEqual([]);
       return mainResult(
         request,
         decision("finish", "The original Main work is complete."),
@@ -3887,7 +3900,7 @@ async function waitForRuntimePhase(orchestrator: Orchestrator, projectId: string
   const deadline = Date.now() + 5_000;
   while (Date.now() < deadline) {
     const project = await orchestrator.getProject(projectId);
-    if (project.phase === phase && project.status === "retrying") return;
+    if (project.phase === phase && (project.status === "retrying" || phase === "harness-recovery-required" && project.status === "interrupted")) return;
     await new Promise(resolve => setTimeout(resolve, 5));
   }
   const project = await orchestrator.getProject(projectId);

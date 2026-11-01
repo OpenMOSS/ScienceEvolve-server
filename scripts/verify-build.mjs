@@ -12,17 +12,34 @@ const repo = fileURLToPath(new URL("../", import.meta.url));
 const exec = promisify(execFile);
 const git = async (...args) => (await exec("git", args, { cwd: repo, maxBuffer: 8 * 1024 * 1024 })).stdout;
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
-async function tree(directory) {
+async function tree(directory, allowDeploymentLinks = false) {
   const files = {};
-  async function visit(current, relative = "") {
+  let canonicalRoot;
+  async function visit(current, relative = "", ancestors = new Set()) {
+    const canonical = await fs.realpath(current);
+    assert.ok(!ancestors.has(canonical), `Build artifact directory cycle: ${current}`);
+    const nextAncestors = new Set([...ancestors, canonical]);
     for (const entry of (await fs.readdir(current, { withFileTypes: true })).sort((a,b) => a.name.localeCompare(b.name))) {
       const name = path.join(relative, entry.name), file = path.join(current, entry.name);
-      assert.ok(!entry.isSymbolicLink(), `Build artifact must not be a symlink: ${file}`);
-      if (entry.isDirectory()) await visit(file, name);
+      if (entry.isSymbolicLink()) {
+        const target = await fs.realpath(file), within = path.relative(canonicalRoot, target);
+        assert.ok(allowDeploymentLinks && within !== ".." && !within.startsWith(`..${path.sep}`) && !path.isAbsolute(within) &&
+          (await fs.stat(target)).isDirectory(), `Build artifact has an untrusted symlink: ${file}`);
+        files[`${name}/@deployment-link`] = hash(await fs.readlink(file));
+        await visit(target, name, nextAncestors);
+      }
+      else if (entry.isDirectory()) await visit(file, name, nextAncestors);
       else if (entry.isFile()) files[name] = hash(await fs.readFile(file));
     }
   }
-  try { await visit(directory); }
+  try {
+    canonicalRoot = await fs.realpath(directory);
+    if ((await fs.lstat(directory)).isSymbolicLink()) {
+      assert.ok(allowDeploymentLinks, `Generated build root must not be a symlink: ${directory}`);
+      files["@deployment-link"] = hash(await fs.readlink(directory));
+    }
+    await visit(directory);
+  }
   catch (error) { if (error.code !== "ENOENT") throw error; return null; }
   return files;
 }
@@ -30,11 +47,11 @@ await fs.mkdir(path.join(repo, "temp", "build-checks"), { recursive: true });
 const directory = await fs.mkdtemp(path.join(repo, "temp", "build-checks", "check-"));
 const source = path.join(directory, "source");
 await fs.mkdir(source);
-const before = { web: await tree(path.join(repo, "web/dist")), server: await tree(path.join(repo, "server/dist")) };
+const before = { web: await tree(path.join(repo, "web/dist"), true), server: await tree(path.join(repo, "server/dist"), true) };
 const commit = (await git("rev-parse", "HEAD")).trim();
 const status = await git("status", "--porcelain");
 const sourceHashes = {};
-for (const name of (await git("ls-files", "--cached", "-z")).split("\0").filter(Boolean)) {
+for (const name of (await git("ls-files", "--cached", "--others", "--exclude-standard", "-z")).split("\0").filter(Boolean)) {
   const input = path.join(repo, name), output = path.join(source, name);
   let stat;
   try { stat = await fs.lstat(input); }
@@ -68,7 +85,7 @@ try {
     child.once("exit", (code) => resolve(code ?? 1));
   });
 } finally { await log.close(); }
-const after = { web: await tree(path.join(repo, "web/dist")), server: await tree(path.join(repo, "server/dist")) };
+const after = { web: await tree(path.join(repo, "web/dist"), true), server: await tree(path.join(repo, "server/dist"), true) };
 const artifacts = { web: await tree(path.join(source, "web/dist")), server: await tree(path.join(source, "server/dist")) };
 const receipt = { command: "npm run build", commit, status, directory, checkedAt: new Date().toISOString(),
   exitCode, sourceHashes, artifacts, originalArtifactsBefore: before, originalArtifactsAfter: after,

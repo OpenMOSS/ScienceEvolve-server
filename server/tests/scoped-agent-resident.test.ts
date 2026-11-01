@@ -12,7 +12,7 @@ function input(): ScopedAgentTurnInput {
 }
 
 function openInput(turn: ScopedAgentTurnInput): CollaborationResidentOpenInput {
-  return { request: { project: { id: turn.execution.projectId, orchestration: { schemaVersion: 3 },
+  return { initialTask: "来源：Leader\n内容：Complete the original retained task.", request: { project: { id: turn.execution.projectId, orchestration: { schemaVersion: 3 },
     agents: { worker: { decisionBy: "agent" } }, agentSessionIds: { worker: "native-retained" } },
     agent: "worker", invocationId: turn.invocationId, workspacePath: turn.execution.worktreePath,
     runtimePath: turn.runtimePath, sessionContinuity: "strict", resumeThreadId: "native-retained",

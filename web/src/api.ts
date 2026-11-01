@@ -49,6 +49,7 @@ import type {
 } from "./types";
 import type { AgentOrchestrationTemplate } from "./types";
 import { DEFAULT_MODEL_CONTEXT_WINDOW, MAX_MODEL_CONTEXT_WINDOW } from "./types";
+import { invalidateResource, loadResource } from "./resource-cache";
 import type { WorkflowAdjustmentPage, WorkflowAdjustmentPageInput, WorkflowAdjustmentDetail, WorkflowAdjustmentContext, WorkflowAdjustmentSubmission, WorkflowAdjustmentSubmissionResult,
   WorkflowAdjustmentWithdrawal, WorkflowAdjustmentWithdrawalResult } from "./workflowAdjustments";
 
@@ -368,7 +369,24 @@ async function request(path: string, init?: RequestInit): Promise<unknown> {
       ...init?.headers
     }
   });
-  return await readResponse(response);
+  const result = await readResponse(response);
+  if (init?.method && !["GET", "HEAD"].includes(init.method.toUpperCase())) {
+    if (/^\/api\/(?:gateways|skills|mcp)/.test(path)) {
+      invalidateResource("catalog"); invalidateResource("gateways");
+    }
+    if (path.startsWith("/api/saved-research-tasks")) {
+      invalidateResource("saved-tasks");
+      const task = path.match(/^\/api\/saved-research-tasks\/([^/?]+)/)?.[1];
+      if (task) invalidateResource(`saved-task:${decodeURIComponent(task)}`);
+    }
+    if (path.startsWith("/api/agent-config-presets")) {
+      invalidateResource("presets:false"); invalidateResource("presets:true");
+    }
+    if (path.startsWith("/api/github/")) invalidateResource("github-accounts");
+    const project = path.match(/^\/api\/projects\/([^/?]+)/)?.[1];
+    if (project) invalidateResource(`project:${decodeURIComponent(project)}`);
+  }
+  return result;
 }
 
 async function readResponse(response: Response): Promise<unknown> {
@@ -465,18 +483,16 @@ function unwrapProject(value: unknown): unknown {
 
 export async function getProjects(includeArchived = false): Promise<Project[]> {
   const query = includeArchived ? "?view=summary&includeArchived=true" : "?view=summary";
-  return normalizeProjects(await request(`/api/projects${query}`));
+  return loadResource(`projects:${includeArchived}`, async () => normalizeProjects(await request(`/api/projects${query}`)));
 }
 
 export async function getQueue(): Promise<QueueSnapshot> {
-  return normalizeQueueSnapshot(await request("/api/queue"));
+  return loadResource("queue", async () => normalizeQueueSnapshot(await request("/api/queue")));
 }
 
 export async function getProject(projectId: string): Promise<Project> {
-  const result = await request(
-    `/api/projects/${encodeURIComponent(projectId)}?view=state`
-  );
-  return normalizeProject(unwrapProject(result));
+  return loadResource(`project:${projectId}`, async () => normalizeProject(unwrapProject(
+    await request(`/api/projects/${encodeURIComponent(projectId)}?view=state`))));
 }
 
 export async function getProjectGitGraph(
@@ -653,12 +669,15 @@ async function streamExplainerQuestionAt(url: string, question: string,
 
 export interface ExplainerAssistantContext {
   id: string; revision: number; draft: CreateProjectInput; taskId?: string; projectId?: string; updatedAt: string; canUndo?: boolean;
+  deletedTaskId?: string;
   workflowBase?: { revision: number; hash: string };
 }
 export interface ExplainerAssistantAction {
-  kind: "draft.created" | "draft.updated" | "draft.saved" | "draft.undone" | "workflow.submitted" | "projects.started";
+  kind: typeof import("../../server/src/internal/shared/explainer-tools.js").EXPLAINER_ACTION_KINDS[number];
   context: ExplainerAssistantContext; summary: string; href?: string; requestId?: string;
   savedTask?: { id: string; title: string; updatedAt: string };
+  targetTaskId?: string;
+  deletedTasks?: { id: string; title: string; updatedAt: string }[];
   launches?: { operationId: string; results: { taskId: string; title?: string; status: "started" | "failed" | "unconfirmed";
     projectId?: string; href?: string; error?: string }[] };
 }
@@ -864,12 +883,15 @@ export async function discardProjectInputUpload(uploadId: string): Promise<void>
 }
 
 export async function getSavedResearchTasks(): Promise<SavedResearchTask[]> {
-  return normalizeSavedResearchTasks(await request("/api/saved-research-tasks"));
+  return loadResource("saved-tasks", async () => normalizeSavedResearchTasks(await request("/api/saved-research-tasks")));
 }
 
 export async function getSavedResearchTask(
   taskId: string
 ): Promise<SavedResearchTask> {
+  return loadResource(`saved-task:${taskId}`, () => loadSavedResearchTask(taskId));
+}
+async function loadSavedResearchTask(taskId: string): Promise<SavedResearchTask> {
   const result = await request(
     `/api/saved-research-tasks/${encodeURIComponent(taskId)}`
   );
@@ -933,7 +955,7 @@ export async function deleteSavedResearchTask(taskId: string): Promise<void> {
 }
 
 export async function getAgentConfigPresets(includeVisualizations = false): Promise<AgentConfigPreset[]> {
-  return normalizeAgentConfigPresets(await request(`/api/agent-config-presets${includeVisualizations ? "?includeVisualizations=true" : ""}`));
+  return loadResource(`presets:${includeVisualizations}`, async () => normalizeAgentConfigPresets(await request(`/api/agent-config-presets${includeVisualizations ? "?includeVisualizations=true" : ""}`)));
 }
 
 export async function importAgentConfigPreset(filename: string, text: string): Promise<AgentConfigPreset> {
@@ -1392,6 +1414,9 @@ async function readGatewayMatrixStream(
 }
 
 export async function getGateways(): Promise<{ gateways: GatewayRecord[]; defaultGatewayId?: string }> {
+  return loadResource("gateways", loadGateways);
+}
+async function loadGateways(): Promise<{ gateways: GatewayRecord[]; defaultGatewayId?: string }> {
   const value = await request("/api/gateways");
   const record = value && typeof value === "object" ? value as Record<string, unknown> : {};
   return {
@@ -1571,6 +1596,9 @@ function normalizeGitHubAccount(value: unknown): GitHubAccountRecord | undefined
 }
 
 export async function getGitHubAccounts(): Promise<GitHubAccountCatalog> {
+  return loadResource("github-accounts", loadGitHubAccounts);
+}
+async function loadGitHubAccounts(): Promise<GitHubAccountCatalog> {
   const value = await request("/api/github/accounts");
   const record = value && typeof value === "object"
     ? value as Record<string, unknown>
@@ -1695,6 +1723,9 @@ export async function getGitHubRepositoryStatus(projectId: string): Promise<GitH
 }
 
 export async function getCatalog(): Promise<Catalog> {
+  return loadResource("catalog", loadCatalog);
+}
+async function loadCatalog(): Promise<Catalog> {
   const result = await request("/api/skills");
   const record =
     result && typeof result === "object"
@@ -2211,4 +2242,14 @@ function getArtifactResourceUrl(
 export function eventStreamUrl(projectId: string, after: number): string {
   const params = new URLSearchParams({ after: String(after) });
   return `${API_BASE}/api/projects/${encodeURIComponent(projectId)}/events?${params}`;
+}
+
+export async function getHarnessPrompt(config: AgentConfig, signal?: AbortSignal, forceRefresh = false): Promise<import("./types").HarnessPromptResult> {
+  return await request("/api/harness-prompts/query", {
+    method: "POST", signal,
+    body: JSON.stringify({ harness: config.harness, model: config.model, ...(forceRefresh ? { forceRefresh: true } : {}),
+      permission: config.permission, reasoningEffort: config.reasoningEffort,
+      webSearch: config.webSearch, skills: config.skills, autoSkills: config.autoSkills,
+      mcpServers: config.mcpServers.map(server => server.name) })
+  }) as import("./types").HarnessPromptResult;
 }

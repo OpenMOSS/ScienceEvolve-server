@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { constants as fsConstants, promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -89,6 +89,7 @@ export class DshAdapter extends AdapterBase implements HarnessAdapter {
   }
 
   async run(context: HarnessAdapterContext): Promise<AgentRunResult> {
+    if ("nativeCodexProfileHome" in context.route) throw new Error("DSH requires a Gateway route");
     const executable = await this.resolveExecutable();
     if (!executable) {
       throw new HarnessRuntimeError(
@@ -110,7 +111,7 @@ export class DshAdapter extends AdapterBase implements HarnessAdapter {
     );
     const runtime = await prepareAdapterRuntime(context, this.descriptor, this.options, {
       SCIENCEEVOLVE_WEB_SEARCH_ENABLED: !explainer && spec.policy.webSearch ? "1" : "0",
-      ...(explainer ? { DSH_PERMISSION_MODE: "read-only" } : {})
+      DSH_PERMISSION_MODE: explainer ? "read-only" : spec.policy.permission === "yolo" ? "danger-full-access" : "workspace-write"
     });
     runtime.environment.DSH_HOME = runtime.home;
     await prepareDshSettings(
@@ -128,7 +129,7 @@ export class DshAdapter extends AdapterBase implements HarnessAdapter {
     if (spec.session!.durable && spec.session!.resumedAt) {
       try {
         await assertDshSessionArtifact({
-          artifactPath: sessionArtifact,
+          artifactPath: await resolveDshSessionArtifactPath(sessionArtifact),
           sessionRoot,
           expectedSessionId: spec.session!.nativeId,
           expectedWorkspacePath: spec.inputs.workspacePath
@@ -177,7 +178,7 @@ export class DshAdapter extends AdapterBase implements HarnessAdapter {
         mode: 0o600
       });
       managed = context.processHost.start({
-        ...harnessExecutableLaunch(executable, ["--profile", "sdk", "--patch", patchPath]),
+        ...harnessExecutableLaunch(executable, ["--profile", "sdk", "--patch", path.join(runtime.home, "gateway.patch.yml"), "--patch", patchPath]),
         cwd: spec.inputs.workspacePath,
         env: runtime.environment,
         eventFormat: "json-rpc",
@@ -245,7 +246,7 @@ export class DshAdapter extends AdapterBase implements HarnessAdapter {
       if (spec.session!.durable) {
         try {
           await assertDshSessionArtifact({
-            artifactPath: sessionArtifact,
+            artifactPath: await resolveDshSessionArtifactPath(sessionArtifact),
             sessionRoot,
             expectedSessionId: spec.session!.nativeId,
             expectedWorkspacePath: spec.inputs.workspacePath
@@ -299,6 +300,10 @@ export class DshAdapter extends AdapterBase implements HarnessAdapter {
         });
       }
       if (bridgeFailure) throw bridgeFailure;
+      if (/plugin tree failed to load/i.test(stderr) && /invalid config/i.test(stderr)) {
+        throw new HarnessRuntimeError("HARNESS_CONFIGURATION_INVALID", "DSH 插件配置校验失败，Agent 未能启动。请检查 MCP 配置后继续；详细诊断见本次调用的 dsh-stderr.log。",
+          { harnessId: this.descriptor.id, reason: "dsh-plugin-config-invalid" }, { source: "adapter", cause: error });
+      }
       if (error instanceof DshSessionIdentityError) {
         throw dshSessionIdentityError(this.descriptor.id, spec.session!, error);
       }
@@ -401,6 +406,24 @@ export function dshSessionArtifactPath(
     dshEncodeSegment(sessionId),
     "session.jsonl.zstd"
   );
+}
+
+/** Current DSH uses immutable session.vN generations; old releases use v0. */
+export async function resolveDshSessionArtifactPath(legacyPath: string): Promise<string> {
+  const directory = path.dirname(legacyPath);
+  let info;
+  try { info = await fs.lstat(directory); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return legacyPath; throw error; }
+  if (!info.isDirectory() || info.isSymbolicLink() || await fs.realpath(directory) !== path.resolve(directory)) {
+    throw new Error("DSH session generation directory is not a pinned real directory");
+  }
+  const names = await fs.readdir(directory);
+  if (names.length > 1000) throw new Error("Too many DSH session generation files");
+  const versions = names.flatMap(name => {
+    const match = /^session\.v([1-9][0-9]*)\.jsonl\.zstd$/.exec(name);
+    return match && Number.isSafeInteger(Number(match[1])) ? [{ name, version: Number(match[1]) }] : [];
+  }).sort((a, b) => b.version - a.version);
+  return versions.length ? path.join(directory, versions[0].name) : legacyPath;
 }
 
 function dshEncodeSegment(raw: string): string {
@@ -527,6 +550,8 @@ export async function assertDshSessionArtifact(
         cause: error instanceof Error ? error : undefined
       });
     }
+    const physicalVersion = /^session\.v([1-9][0-9]*)\.jsonl\.zstd$/.exec(path.basename(artifactPath));
+    if (physicalVersion && header.version !== Number(physicalVersion[1])) throw new Error("DSH session generation header disagrees with its filename");
     if (header.type !== "session" || !Number.isSafeInteger(header.version) ||
       (header.version as number) < 0 || !Number.isSafeInteger(header.createdAt) ||
       (header.createdAt as number) < 0) {
@@ -925,7 +950,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-async function prepareDshSettings(
+export async function prepareDshSettings(
   home: string,
   baseUrl: string,
   model: string,
@@ -950,6 +975,17 @@ async function prepareDshSettings(
     ""
   ].join("\n");
   await fs.writeFile(path.join(home, "settings.yaml"), content, { encoding: "utf8", mode: 0o600 });
+  // Current DSH persists model routes in the profile patch, not settings.yaml.
+  // Keep the legacy file for older releases, but mount the selected route
+  // explicitly in this invocation's private profile; credentials remain env refs.
+  const patch = "- id: llm-pi-ai\n  config:\n" + content.split("agent-default-model:")[0]
+    .split("\n").slice(1).filter(Boolean).map(line => `  ${line}`).join("\n") + "\n" +
+    `- id: agent-default-model\n  config:\n    provider: openfars\n    model: ${JSON.stringify(model)}\n`;
+  await fs.writeFile(path.join(home, "gateway.patch.yml"), patch, { encoding: "utf8", mode: 0o600 });
+}
+
+export function dshNativeSessionPatch(executable: string, sessionId: string): string {
+  return dshNativeSdkPatch(executable, sessionId);
 }
 
 /** The same native Agent resume API serves ordinary and resident invocations. */
@@ -967,6 +1003,14 @@ export function dshNativeSdkPatch(executable: string, sessionId: string): string
   ].join("\n") + "\n";
 }
 
+/** The installed MCP plugin limits serverName to 32 ASCII word characters.
+ * Preserve valid namespaces and hash normalized names to avoid collisions. */
+export function dshMcpServerName(namespace: string): string {
+  if (/^[A-Za-z0-9_-]{1,32}$/.test(namespace)) return namespace;
+  const prefix = namespace.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 19) || "mcp";
+  return `${prefix}_${createHash("sha256").update(namespace).digest("hex").slice(0, 12)}`;
+}
+
 export function dshMcpPatch(
   rows: readonly AdapterMcpRow[],
   _webSearch: boolean
@@ -976,7 +1020,7 @@ export function dshMcpPatch(
       `    - id: openfars-mcp-${index}`,
       "      name: '@deepseek-ai/dsh-mcp-client'",
       "      config:",
-      `        serverName: ${JSON.stringify(row.namespace)}`,
+      `        serverName: ${JSON.stringify(dshMcpServerName(row.namespace))}`,
       `        transport: ${row.transport}`
     ];
     if (row.transport === "stdio") {

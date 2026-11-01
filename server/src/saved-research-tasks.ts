@@ -1,7 +1,8 @@
 import { promises as fs } from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import type { z } from "zod";
+import { z } from "zod";
 import type { SavedResearchTask } from "./types.js";
 import { workflowOuterNodeIds } from "./agent-orchestration.js";
 import {
@@ -24,7 +25,22 @@ import { newId, nowIso } from "./utils.js";
 interface SavedResearchTaskFile {
   schemaVersion: 2;
   tasks: SavedResearchTask[];
+  deletionReceipts?: Record<string, { signature: string; tasks: DeletedSavedResearchTask[] }>;
 }
+
+export type DeletedSavedResearchTask = Pick<SavedResearchTask, "id" | "title" | "updatedAt">;
+export const savedTaskDeletionSchema = z.object({
+  operationId: z.string().regex(/^[A-Za-z0-9_-]{8,160}$/),
+  tasks: z.array(z.object({ taskId: z.string().regex(/^task_[a-f0-9]{32}$/), expectedUpdatedAt: z.string().datetime() }).strict())
+    .min(1).max(100).refine(tasks => new Set(tasks.map(task => task.taskId)).size === tasks.length, "不能重复删除同一份草稿")
+}).strict();
+type SavedTaskDeletionInput = z.infer<typeof savedTaskDeletionSchema> & { requestSignature?: string };
+const internalDeletionSchema = savedTaskDeletionSchema.extend({ requestSignature: z.string().regex(/^[a-f0-9]{64}$/).optional() });
+const deletionReceiptsSchema = z.record(z.string().regex(/^[A-Za-z0-9_-]{8,160}$/), z.object({
+  signature: z.string().regex(/^[a-f0-9]{64}$/), tasks: z.array(z.object({
+    id: z.string().regex(/^task_[a-f0-9]{32}$/), title: z.string(), updatedAt: z.string().datetime()
+  }).strict())
+}).strict());
 
 type SavedResearchTaskInput = z.input<typeof savedResearchTaskInputSchema>;
 
@@ -49,6 +65,8 @@ export class SavedResearchTaskStore {
       const parsed = savedResearchTaskInputSchema.parse(input);
       const tasks = await this.readPersisted();
       if (taskId && !/^task_[a-f0-9]{32}$/.test(taskId)) throw new Error("Invalid saved research task id");
+      if (taskId && Object.values((await this.readDocument()).deletionReceipts ?? {}).some(receipt => receipt.tasks.some(task => task.id === taskId)))
+        throw Object.assign(new Error("这份草稿已被删除，请使用新的操作编号新建独立草稿。"), { status: 409 });
       // Assistant save operations use a deterministic identity. Retrying the
       // same committed operation cannot create a second project draft.
       const existing = taskId && tasks.find(task => task.id === taskId);
@@ -136,25 +154,72 @@ export class SavedResearchTaskStore {
     });
   }
 
+  async getDeletionReceipt(input: SavedTaskDeletionInput): Promise<DeletedSavedResearchTask[] | undefined> {
+    const parsed = internalDeletionSchema.parse(input);
+    await this.mutationTail;
+    return this.deletionReceipt(await this.readDocument(), parsed);
+  }
+
+  /** Selection, version checks, deletion and its retry receipt share one atomic
+   * file replacement. No successful item can be deleted again after a crash. */
+  async deleteMany(input: SavedTaskDeletionInput, signal?: AbortSignal): Promise<DeletedSavedResearchTask[]> {
+    const parsed = internalDeletionSchema.parse(input);
+    return this.serialize(async () => {
+      signal?.throwIfAborted();
+      const document = await this.readDocument();
+      const replay = this.deletionReceipt(document, parsed);
+      if (replay) return replay;
+      const deleted = parsed.tasks.map(selection => {
+        const task = document.tasks.find(task => task.id === selection.taskId);
+        if (!task) throw Object.assign(new Error("项目草稿不存在或已被删除，请重新读取草稿列表。"), { status: 404 });
+        if (task.updatedAt !== selection.expectedUpdatedAt)
+          throw Object.assign(new Error("草稿已有新的修改，请重新读取最新版本后决定是否删除。"), { status: 409 });
+        return { id: task.id, title: task.title, updatedAt: task.updatedAt };
+      });
+      const ids = new Set(deleted.map(task => task.id));
+      const receipts = { ...document.deletionReceipts, [parsed.operationId]: {
+        signature: this.deletionSignature(parsed), tasks: deleted
+      } };
+      signal?.throwIfAborted();
+      await this.writePersisted(document.tasks.filter(task => !ids.has(task.id)), receipts);
+      return structuredClone(deleted);
+    });
+  }
+
+  private deletionSignature(input: SavedTaskDeletionInput) {
+    return createHash("sha256").update(JSON.stringify({ tasks: input.tasks, requestSignature: input.requestSignature })).digest("hex");
+  }
+  private deletionReceipt(document: SavedResearchTaskFile, input: SavedTaskDeletionInput) {
+    const receipt = document.deletionReceipts?.[input.operationId];
+    if (!receipt) return undefined;
+    if (receipt.signature !== this.deletionSignature(input))
+      throw Object.assign(new Error("同一删除操作编号不能用于不同草稿或版本。"), { status: 409 });
+    return structuredClone(receipt.tasks);
+  }
+
   private filePath(): string {
     return path.join(this.root, "saved-research-tasks.json");
   }
 
   private async readPersisted(): Promise<SavedResearchTask[]> {
+    return (await this.readDocument()).tasks;
+  }
+
+  private async readDocument(): Promise<SavedResearchTaskFile> {
     let raw: unknown;
     try {
       raw = JSON.parse(await fs.readFile(this.filePath(), "utf8")) as unknown;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return { schemaVersion: 2, tasks: [] };
       // Saved tasks are deliberately hard-cut to the current format.  A
       // stale or malformed file is hidden, never migrated and never allowed
       // to block newly-created tasks.
-      return [];
+      return { schemaVersion: 2, tasks: [] };
     }
     if (!isRecord(raw) || raw.schemaVersion !== 2 || !Array.isArray(raw.tasks)) {
-      return [];
+      return { schemaVersion: 2, tasks: [] };
     }
-    return raw.tasks
+    const tasks = raw.tasks
       .flatMap((value) => {
         try {
           return [parsePersistedTask(value)];
@@ -164,13 +229,16 @@ export class SavedResearchTaskStore {
         }
       })
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    return { schemaVersion: 2, tasks, ...(raw.deletionReceipts === undefined ? {}
+      : { deletionReceipts: deletionReceiptsSchema.parse(raw.deletionReceipts) }) };
   }
 
-  private async writePersisted(tasks: SavedResearchTask[]): Promise<void> {
+  private async writePersisted(tasks: SavedResearchTask[], deletionReceipts?: SavedResearchTaskFile["deletionReceipts"]): Promise<void> {
     await fs.mkdir(this.root, { recursive: true });
     const destination = this.filePath();
     const temporary = `${destination}.${process.pid}.${newId("tmp")}`;
-    const document: SavedResearchTaskFile = { schemaVersion: 2, tasks };
+    const receipts = deletionReceipts ?? (await this.readDocument()).deletionReceipts;
+    const document: SavedResearchTaskFile = { schemaVersion: 2, tasks, ...(receipts ? { deletionReceipts: receipts } : {}) };
     try {
       await fs.writeFile(temporary, `${JSON.stringify(document, null, 2)}\n`, {
         encoding: "utf8",

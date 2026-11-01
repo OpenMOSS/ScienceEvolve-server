@@ -34,7 +34,9 @@ import {
 } from "react";
 import ReactMarkdown from "react-markdown";
 import { ProjectExplainerReplyStatus, ProjectExplainerTrace } from "../components/ProjectExplainerTrace";
-import { foldExplainerMessages, isExplainerConversationMessage, mergeExplainerMessages } from "../components/project-explainer-events";
+import { isExplainerConversationMessage, mergeExplainerMessages, reconcileExplainerHistory,
+  pendingExplainerMessage, explainerActionFromEvent, notifyExplainerAction, restoreExplainerMessages } from "../components/project-explainer-events";
+import { ExplainerActionCard } from "../components/ExplainerActionCard";
 import { agentPermissionLabel } from "../../../server/src/internal/shared/agent-permission-metadata.js";
 import rehypeKatex from "rehype-katex";
 import rehypeSanitize from "rehype-sanitize";
@@ -124,6 +126,8 @@ import {
 import { AgentCallGraph } from "../components/AgentCallGraph";
 import { WorkflowAdjustmentEditor } from "../components/WorkflowAdjustmentEditor";
 import { AgentToolRecommendation } from "../components/AgentToolRecommendation";
+import { AgentPromptPanels } from "../components/workflow-canvas/AgentPromptPanels";
+import { cacheResource, readCachedResource } from "../resource-cache";
 import { ExperimentMcpControl } from "../components/ExperimentMcpControl";
 import { ExplainerRecommendationSettings, RecommendationProvider } from "../components/RecommendationContext";
 import { CollaborationDissolutionPlanner } from "../components/workflow-canvas/CollaborationDissolutionPlanner";
@@ -367,6 +371,9 @@ function displayItems(selection?: DisplaySelection): DisplayItem[] {
 
 function displayPhase(phase?: string): string {
   if (!phase) return "等待调度";
+  if (phase.endsWith(":preparing-skills")) return "正在准备选中的 Skills";
+  if (phase.endsWith(":preparing-context")) return "正在准备调用上下文";
+  if (phase === "harness-recovery-required") return "Agent 启动失败，等待修复后继续";
   if (phase === "collaboration:harness-recovery" || phase.endsWith(":gateway-retrying")) return "模型调用暂时失败，正在自动恢复原任务";
   if (phase.endsWith(":awaiting-experiment-result")) return "等待实验结果（系统监测中）";
   if (phase === "main-recovery-required") return "正在恢复 Main 的处理，恢复后会继续";
@@ -1074,7 +1081,7 @@ type AgentRuntimeConfigDraft = {
   webSearch: boolean;
 };
 
-function AgentModelEditor({
+export function AgentModelEditor({
   project,
   harnesses,
   gateways,
@@ -1682,24 +1689,9 @@ function AgentModelEditor({
                 </button>
                 <div className="agent-runtime-config-details">
                   <div className="agent-runtime-prompt-control">
-                    {role === SYSTEM_CONTROLLER_AGENT && (
-                      <div className="main-system-prompt-field">
-                        <span className="agent-prompt-label">
-                          <span>
-                            <FileText size={14} />
-                            系统固定 Prompt
-                          </span>
-                          <em>只读</em>
-                        </span>
-                        <textarea
-                          value={mainSystemPrompt || "Main 的固定调度协议将在服务连接后显示。"}
-                          readOnly
-                          rows={7}
-                          aria-label="Main 系统固定 Prompt"
-                        />
-                        <small>该协议由系统强制注入，用户不能修改。</small>
-                      </div>
-                    )}
+                    <AgentPromptPanels agentId={role} agent={{ ...recommendationAgents[role],
+                      harness: project.agents[role].harness ?? catalogDefaultHarnessId(harnesses) }}
+                      mainSystemPrompt={mainSystemPrompt} />
                     <span className="agent-prompt-label">
                       <span>
                         <FileText size={14} />
@@ -3937,23 +3929,9 @@ function mergeProjectExplainerEvent(
   return mergeExplainerMessages(current, incoming);
 }
 
-function foldProjectExplainerEvents(
-  events: ProjectExplainerEvent[]
-): ProjectExplainerEvent[] {
-  return foldExplainerMessages(events)
-    .filter(
-      (event) =>
-        !(
-          event.kind === "reasoning" &&
-          event.phase === "completed" &&
-          !event.text
-        )
-    );
-}
-
 export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
-  const [events, setEvents] = useState<ProjectExplainerEvent[]>([]);
-  const [runtimeConfig, setRuntimeConfig] = useState<ProjectExplainerRuntimeConfig>();
+  const [events, setEvents] = useState<ProjectExplainerEvent[]>(() => restoreExplainerMessages(readCachedResource<ProjectExplainerEvent[]>(`project-explainer:${projectId}:events`) ?? []));
+  const [runtimeConfig, setRuntimeConfig] = useState<ProjectExplainerRuntimeConfig | undefined>(() => readCachedResource(`project-explainer:${projectId}:config`));
   const [configDraft, setConfigDraft] = useState<ProjectExplainerConfigInput>();
   const [runtimeCatalog, setRuntimeCatalog] = useState<Pick<Catalog, "gateways" | "harnesses" | "protocols" | "defaultHarnessId">>();
   const [configLoading, setConfigLoading] = useState(true);
@@ -3980,6 +3958,7 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
   const transcriptRef = useRef<HTMLDivElement>(null);
   const historyRequestRef = useRef(0);
   const gatewayRefreshRequestRef = useRef(0);
+  const currentProjectRef = useRef(projectId); currentProjectRef.current = projectId;
 
   const loadRuntimeConfig = useCallback(async () => {
     try {
@@ -3987,6 +3966,8 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
         getProjectExplainerConfig(projectId),
         getCatalog()
       ]);
+      if (currentProjectRef.current !== projectId) return;
+      cacheResource(`project-explainer:${projectId}:config`, config);
       setRuntimeConfig(config);
       setConfigDraft({
         harness: config.harness,
@@ -4013,7 +3994,7 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
     try {
       const history = await getProjectExplainerHistory(projectId);
       if (requestId !== historyRequestRef.current) return;
-      setEvents(current => foldProjectExplainerEvents(history.active ? [...history.events, ...current] : history.events));
+      setEvents(current => cacheResource(`project-explainer:${projectId}:events`, reconcileExplainerHistory(current, history.events)));
       setRemoteActive(history.active);
       setError("");
     } catch (reason) {
@@ -4025,15 +4006,16 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
   }, [projectId]);
 
   useEffect(() => {
-    setEvents([]);
+    const cachedEvents = readCachedResource<ProjectExplainerEvent[]>(`project-explainer:${projectId}:events`);
+    setEvents(restoreExplainerMessages(cachedEvents ?? []));
     setQuestion("");
-    setHistoryLoading(true);
+    setHistoryLoading(!cachedEvents);
     setStopping(false);
     setRemoteActive(false);
     setResetting(false);
     setResetNotice("");
     setError("");
-    setRuntimeConfig(undefined);
+    setRuntimeConfig(readCachedResource(`project-explainer:${projectId}:config`));
     setConfigDraft(undefined);
     setRuntimeCatalog(undefined);
     setConfigLoading(true);
@@ -4073,7 +4055,7 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
       if (detail.source !== "floating" || detail.projectId !== projectId || !detail.event) return;
       historyRequestRef.current += 1;
       setHistoryLoading(false); setRemoteActive(!detail.event.data?.turnComplete);
-      setEvents(current => mergeProjectExplainerEvent(current, detail.event!));
+      setEvents(current => cacheResource(`project-explainer:${projectId}:events`, mergeProjectExplainerEvent(current, detail.event!), false));
     };
     const refresh = (event: Event) => {
       const detail = (event as CustomEvent).detail as { projectId?: string; source?: string; active?: boolean };
@@ -4094,9 +4076,12 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const message = question.trim();
-    if (!message || streaming || stopping || remoteActive || resetting || !runtimeConfig?.available) return;
+    if (!message || streaming || abortRef.current || stopping || remoteActive || resetting || !runtimeConfig?.available) return;
     const controller = new AbortController();
     abortRef.current = controller;
+    const pending = pendingExplainerMessage(projectId, message, events);
+    setEvents(current => cacheResource(`project-explainer:${projectId}:events`,
+      [...current.filter(event => !(event.data?.clientPending === "unconfirmed" && event.text === message)), pending]));
     stopRequestedRef.current = false;
     setStreaming(true);
     setError("");
@@ -4109,7 +4094,10 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
         message,
         (incoming) => {
           if (stopRequestedRef.current) return;
-          setEvents((current) => mergeProjectExplainerEvent(current, incoming));
+          if (currentProjectRef.current !== projectId) return;
+          setEvents((current) => cacheResource(`project-explainer:${projectId}:events`, mergeProjectExplainerEvent(current, incoming), false));
+          const action = explainerActionFromEvent(incoming);
+          if (action) notifyExplainerAction(action);
           window.dispatchEvent(new CustomEvent("openfars:explainer-event", { detail: { projectId, event: incoming, source: "panel" } }));
         },
         controller.signal
@@ -4117,8 +4105,12 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
     } catch (reason) {
       if (!controller.signal.aborted) {
         setError(reason instanceof Error ? reason.message : "项目解说失败");
+        setQuestion(current => current || message);
+        setEvents(current => current.map(event => event.id === pending.id ? { ...event, data: { ...event.data, clientPending: "unconfirmed" } } : event));
       }
     } finally {
+      if (currentProjectRef.current === projectId) setEvents(current => cacheResource(`project-explainer:${projectId}:events`, current.map(event =>
+        event.id === pending.id && event.data?.clientPending === "sending" ? { ...event, data: { ...event.data, clientPending: "unconfirmed" } } : event)));
       if (abortRef.current === controller) abortRef.current = undefined;
       setStreaming(false);
       if (!stopRequestedRef.current) setStopping(false);
@@ -4160,6 +4152,7 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
     try {
       await resetProjectExplainer(projectId);
       setEvents([]);
+      cacheResource(`project-explainer:${projectId}:events`, []);
       setQuestion("");
       setRemoteActive(false);
       setHistoryLoading(false);
@@ -4583,11 +4576,14 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
           </div>
         ) : events.length ? (
           events.filter(isExplainerConversationMessage).map((entry) => {
+            const action = explainerActionFromEvent(entry);
+            if (action) return <ExplainerActionCard key={entry.id} action={action} />;
             if (entry.kind === "user") {
               return (
                 <div className="project-explainer-message user" key={entry.id}>
                   <small>你</small>
                   <p>{entry.text}</p>
+                  {!!entry.data?.clientPending && <small>{entry.data.clientPending === "sending" ? "发送中…" : "发送未确认，请检查后重试"}</small>}
                 </div>
               );
             }
@@ -4697,8 +4693,8 @@ export function WorkspacePage({
   projectId: string;
   onBack: () => void;
 }) {
-  const [project, setProject] = useState<Project>();
-  const [projectLoading, setProjectLoading] = useState(true);
+  const [project, setProject] = useState<Project | undefined>(() => readCachedResource<Project>(`project:${projectId}`));
+  const [projectLoading, setProjectLoading] = useState(() => !readCachedResource(`project:${projectId}`));
   const [projectError, setProjectError] = useState("");
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [artifactDirectoryEntries, setArtifactDirectoryEntries] = useState<
@@ -4974,7 +4970,9 @@ export function WorkspacePage({
   }, []);
 
   useEffect(() => {
-    setProjectLoading(true);
+    const cached = readCachedResource<Project>(`project:${projectId}`);
+    setProject(current => current?.id === projectId ? current : cached);
+    setProjectLoading(!cached);
     artifactRequestRef.current += 1;
     publishedArtifactKeyRef.current = undefined;
     setArtifactsLoading(true);
@@ -5604,7 +5602,7 @@ export function WorkspacePage({
           </span>
           <div>
             <strong>
-              {project.queuedAgent
+              {project.phase === "harness-recovery-required" ? "Agent 启动失败，需要处理" : project.queuedAgent
                 ? `${agentMeta(
                     project.queuedAgent,
                     agentTemplateFor(project.orchestration, project.queuedAgent)
@@ -5612,8 +5610,9 @@ export function WorkspacePage({
                 : "科研流程运行时被中断"}
             </strong>
             <p>
-              已完成步骤、Agent 交接消息和研究产物均已保存。恢复后会重新运行中断
-              Agent，并继续原有科研流程。
+              {project.phase === "harness-recovery-required"
+                ? `自动重试已停止，原任务和会话已保留。${project.error || "请检查 Agent 配置或会话后继续。"}`
+                : "已完成步骤、Agent 交接消息和研究产物均已保存。恢复后会重新运行中断 Agent，并继续原有科研流程。"}
             </p>
             {project.interruptedAt && (
               <small>断点时间：{formatClock(project.interruptedAt)}</small>

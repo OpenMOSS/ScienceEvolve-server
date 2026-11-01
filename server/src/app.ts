@@ -1,3 +1,4 @@
+import { HarnessPromptCatalog } from "./harness-runtime/prompt-catalog.js";
 import { workflowAdjustmentPageSchema, workflowAdjustmentDetailQuerySchema } from "./workflow-adjustments.js";
 import express, {
   type ErrorRequestHandler,
@@ -141,6 +142,7 @@ export interface AppDependencies {
   gatewayStore?: GatewayStore;
   githubAccounts?: GitHubAccountStore;
   harnessCatalog?: () => Promise<PublicHarnessDescriptor[]>;
+  harnessPrompts?: Pick<HarnessPromptCatalog, "query">;
   config: Pick<AppConfig, "modelSuggestions" | "maxEventHistory">;
   harnessVersion?: string;
 }
@@ -853,9 +855,28 @@ export function createApp(dependencies: AppDependencies) {
     }
   );
 
-  app.get("/api/skills", async (_request, response, next) => {
+  const harnessPrompts = dependencies.harnessPrompts ?? new HarnessPromptCatalog();
+  app.post("/api/harness-prompts/query", async (request, response, next) => {
     try {
-      const publicSkills = (await skills.list()).map(
+      const query = z.object({
+        harness: z.string().min(1).max(64).refine(value => harnessCatalogRegistry.list().some(descriptor => descriptor.id === value), "Unknown Harness"),
+        model: z.string().min(1).max(200),
+        forceRefresh: z.boolean().optional(),
+        permission: z.enum(["workspace", "compute", "yolo"]).optional(),
+        reasoningEffort: z.string().max(40).optional(),
+        webSearch: z.boolean().optional(),
+        skills: z.array(z.string().max(300)).max(200).optional(),
+        autoSkills: z.array(z.string().max(300)).max(200).optional(),
+        mcpServers: z.array(z.string().max(300)).max(200).optional()
+      }).strict().parse(request.body);
+      response.json(await harnessPrompts.query(query));
+    } catch (error) { next(error); }
+  });
+
+  app.get("/api/skills", async (request, response, next) => {
+    try {
+      const refresh = z.enum(["true", "false"]).optional().parse(request.query.refresh);
+      const publicSkills = (await skills.list(refresh === "true")).map(
         ({ path: _path, ...skill }) => skill
       );
       const harnesses = await harnessCatalog();

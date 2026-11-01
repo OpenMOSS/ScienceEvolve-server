@@ -272,12 +272,17 @@ export class SharedProjectExplainerService<
     let project: ProjectExplainerProjectSnapshot | undefined;
     let terminal: ProjectExplainerEvent | undefined;
     try {
+      const preparationStarted = Date.now();
+      await emit({ turnId, kind: "user", text: trimmedQuestion, phase: "completed" });
+      await emit({ turnId, kind: "status", text: "正在准备对话上下文…", phase: "started", data: { stage: "preparing-context" } });
+      controller.signal.throwIfAborted();
       project = await this.host.project(projectId);
+      historyReady = true;
+      controller.signal.throwIfAborted();
       const config = await this.host.getConfig(projectId);
       if (!config.available) throw new ProjectExplainerConfigurationError(config.validationError ?? "Project Explainer 配置不可用");
       const route = await this.host.resolveRoute(projectId, config);
-      historyReady = true;
-      await emit({ turnId, kind: "user", text: trimmedQuestion, phase: "completed" });
+      controller.signal.throwIfAborted();
       const priorConversation = await this.completedConversationContext(project);
       snapshotRoot = project.stableWorkspace ? undefined : await fs.mkdtemp(path.join(project.runtimePath, "readonly-"));
       const snapshotPath = snapshotRoot ? path.join(snapshotRoot, "workspaces") : project.workspacePath;
@@ -285,6 +290,7 @@ export class SharedProjectExplainerService<
       const evidenceIndex = await buildExplainerEvidence(project.evidence, snapshotPath, priorConversation,
         (inboxPath, sources) => this.host.publishContextIndex?.({ projectId, projectPath: project!.projectPath, inboxPath, sources })
           ?? publishAgentContextIndex(inboxPath, sources));
+      controller.signal.throwIfAborted();
       const evidence = evidenceIndex?.preview ?? "No additional project evidence.";
       const inputDirectory = path.join(snapshotPath, ".scienceevolve");
       await fs.mkdir(inputDirectory, { recursive: true, mode: 0o700 });
@@ -300,6 +306,7 @@ export class SharedProjectExplainerService<
       });
       if (!project.stableWorkspace) await makeTreeReadOnly(snapshotPath);
       const persisted = await this.host.readSession(projectId, config);
+      controller.signal.throwIfAborted();
       let assistantCompleted = false;
       let lastHarnessActivity = 0;
       let protocolFailureReported = false;
@@ -309,6 +316,8 @@ export class SharedProjectExplainerService<
         text: persisted ? "继续项目解说会话…" : "启动项目解说会话…",
         phase: "started",
         data: {
+          stage: "connecting-model",
+          preparationMs: Date.now() - preparationStarted,
           sandbox: "read-only-snapshot",
           ...this.host.routeStatus(route, config),
           model: config.model,

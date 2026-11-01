@@ -87,6 +87,7 @@ import {
 } from "./agent-runtime.js";
 import {
   harnessCatalogRegistry,
+  harnessSupportsNativeProfile,
   toPublicHarnessDescriptor
 } from "./harness-runtime/registry.js";
 import { HANDOFF_CHARACTER_LIMIT } from "./content-limits.js";
@@ -335,7 +336,12 @@ export class Orchestrator {
       AgentApiWatchdogConfig,
     private readonly gatewayStore?: GatewayStore,
     private readonly collaborationRuntime?: OrchestratorCollaborationRuntime,
-    private readonly githubAccounts?: GitHubAccountStore
+    private readonly githubAccounts?: GitHubAccountStore,
+    /** Trusted host lifecycle, independent of the per-create source selection. */
+    private readonly hostLifecycle?: {
+      beforePersist?: (context: { projectId: string; gitEnabled: boolean }) => Promise<void>;
+      validateNativeCodexProfile?: (config: AgentConfig) => Promise<void>;
+    }
   ) {
     this.scheduler = new AgentScheduler(
       config.agentConcurrency ?? DEFAULT_AGENT_KIND_CAPACITY
@@ -594,7 +600,8 @@ export class Orchestrator {
       if (
         state.status === "completed" ||
         state.status === "cancelled" ||
-        state.status === "paused"
+        state.status === "paused" ||
+        state.status === "interrupted" && state.phase === "harness-recovery-required"
       ) {
         continue;
       }
@@ -951,10 +958,17 @@ export class Orchestrator {
 
   async createProject(
     input: z.input<typeof createProjectSchema>,
-    initialInputs?: { files: string[]; install: (projectId: string) => Promise<void> }
+    /** Trusted host lifecycle only; never parsed from HTTP/workflow/Agent input. */
+    hostInput?: {
+      beforePersist?: (context: { projectId: string; gitEnabled: boolean }) => Promise<void>;
+      initialInputs?: { files: string[]; install: (projectId: string) => Promise<void> };
+    } | { files: string[]; install: (projectId: string) => Promise<void> }
   ): Promise<ProjectView> {
+    // Preserve the Web host's existing positional initial-input contract.
+    const host = hostInput && "files" in hostInput ? { initialInputs: hostInput } : hostInput;
+    const creationStartedAt = performance.now();
     const parsed = createProjectSchema.parse(input);
-    if (Boolean(parsed.inputUploadId) !== Boolean(initialInputs)) {
+    if (Boolean(parsed.inputUploadId) !== Boolean(host?.initialInputs)) {
       throw new Error("上传会话与课题输入不匹配");
     }
     const selectedGitHubAccount = parsed.git.enabled && this.githubAccounts
@@ -980,13 +994,15 @@ export class Orchestrator {
       this.storage.projectDir(projectId),
       mcpDefinitions
     );
-    const availableSkills = await this.skills.list(true);
+    const skillValidationStartedAt = performance.now();
+    const availableSkills = await this.skills.forSelections(Object.values(agents).flatMap(config => [...config.skills, ...config.autoSkills]));
     for (const role of Object.keys(agents)) {
       await this.skills.resolveConfigured(availableSkills, [
         ...agents[role].skills,
         ...agents[role].autoSkills
       ], projectSkills);
     }
+    const skillValidationMs = Math.round(performance.now() - skillValidationStartedAt);
     const timestamp = nowIso();
     const firstAgent = orchestration.input.target;
     const git: ProjectGitState = parsed.git.enabled
@@ -1027,7 +1043,7 @@ export class Orchestrator {
       mcpDefinitions,
       title: parsed.title,
       requirement: parsed.requirement,
-      inputFiles: initialInputs?.files ?? [],
+      inputFiles: host?.initialInputs?.files ?? [],
       inputDescription: parsed.inputDescription ?? "",
       status: "queued",
       phase: parsed.git.enabled ? "git:initializing" : `${firstAgent}:queued`,
@@ -1102,7 +1118,12 @@ export class Orchestrator {
       agents,
       orchestration
     };
-    await initialInputs?.install(projectId);
+    // Bind host-owned initial source before any durable project/provider/Agent work.
+    await host?.beforePersist?.({ projectId, gitEnabled: parsed.git.enabled });
+    await this.hostLifecycle?.beforePersist?.({ projectId, gitEnabled: parsed.git.enabled });
+    // Bind the selected workspace first, then install original inputs before
+    // persistence/queueing so neither ordinary nor Git Agents race the copy.
+    await host?.initialInputs?.install(projectId);
     await this.storage.createProject(state);
     const runtime: RuntimeProject = {
       state,
@@ -1113,7 +1134,7 @@ export class Orchestrator {
     await this.emit(runtime, {
       type: "project.created",
       message: `Project created; orchestration input is routed to ${firstAgent}`,
-      data: { firstAgent, orchestration }
+      data: { firstAgent, orchestration, preparationMs: Math.round(performance.now() - creationStartedAt), skillValidationMs }
     });
     if (orchestration.loops?.some((loop) => loop.to === firstAgent)) {
       await this.beginLoopBatch(runtime, firstAgent, true);
@@ -1233,6 +1254,18 @@ export class Orchestrator {
         if (!capabilities.permissionPrompts.includes(config.permission)) {
           reject(definition.name, `${definition.name} Agent 选择的 ${harness} harness 不支持 ${config.permission} 权限约束`);
         }
+      }
+      if (config.nativeCodexProfileId) {
+        try {
+          if (!harnessSupportsNativeProfile(harness) || config.gatewayId || config.gatewaySnapshot || config.gatewayReasoningOption ||
+            !this.hostLifecycle?.validateNativeCodexProfile) {
+            throw new Error("Native Codex profile requires an explicit trusted host binding and cannot be mixed with a Gateway");
+          }
+          await this.hostLifecycle.validateNativeCodexProfile(config);
+        } catch (error) {
+          reject(definition.name, error instanceof Error ? error.message : "Invalid native Codex profile binding");
+        }
+        continue;
       }
       if (!gatewayStore) continue;
       if (options.preserveGatewaySnapshots && config.gatewaySnapshot) {
@@ -1466,10 +1499,11 @@ export class Orchestrator {
     state: ProjectState,
     baseVersion = !state.git?.enabled ? this.collaborationRuntime?.prepareSerialMainWorkflowAdjustment?.(state).version : undefined
   ): Promise<AgentOrchestrationProposal> {
-    const raw = await this.storage.readRoleWorkspaceFile(
+    if (!state.activeInvocationId) throw new Error("Workflow proposal requires the active invocation");
+    const raw = await this.storage.readMainAgentOrchestrationSnapshot(
       state.id,
-      SYSTEM_CONTROLLER_AGENT,
-      MAIN_AGENT_ORCHESTRATION_FILE
+      MAIN_AGENT_ORCHESTRATION_FILE,
+      state.activeInvocationId
     );
     const proposal = parseAgentOrchestrationProposal(
       raw.toString("utf8"),
@@ -1500,7 +1534,7 @@ export class Orchestrator {
       proposal.orchestration,
       { preserveGatewaySnapshots: true }
     );
-    const availableSkills = await this.skills.list(true);
+    const availableSkills = await this.skills.forSelections(Object.values(proposal.agents).flatMap(config => [...config.skills, ...config.autoSkills]));
     const projectSkills = await materializeProjectSkills(
       this.storage.projectDir(state.id),
       proposal.skillDefinitions
@@ -2707,7 +2741,7 @@ export class Orchestrator {
     if (Object.keys(requested).length === 0) {
       throw new Error("At least one agent configuration must be provided");
     }
-    const availableSkills = await this.skills.list(true);
+    const availableSkills = await this.skills.forSelections(Object.values(requested).flatMap(config => [...(config?.skills ?? []), ...(config?.autoSkills ?? [])]));
     const projectSkills = await materializeProjectSkills(
       this.storage.projectDir(projectId),
       runtime.state.skillDefinitions
@@ -3594,7 +3628,13 @@ export class Orchestrator {
         }
       });
 
-      const allSkills = await this.skills.list(true);
+      const skillPreparationStartedAt = performance.now();
+      state.phase = `${agent}:preparing-skills`;
+      await this.emit(runtime, { type: "agent.trace", agent, message: "正在准备选中的 Skills…",
+        data: { invocationId, stage: "preparing-skills", selectedSkills: state.agents[agent].skills.length + state.agents[agent].autoSkills.length } });
+      const allSkills = agent === "main" && state.orchestration.allowMainReconfiguration
+        ? await this.skills.list()
+        : await this.skills.forSelections([...state.agents[agent].skills, ...state.agents[agent].autoSkills]);
       const projectSkills = await materializeProjectSkills(
         this.storage.projectDir(state.id),
         state.skillDefinitions
@@ -3609,6 +3649,9 @@ export class Orchestrator {
         state.agents[agent].autoSkills,
         projectSkills
       );
+      state.phase = `${agent}:preparing-context`;
+      await this.emit(runtime, { type: "agent.trace", agent, message: "Skills 准备完成，正在准备调用上下文…",
+        data: { invocationId, stage: "preparing-context", skillPreparationMs: Math.round(performance.now() - skillPreparationStartedAt) } });
       const projectPath = this.storage.projectDir(state.id);
       const workspacePath = await this.storage.roleWorkspace(
         state.id,
@@ -3628,12 +3671,13 @@ export class Orchestrator {
           state.pendingMainDecision.capabilities = state.mainCapabilities;
         }
       }
+      let workflowAuthoringPath: string | undefined;
       if (
         kind === "main" &&
         mainCanReconfigure(state)
       ) {
         const baseVersion = !state.git?.enabled ? this.collaborationRuntime?.prepareSerialMainWorkflowAdjustment?.(state).version : undefined;
-        await this.storage.writeMainAgentOrchestrationSnapshot(
+        const proposalPath = await this.storage.writeMainAgentOrchestrationSnapshot(
           state.id,
           MAIN_AGENT_ORCHESTRATION_FILE,
           mainAgentOrchestrationDocument(
@@ -3645,8 +3689,10 @@ export class Orchestrator {
             baseVersion
           ),
           baseVersion ? () => this.collaborationRuntime!.isSerialWorkflowConfigurationCurrent?.(state, baseVersion) ??
-            sameWorkflowConfigurationVersion(this.collaborationRuntime!.prepareSerialMainWorkflowAdjustment!(state).version, baseVersion) : undefined
+            sameWorkflowConfigurationVersion(this.collaborationRuntime!.prepareSerialMainWorkflowAdjustment!(state).version, baseVersion) : undefined,
+          invocationId
         );
+        if (proposalPath !== path.join(workspacePath, MAIN_AGENT_ORCHESTRATION_FILE)) workflowAuthoringPath = proposalPath;
       }
       const mainContextTargetSeq =
         kind === "main" ? state.eventSeq : undefined;
@@ -3685,7 +3731,9 @@ export class Orchestrator {
         skillPaths,
         autoSkillPaths,
         projectUserInputs
-      );
+      ) + (workflowAuthoringPath
+        ? `\n\n## Workflow proposal location\nEdit only ${workflowAuthoringPath} for reconfiguration. The apply_workflow path "workflow.json" is a logical alias for this proposal; do not edit the user's root workflow.json.\n`
+        : "");
       const inboxPath = await this.storage.writeInbox(
         state,
         agent,
@@ -3711,6 +3759,7 @@ export class Orchestrator {
         ? state.mainCapabilities ?? buildMainCapabilitySnapshot(state)
         : undefined;
       const control: ControlMcpRequest = {
+        ...(workflowAuthoringPath ? { workflowAuthoringPath } : {}),
         stagingPath: path.join(runtimePath, "control-actions.json"),
         capability: controlCapability,
         capabilityHash: hashControlCapability(controlCapability),
@@ -4001,7 +4050,7 @@ export class Orchestrator {
         onHarnessAttemptReset: async (attempt) => {
           const replacedAttemptPerformance = performanceTracker.finish("incomplete");
           recordTerminalPerformance(state, replacedAttemptPerformance, false);
-          await onTrace("status", "Harness attempt replaced for automatic recovery", {
+          await onTrace("status", "Harness attempt ended; continuing the original task", {
             diagnostic: true,
             invocationId,
             attempt: replacedAttemptPerformance.attempt,
@@ -4551,6 +4600,7 @@ export class Orchestrator {
         agent,
         invocationId,
         markdown: handoffText,
+        body: handoff ?? "The Agent completed without a textual handoff.",
         excerpt: handoffExcerpt(handoff),
         updatedAt: nowIso()
       };
@@ -4643,6 +4693,7 @@ export class Orchestrator {
         agent,
         invocationId,
         markdown: handoffText,
+        body: handoff ?? "The Agent completed without a textual handoff.",
         excerpt: handoffExcerpt(handoff),
         updatedAt: nowIso()
       };
@@ -4735,7 +4786,7 @@ export class Orchestrator {
       "workflow-reconfiguration-rejected",
       candidates,
       previous?.allowAnyAgent ?? false,
-      `The proposed Workflow was rejected and no state was changed. Main must preserve and correct its workflow.json draft${state.git?.enabled ? "" : ` against the current reference at ${MAIN_AGENT_ORCHESTRATION_CURRENT_FILE}`} before retrying. Validation error: ${safeError}`
+      `The proposed Workflow was rejected and no state was changed. Main must preserve and correct its workflow.json draft${state.git?.enabled ? "" : ` against the current reference at ${MAIN_AGENT_ORCHESTRATION_CURRENT_FILE} relative to the directory containing its authoring proposal`} before retrying. Validation error: ${safeError}`
     );
   }
 
@@ -5133,6 +5184,7 @@ export class Orchestrator {
       agent: SYSTEM_CONTROLLER_AGENT,
       invocationId,
       markdown: mainHandoff,
+        body: handoff ?? "Agent orchestration committed.",
       excerpt: handoffExcerpt(handoff ?? mainHandoff),
       updatedAt: nowIso()
     };
@@ -5402,6 +5454,7 @@ export class Orchestrator {
           agent,
           invocationId,
           markdown: mainHandoff,
+        body: handoff ?? "Main completed without recording an orchestration decision.",
           excerpt: handoffExcerpt(handoff ?? mainHandoff),
           updatedAt: nowIso()
         };
@@ -5516,6 +5569,7 @@ export class Orchestrator {
         agent,
         invocationId,
         markdown: mainHandoff,
+        body: handoff ?? decision.message,
         excerpt: handoffExcerpt(handoff ?? mainHandoff),
         updatedAt: nowIso()
       };
@@ -5757,6 +5811,7 @@ export class Orchestrator {
       agent,
       invocationId,
       markdown: handoffText,
+        body: handoff ?? "The Agent completed without a textual handoff.",
       excerpt: handoffExcerpt(handoff ?? handoffText),
       updatedAt: nowIso()
     };
@@ -6489,20 +6544,23 @@ export class Orchestrator {
     }
     if (harnessError && !harnessError.retryable) {
       state.retryAt = undefined;
-      state.status = "retrying";
+      state.status = "interrupted";
       state.phase = "harness-recovery-required";
+      state.interruptedAt = nowIso();
+      finishWorkflowRecovery(state);
       await this.emit(runtime, {
         type: "agent.failed",
         level: "error",
         agent,
-        message: `${agent} failed with a non-retryable Harness error; the original task will be rechecked automatically`,
+        message: `${agent} failed with a non-retryable Harness error; fix the reported problem before explicitly continuing the retained task`,
         data: {
           error: record.error,
           errorType: record.errorType,
           invocationId,
           tracePath,
           failureCount,
-          automaticRetry: true,
+          automaticRetry: false,
+          userActionRequired: true,
           harnessRecoveryRequired: true,
           ...failureMetadata
         }
@@ -6998,7 +7056,8 @@ function naturalHandoffMarkdown(
   invocationId: string,
   handoff: string
 ): string {
-  const bounded = handoff.trim().slice(0, HANDOFF_CHARACTER_LIMIT);
+  if (handoff.length > HANDOFF_CHARACTER_LIMIT) throw new Error("Handoff exceeds the communication character limit");
+  const bounded = handoff;
   return `---\nproject_id: ${state.id}\ninvocation_id: ${invocationId}\nagent: ${agent}\nkind: natural_language_handoff\nfrom: ${agent}\n---\n\n# ${agent} handoff\n\n${bounded}\n`;
 }
 

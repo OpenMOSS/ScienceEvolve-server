@@ -167,7 +167,8 @@ describe("workflow loop groups", () => {
       async (request) => {
         if (request.agent !== "main") {
           const inbox = await fs.readFile(request.inboxPath, "utf8");
-          expect(inbox).toContain("maxIterations=2");
+          expect(inbox).not.toContain("maxIterations=2");
+          expect(request.project.orchestration.loops?.[0].maxIterations).toBe(2);
           return { handoff: `${request.agent} recorded evidence.` };
         }
         mainDecisions += 1;

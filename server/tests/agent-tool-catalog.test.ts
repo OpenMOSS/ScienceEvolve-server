@@ -58,8 +58,9 @@ describe("Agent resource discovery", () => {
     const prepared = await prepareWorkflowContext(request, inputs);
     const prompt = compileWorkflowPrompt(request, prepared, policy);
     const directoryHint = "Available Agent Skill/MCP directory: use the agent-tool-catalog sources in the on-demand context index.";
-    expect(prompt).toContain(directoryHint);
-    expect(prompt).toContain(`Context index: ${prepared.contextIndex!.indexPath}`);
+    expect(prompt).not.toContain(directoryHint);
+    expect(prompt).toContain(`项目入口：${root}`);
+    expect(prompt).not.toContain(`Context index: ${prepared.contextIndex!.indexPath}`);
     expect(prompt).not.toContain(JSON.stringify(catalog));
     const directory = JSON.parse(await fs.readFile(prepared.contextIndex!.indexPath, "utf8"));
     const records = async (key: string) => {

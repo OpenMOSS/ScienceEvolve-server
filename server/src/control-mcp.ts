@@ -1,4 +1,4 @@
-import { promises as fs } from "node:fs";
+import { constants as fsConstants, promises as fs } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import readline from "node:readline";
@@ -29,6 +29,10 @@ const publishedArtifactManifestPath =
   process.env[PUBLISHED_ARTIFACT_MANIFEST_ENV];
 
 const APPEND_FILE_TOOL = "scienceevolve_append_file";
+const READ_INVOCATION_INPUT_TOOL = "scienceevolve_read_invocation_input";
+const invocationId = process.env.SCIENCEEVOLVE_INVOCATION_ID;
+const invocationInputAvailable = Boolean(appendRoot && agentName !== "probe" &&
+  invocationId && /^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/.test(invocationId));
 const READ_SMOKE_SENTINEL_TOOL = "scienceevolve_read_smoke_sentinel";
 const SMOKE_SENTINEL_FILENAME = "openfars-smoke-sentinel.txt";
 const MAX_SMOKE_SENTINEL_BYTES = 4_096;
@@ -261,6 +265,43 @@ function isUtf8Boundary(buffer: Buffer, offset: number): boolean {
     (buffer[offset]! & 0xc0) !== 0x80;
 }
 
+// Exactly two server-staged inputs. This is not a general filesystem reader:
+// no model-supplied path, other invocation, native profile or host directory.
+async function readInvocationInput(input: "inbox" | "memory", offset: number, limit: number,
+  isCancelled: () => boolean): Promise<Record<string, unknown>> {
+  assertNotCancelled(isCancelled);
+  if (!invocationInputAvailable) throw new Error("invocation inputs are unavailable");
+  const root = await fs.realpath(appendRoot!);
+  const parts = input === "inbox" ? [".scienceevolve", "inbox", `${invocationId}.md`] : ["Memory.md"];
+  let candidate = root;
+  for (const [index, part] of parts.entries()) {
+    candidate = path.join(candidate, part);
+    const stat = await fs.lstat(candidate);
+    if (stat.isSymbolicLink() || (index < parts.length - 1 ? !stat.isDirectory() : !stat.isFile()) ||
+        await fs.realpath(candidate) !== candidate) throw new Error("invocation input must not traverse links");
+  }
+  const declared = await fs.lstat(candidate);
+  const file = await fs.open(candidate, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+  try {
+    const before = await file.stat();
+    if (!before.isFile() || before.nlink !== 1 || before.dev !== declared.dev || before.ino !== declared.ino ||
+        before.size > 32 * 1024 * 1024 || offset > before.size) throw new Error("invalid invocation input identity or size");
+    const buffer = Buffer.alloc(Math.min(limit + 4, before.size - offset));
+    const { bytesRead } = await file.read(buffer, 0, buffer.length, offset);
+    const bytes = buffer.subarray(0, bytesRead);
+    if (!isUtf8Boundary(bytes, 0) || (bytes.length && (bytes[0]! & 0xc0) === 0x80)) throw new Error("offset must be a UTF-8 boundary");
+    const end = nextUtf8Boundary(bytes, Math.min(limit, bytes.length));
+    if (end === 0 && offset < before.size) throw new Error("limit must include a complete UTF-8 character");
+    const after = await file.stat(), current = await fs.lstat(candidate);
+    if (after.size !== before.size || after.mtimeMs !== before.mtimeMs || current.isSymbolicLink() ||
+        current.dev !== before.dev || current.ino !== before.ino || current.nlink !== 1 ||
+        await fs.realpath(candidate) !== candidate) throw new Error("invocation input changed during read");
+    assertNotCancelled(isCancelled);
+    return { input, invocationId, totalSize: before.size, offset, length: end, nextOffset: offset + end,
+      hasMore: offset + end < before.size, encoding: "utf8", content: bytes.subarray(0, end).toString("utf8") };
+  } finally { await file.close(); }
+}
+
 async function readPublishedArtifact(
   artifactId: string,
   offset: number,
@@ -389,6 +430,14 @@ async function handle(
           }
         }
       }
+    }] : []), ...(invocationInputAvailable ? [{
+      name: READ_INVOCATION_INPUT_TOOL,
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+      description: "Read this invocation's server-staged Inbox or persistent Memory.md in bounded UTF-8 chunks. No filesystem path is accepted; use nextOffset until hasMore=false.",
+      inputSchema: { type: "object", additionalProperties: false, required: ["input"], properties: {
+        input: { enum: ["inbox", "memory"] }, offset: { type: "integer", minimum: 0, default: 0 },
+        limit: { type: "integer", minimum: 1, maximum: MAX_PUBLISHED_ARTIFACT_CHUNK_BYTES, default: 16_384 }
+      } }
     }] : []), ...(agentName === "probe" ? [{
       name: READ_SMOKE_SENTINEL_TOOL,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
@@ -413,6 +462,24 @@ async function handle(
     params.arguments && typeof params.arguments === "object"
       ? (params.arguments as Record<string, unknown>)
       : {};
+  if (name === READ_INVOCATION_INPUT_TOOL) {
+    if (!invocationInputAvailable) { error(request.id, -32601, `Unknown tool: ${name}`); return; }
+    const offset = args.offset ?? 0, limit = args.limit ?? 16_384;
+    if (Object.keys(args).some((key) => !["input", "offset", "limit"].includes(key)) ||
+        !["inbox", "memory"].includes(args.input as string) || !Number.isSafeInteger(offset) ||
+        (offset as number) < 0 || !Number.isSafeInteger(limit) || (limit as number) < 1 ||
+        (limit as number) > MAX_PUBLISHED_ARTIFACT_CHUNK_BYTES) {
+      error(request.id, -32602, "input, offset, or limit is invalid"); return;
+    }
+    try {
+      const result = await readInvocationInput(args.input as "inbox" | "memory", offset as number, limit as number, isCancelled);
+      response(request.id, { content: [{ type: "text", text: JSON.stringify(result) }] });
+    } catch (caught) {
+      error(request.id, caught instanceof RequestCancelledError ? -32800 : -32000,
+        caught instanceof RequestCancelledError ? "Request cancelled" : "Unable to read invocation input safely");
+    }
+    return;
+  }
   if (name === READ_PUBLISHED_ARTIFACT_TOOL) {
     const artifactId = typeof args.artifactId === "string"
       ? args.artifactId.trim()

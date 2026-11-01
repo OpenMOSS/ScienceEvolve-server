@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { readCachedResource } from "../resource-cache";
 import {
   Activity,
   ArrowLeft,
@@ -60,11 +61,12 @@ function projectStatusLabel(status: Project["status"]): string {
 }
 
 export function GitHubAccountManagementPage({ onBack }: { onBack: () => void }) {
-  const [accounts, setAccounts] = useState<GitHubAccountRecord[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [cachedAccounts] = useState(() => readCachedResource<Awaited<ReturnType<typeof getGitHubAccounts>>>("github-accounts"));
+  const [accounts, setAccounts] = useState<GitHubAccountRecord[]>(cachedAccounts?.accounts ?? []);
+  const [projects, setProjects] = useState<Project[]>(() => readCachedResource<Project[]>("projects:true") ?? []);
   const [repositoryChecks, setRepositoryChecks] = useState<Record<string, RepositoryCheck>>({});
-  const [oauthConfigured, setOauthConfigured] = useState<boolean>();
-  const [loading, setLoading] = useState(true);
+  const [oauthConfigured, setOauthConfigured] = useState<boolean | undefined>(cachedAccounts?.oauthConfigured);
+  const [loading, setLoading] = useState(!cachedAccounts);
   const [repositoriesLoading, setRepositoriesLoading] = useState(true);
   const [repositoriesError, setRepositoriesError] = useState("");
   const [busyId, setBusyId] = useState("");
@@ -80,10 +82,8 @@ export function GitHubAccountManagementPage({ onBack }: { onBack: () => void }) 
   }, []);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setOauthConfigured(undefined);
-    setRepositoriesLoading(true);
-    setRepositoryChecks({});
+    setLoading(!readCachedResource("github-accounts"));
+    setRepositoriesLoading(!readCachedResource("projects:true"));
     const projectsRequest = getProjects(true)
       .then(async (items) => {
         setProjects(items);

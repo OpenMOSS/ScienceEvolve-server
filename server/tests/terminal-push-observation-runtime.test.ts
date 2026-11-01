@@ -122,7 +122,7 @@ async function fixture(mode: Mode = "confirmed", twoJournals = false, hierarchy?
   const provider = { observeRef: vi.fn(async (_owner: string, _name: string, ref: string) => ({ owner: repository.owner, repository: repository.name,
     ref, status: !remoteAvailable && (hierarchy ? ref === "executions/old-execution" : ref !== "main") ? "missing" as const : "present" as const,
     ...(!remoteAvailable && (hierarchy ? ref === "executions/old-execution" : ref !== "main") ? {} : { sha: HEAD }), observedAt: new Date().toISOString() })) };
-  const catalog = { list: vi.fn(async () => []), resolveConfigured: vi.fn(async () => []) };
+  const catalog = { list: vi.fn(async () => []), forSelections: vi.fn(async () => []), resolveConfigured: vi.fn(async () => []) };
   let latestCoordinator!: CollaborationRuntimeCoordinator;
   const adapter = { async open(input: CollaborationResidentOpenInput) {
     const database = (latestCoordinator as unknown as {database():CollaborationStateDatabase}).database();
@@ -177,8 +177,9 @@ async function fixture(mode: Mode = "confirmed", twoJournals = false, hierarchy?
           const scope = input.controlScope!;
           if (scope.role !== "scoped-leader" && scope.role !== "scoped-main") throw new Error("Receipt hierarchy must use the existing manager scopes");
           if (!scope.failedArrivalRequestIds.length) throw new Error("Controlled receipt scene does not execute later group integration");
-          expect(turn.prompt).toContain("terminalPushObservationOperations");
-          expect(turn.prompt).toContain("already successful business task");
+          expect(JSON.stringify(input.request.contextSources)).toContain("terminalPushObservationOperations");
+          expect(turn.prompt).not.toContain("terminalPushObservationOperations");
+          expect(JSON.stringify(input.request.contextSources)).toContain("already successful business task");
           const fresh = await input.turnRequestFactory({baseRequest:input.request,turn});
           const authority = await input.controlAuthorityFactory!({request:fresh.request,turn});
           const service = new ControlActionService({projectId:PROJECT,agent:input.request.agent,invocationId:turn.invocationId,
@@ -1003,8 +1004,8 @@ describe("production terminal receipt scheduling", () => {
     else expect(current.remoteFact).toMatchObject({ owner: "fixture", repository: "retained", ref: "executions/old-execution", status: "present", sha: HEAD });
     if (mode !== "confirmed") {
       const prompt = await fs.readFile(f.mainInputs[0],"utf8");
-      expect(prompt).toContain("terminalPushObservationOperations");
-      expect(prompt).toContain("immutable reservation snapshot");
+      expect(prompt).not.toContain("terminalPushObservationOperations");
+      expect(prompt).not.toContain("immutable reservation snapshot");
       expect(prompt).not.toContain(JSON.stringify(current));
       expect(JSON.stringify(f.mainContextSources[0])).toContain(JSON.stringify(current));
     }
@@ -1097,7 +1098,7 @@ describe("production terminal receipt scheduling", () => {
     expect(f.state.lastError).toBeUndefined(); expect(f.state.userIntervention?.status).toBe("pending");
     expect(f.nativeOpens).toHaveLength(1);
     expect(f.database.recordedGitOperation(PROJECT,"original-push")!.status).toBe("uncertain");
-    expect(await fs.readFile(f.mainInputs[0],"utf8")).toContain("Original Agent receipt coordination is required");
+    expect(await fs.readFile(f.mainInputs[0],"utf8")).toContain("requires coordination; its original completion and finite budget are retained");
     expect(f.state.userIntervention!.message).toBe("Please decide how to proceed");
     expect(f.database.terminalPushObservationRepairCount(PROJECT,"old-execution")).toBe(1);
     const facts = f.database.authoritativeWorkflowFiles(PROJECT).currentState as {terminalPushObservationIssues: Array<{operationId:string;result:{output:string}}>};
@@ -1119,7 +1120,7 @@ describe("production terminal receipt scheduling", () => {
     expect(f.database.recordedGitOperation(PROJECT,"original-push")!.status).toBe("finalized");
     expect(f.database.terminalPushObservationTurns(PROJECT).every(turn => turn.status === "stopped" && !turn.completion)).toBe(true);
     expect(f.database.terminalPushObservationRepairCount(PROJECT,"old-execution")).toBe(2);
-    expect(await fs.readFile(f.mainInputs[0],"utf8")).toContain("Original Agent receipt coordination is required");
+    expect(await fs.readFile(f.mainInputs[0],"utf8")).toContain("requires coordination; its original completion and finite budget are retained");
   });
 
   it("a new writer restores the accepted snapshot, proves the orphan stopped, and continues the same original session within the old budget", async () => {

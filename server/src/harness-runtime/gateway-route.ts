@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import path from "node:path";
 import type { AgentProtocol } from "../agent-runtime.js";
 import {
   startProtocolProxy,
@@ -30,6 +32,51 @@ export interface InvocationGatewayRoute {
   resetFailure(): void;
   setInjectionBudget?(prompt: string, extra?: string): void;
   close(): Promise<void>;
+}
+
+/** Host-owned profile authority, not a provider endpoint or bearer token. */
+export interface NativeCodexProfileBinding {
+  nativeCodexProfileHome: string;
+  authorityId: string;
+}
+export type ModelRouteBinding = { baseUrl: string; token: string } | NativeCodexProfileBinding;
+export type AdapterModelRoute = (Pick<InvocationGatewayRoute, "baseUrl" | "token" | "sourceProtocol" | "targetProtocol">) | NativeCodexProfileBinding;
+export interface InvocationNativeCodexRoute extends NativeCodexProfileBinding {
+  /** Native profiles have neither a proxy secret nor a proxy injection hook. */
+  token?: never;
+  setInjectionBudget?: never;
+  getFailure(): undefined;
+  resetFailure(): void;
+  close(): Promise<void>;
+}
+export type InvocationModelRoute = InvocationGatewayRoute | InvocationNativeCodexRoute;
+export type NativeCodexProfileResolver = (profileId: string) => Promise<string>;
+
+export async function openInvocationModelRoute(
+  descriptor: HarnessDescriptor, request: AgentRunRequest, onTrace: TraceSink, signal: AbortSignal,
+  options: GatewayRouteOptions, resolveNativeCodexProfile?: NativeCodexProfileResolver
+): Promise<InvocationModelRoute> {
+  const config = request.project.agents[request.agent];
+  if (!config.nativeCodexProfileId) return openInvocationGatewayRoute(descriptor, request, onTrace, signal, options);
+  signal.throwIfAborted();
+  if (descriptor.route?.nativeProfileAuth !== true || request.purpose === "probe" || request.purpose === "explainer" ||
+    config.gatewayId || config.gatewaySnapshot || !resolveNativeCodexProfile) {
+    throw new HarnessRuntimeError("HARNESS_CONFIGURATION_INVALID", "Invalid native Codex profile route", { harnessId: descriptor.id });
+  }
+  const nativeCodexProfileHome = await resolveNativeCodexProfile(config.nativeCodexProfileId);
+  if (!path.isAbsolute(nativeCodexProfileHome)) throw new Error("Native Codex profile home must be absolute");
+  signal.throwIfAborted();
+  await onTrace("status", "Native Codex profile route ready (Codex-owned authentication)", {
+    diagnostic: true, diagnosticSource: "runtime", harness: descriptor.id, routeMode: "native-profile"
+  });
+  return { nativeCodexProfileHome, authorityId: randomUUID(), getFailure: () => undefined,
+    resetFailure() {}, async close() {} };
+}
+
+export function modelRouteBinding(route: InvocationModelRoute): ModelRouteBinding {
+  return "nativeCodexProfileHome" in route
+    ? { nativeCodexProfileHome: route.nativeCodexProfileHome, authorityId: route.authorityId }
+    : { baseUrl: route.baseUrl, token: route.token };
 }
 
 /** Every Harness, including same-protocol invocations, crosses this usage boundary. */

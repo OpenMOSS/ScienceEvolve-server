@@ -1,7 +1,7 @@
 import type { CollaborationGitOperationStore, GitHubCredentialResolver } from "./contracts.js";
 import { CollaborationGitFacade } from "./facade.js";
 import { GitHubUserProvider } from "./github-provider.js";
-import { LocalCollaborationGitService } from "./local-git.js";
+import { LocalCollaborationGitService, type LocalGitServiceOptions } from "./local-git.js";
 import { gitCredentialHelperResolver } from "./credential-helper.js";
 import { ExecFileGitCommandRunner } from "./command-runner.js";
 
@@ -11,6 +11,7 @@ export interface CollaborationGitFactoryOptions {
   operationStore: CollaborationGitOperationStore;
   /** Only scoped v3 projects opt in; legacy projects keep execution worktrees. */
   worktreeMode?: "execution" | "agent";
+  initialTree?: LocalGitServiceOptions["initialTree"];
   credentialResolver?: GitHubCredentialResolver;
   expectedIdentity?: { id: number; login: string };
   fetch?: typeof globalThis.fetch;
@@ -28,6 +29,7 @@ export function createCollaborationGitFacade(
     operationStore: options.operationStore,
     runner: new ExecFileGitCommandRunner({ credentialResolver }),
     ...(options.worktreeMode ? { worktreeMode: options.worktreeMode } : {}),
+    ...(options.initialTree ? { initialTree: options.initialTree } : {}),
     ...(options.now ? { now: options.now } : {})
   });
   const provider = new GitHubUserProvider({

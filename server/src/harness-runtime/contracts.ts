@@ -11,7 +11,7 @@ import type {
 } from "../types.js";
 import type { InvocationProcessHost } from "./process-host.js";
 import type { OfficialEventMapper } from "./official-event-bridge.js";
-import type { BuiltinResidentProtocol, ResidentRecoveryStrategy } from "./resident-native-driver.js";
+import type { ResidentProtocol, ResidentRecoveryStrategy } from "./resident-native-driver.js";
 import type { NativeInputHistoryEvidence, NativeInputHistoryRequest } from "./native-input-history.js";
 
 /** Harness identifiers are catalog data, not a closed TypeScript union. */
@@ -61,6 +61,8 @@ export interface HarnessDescriptor {
     /** Expose the invocation Gateway's authenticated Web MCP to this Adapter. */
     webSearchMcp?: boolean;
     requireMainControlTools?: boolean;
+    /** Supports a trusted host profile instead of an invocation Gateway. */
+    nativeProfileAuth?: boolean;
   };
 }
 
@@ -380,12 +382,7 @@ export interface HarnessAdapterContext {
   processHost: InvocationProcessHost;
   /** Read-only progress for diagnostics; only ProcessHost can consume it. */
   recoveryBudget: Pick<InvocationRecoveryBudget, "maxAttempts" | "attemptsStarted">;
-  route: {
-    baseUrl: string;
-    token: string;
-    sourceProtocol: HarnessProtocol;
-    targetProtocol: HarnessProtocol;
-  };
+  route: import("./gateway-route.js").AdapterModelRoute;
 }
 
 export interface ExplainerInvocationRequest {
@@ -431,10 +428,13 @@ export interface HarnessAdapter {
   readonly descriptor: HarnessDescriptor;
   /** Native execution-scoped protocol; launch remains owned by the trusted resident host. */
   readonly resident?: {
-    protocol: BuiltinResidentProtocol;
+    protocol: ResidentProtocol;
     recoveryStrategy: ResidentRecoveryStrategy;
     /** Adapter-owned translation for raw frames emitted by the resident protocol. */
     createOfficialEventMapper(): OfficialEventMapper;
+    /** Code-level extension; the common host still validates authority and the resulting launch plan. */
+    buildLaunch?(input: import("./resident-lease.js").ResidentAdapterLaunchRequest):
+      Promise<import("./resident-lease.js").ResidentAdapterLaunchDefinition>;
   };
   /** CLI compatibility only; the workspace mirror remains the canonical input. */
   readonly requiresInlineInbox?: boolean;

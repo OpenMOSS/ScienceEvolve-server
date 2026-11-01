@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach } from "vitest";
+import { clearResourceCache } from "../resource-cache";
 
 // jsdom does not currently provide PointerEvent. Canvas interaction tests
 // need the pointer id and mouse coordinates that real browsers expose.
@@ -39,4 +40,5 @@ if (typeof window.PointerEvent === "undefined") {
 
 afterEach(() => {
   cleanup();
+  clearResourceCache();
 });

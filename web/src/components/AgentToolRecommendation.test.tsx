@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getAgentToolRecommendationCatalog, getRecommendationExplainerConfig, recommendAgentTools,
+import { getAgentToolRecommendationCatalog, getCatalog, getHarnessPrompt, getRecommendationExplainerConfig, recommendAgentTools,
   type AgentToolRecommendationResponse, type ExplainerRecommendationConfiguration, type ConfigRecommendationInput } from "../api";
 import { DEFAULT_AGENTS, DEFAULT_AGENT_ORCHESTRATION } from "../lib";
 import { AgentToolRecommendation } from "./AgentToolRecommendation";
@@ -11,13 +11,19 @@ import { ScopedWorkflowEditor } from "./workflow-canvas/ScopedWorkflowEditor";
 import { addScopedGroup, upgradeLegacyGroups } from "./workflow-canvas/core/scoped-workflow";
 
 vi.mock("../api", () => ({ getAgentToolRecommendationCatalog: vi.fn(), getRecommendationExplainerConfig: vi.fn(), recommendAgentTools: vi.fn(),
-  updateRecommendationExplainerConfig: vi.fn(), updateProjectExplainerConfig: vi.fn() }));
+  getCatalog: vi.fn(), getHarnessPrompt: vi.fn(), updateRecommendationExplainerConfig: vi.fn(), updateProjectExplainerConfig: vi.fn() }));
 const initial = (): ConfigRecommendationInput => ({ title: "研究任务", requirement: "根据材料完成研究与独立验证", agents: { ...structuredClone(DEFAULT_AGENTS), idea: { ...structuredClone(DEFAULT_AGENTS.idea), instructions: "读取材料并制定研究方案" } }, orchestration: structuredClone(DEFAULT_AGENT_ORCHESTRATION) });
 let config: ExplainerRecommendationConfiguration;
 const catalogFingerprint = "c".repeat(64);
 describe("Agent tool recommendation previews", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(getCatalog).mockResolvedValue({ skills: [], models: ["shared-model"], agentPrompts: {}, defaultHarnessId: "codex" });
+    vi.mocked(getHarnessPrompt).mockImplementation(async agent => ({
+      harness: agent.harness ?? "codex", model: agent.model, status: "source-unavailable", sourceType: "unavailable",
+      source: "recommendation test fixture", scope: "base-default", collectedAt: "2026-10-28T00:00:00Z",
+      configurationDigest: "d".repeat(64), reason: "No native prompt in recommendation fixture"
+    }));
     config = { fingerprint: "e".repeat(64), config: { schemaVersion: 2, harness: "codex", model: "shared-model", nativeProtocol: "responses", gatewayProtocol: "responses",
       reasoningEffort: "high", revision: 1, updatedAt: "", available: true, routeMode: "direct" } };
     vi.mocked(getRecommendationExplainerConfig).mockImplementation(async () => structuredClone(config));

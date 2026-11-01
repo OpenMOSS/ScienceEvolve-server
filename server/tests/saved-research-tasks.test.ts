@@ -41,6 +41,25 @@ afterEach(async () => {
 });
 
 describe("SavedResearchTaskStore", () => {
+  it("retains deletion receipts across later writes and rejects a concurrent stale batch without partially deleting", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "scienceevolve-saved-deletion-")); temporaryRoots.push(root);
+    const store = new SavedResearchTaskStore(root), orchestration = cloneAgentOrchestrationTemplate();
+    const input = { title: "A", requirement: "批量删除应原子校验版本并保留跨重启回执。", orchestration, agents: mergeAgentConfigs(undefined, orchestration) };
+    const a = await store.create(input), b = await store.create({ ...input, title: "B" });
+    const deletion = { operationId: "atomic-draft-deletion-test", tasks: [a, b].map(task => ({ taskId: task.id, expectedUpdatedAt: task.updatedAt })) };
+    const results = await Promise.allSettled([store.update(b.id, { ...input, title: "B edited" }, b.updatedAt), store.deleteMany(deletion)]);
+    expect(results[0]!.status).toBe("fulfilled"); expect(results[1]).toMatchObject({ status: "rejected", reason: { status: 409 } });
+    expect(await store.list()).toHaveLength(2);
+    const updatedB = (await store.get(b.id))!; deletion.tasks[1]!.expectedUpdatedAt = updatedB.updatedAt;
+    const receipt = await store.deleteMany(deletion);
+    const c = await store.create({ ...input, title: "C" });
+    await store.update(c.id, { ...input, title: "C edited" }, c.updatedAt); await store.delete(c.id);
+    const restarted = new SavedResearchTaskStore(root);
+    expect(await restarted.deleteMany(deletion)).toEqual(receipt);
+    expect(await restarted.list()).toHaveLength(0);
+    await expect(restarted.create(input, a.id)).rejects.toThrow("已被删除");
+  });
+
   it.each([2, 3] as const)("round-trips a v%s task with more than fifty Agents and their configurations", async schemaVersion => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "scienceevolve-large-team-")); temporaryRoots.push(root);
     const store = new SavedResearchTaskStore(root);

@@ -122,6 +122,7 @@ import {
 } from "../types";
 import { workflowOuterNodes } from "../components/workflow-canvas/core/workflow-nodes";
 import { cacheProjectOverview, readCachedProjectOverview } from "../project-overview-cache";
+import { readCachedResource } from "../resource-cache";
 import {
   cacheProjectList,
   cacheProjectQueue,
@@ -1347,10 +1348,11 @@ export function ProjectListPage({
   const [quickNewConfigDialogOpen, setQuickNewConfigDialogOpen] = useState(false);
   const [quickNewConfigName, setQuickNewConfigName] = useState("");
   const [quickNewConfigBlank, setQuickNewConfigBlank] = useState(false);
-  const [configPresets, setConfigPresets] = useState<AgentConfigPreset[]>([]);
-  const [mcpDirectory, setMcpDirectory] = useState<FixedMcpDefinition[]>([]);
-  const [gateways, setGateways] = useState<GatewayRecord[]>([]);
-  const [harnesses, setHarnesses] = useState<HarnessCatalogEntry[]>([]);
+  const [cachedCatalog] = useState(() => readCachedResource<Awaited<ReturnType<typeof getCatalog>>>("catalog"));
+  const [configPresets, setConfigPresets] = useState<AgentConfigPreset[]>(() => readCachedResource<AgentConfigPreset[]>("presets:true") ?? []);
+  const [mcpDirectory, setMcpDirectory] = useState<FixedMcpDefinition[]>(cachedCatalog?.mcpDirectory ?? []);
+  const [gateways, setGateways] = useState<GatewayRecord[]>(cachedCatalog?.gateways ?? []);
+  const [harnesses, setHarnesses] = useState<HarnessCatalogEntry[]>(cachedCatalog?.harnesses ?? []);
   const [defaultHarnessId, setDefaultHarnessId] = useState<string>();
   const [runtimeCatalogState, setRuntimeCatalogState] = useState<
     "loading" | "ready" | "failed" | "invalid"
@@ -1378,8 +1380,9 @@ export function ProjectListPage({
   const [quickSkillDefinitions, setQuickSkillDefinitions] = useState<ProjectSkillDefinitions>({});
   const [quickMcpDefinitions, setQuickMcpDefinitions] = useState<ProjectMcpDefinitions>({});
   const [configPresetWarning, setConfigPresetWarning] = useState("");
-  const [savedTasks, setSavedTasks] = useState<SavedResearchTask[]>([]);
-  const [savedTasksLoading, setSavedTasksLoading] = useState(true);
+  const [cachedSavedTasks] = useState(() => readCachedResource<SavedResearchTask[]>("saved-tasks"));
+  const [savedTasks, setSavedTasks] = useState<SavedResearchTask[]>(cachedSavedTasks ?? []);
+  const [savedTasksLoading, setSavedTasksLoading] = useState(!cachedSavedTasks);
   const [savedTasksWarning, setSavedTasksWarning] = useState("");
   const loadInFlight = useRef(false);
   const queueLoadInFlight = useRef(false);
@@ -1514,14 +1517,12 @@ export function ProjectListPage({
       if (document.visibilityState === "visible") void load(false, true);
     }, 10 * 60_000);
     document.addEventListener("visibilitychange", refresh);
-    window.addEventListener("openfars:saved-tasks-changed", refresh);
     window.addEventListener("openfars:projects-started", refresh);
     return () => {
       pageActiveRef.current = false;
       window.clearInterval(statusTimer);
       window.clearInterval(tokenTimer);
       document.removeEventListener("visibilitychange", refresh);
-      window.removeEventListener("openfars:saved-tasks-changed", refresh);
       window.removeEventListener("openfars:projects-started", refresh);
     };
   }, [load]);
@@ -1637,23 +1638,32 @@ export function ProjectListPage({
 
   useEffect(() => {
     let active = true;
-    getSavedResearchTasks()
+    let generation = 0;
+    const refresh = () => {
+      const current = ++generation;
+      void getSavedResearchTasks()
       .then((tasks) => {
-        if (!active) return;
+        if (!active || current !== generation) return;
         setSavedTasks(tasks);
         setSavedTasksWarning("");
       })
       .catch((reason) => {
-        if (!active) return;
+        if (!active || current !== generation) return;
         setSavedTasksWarning(
           reason instanceof Error ? reason.message : "已保存科研任务加载失败"
         );
       })
       .finally(() => {
-        if (active) setSavedTasksLoading(false);
+        if (active && current === generation) setSavedTasksLoading(false);
       });
+    };
+    refresh();
+    window.addEventListener("openfars:saved-tasks-changed", refresh);
+    window.addEventListener("focus", refresh);
     return () => {
       active = false;
+      window.removeEventListener("openfars:saved-tasks-changed", refresh);
+      window.removeEventListener("focus", refresh);
     };
   }, []);
 
@@ -2160,7 +2170,7 @@ export function ProjectListPage({
           </span>
           <h1>
             让科研智能体
-            <span>协作完成可验证的研究结果</span>
+            <span>协作完成可验证的研究结果，并自我进化</span>
           </h1>
           <p>
             编排任意通用 Worker。每一步有迹可循，流程根据全局证据安排下一步、用户介入或结束。

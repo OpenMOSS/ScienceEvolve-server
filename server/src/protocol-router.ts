@@ -393,8 +393,15 @@ function normalizeProtocolStreamEventSingle(protocol: AgentProtocol, value: unkn
       const toolCalls = Array.isArray(deltaRecord.tool_calls) ? deltaRecord.tool_calls as unknown[] : [];
       const tool = toolCalls[0] && typeof toolCalls[0] === "object" ? toolCalls[0] as Record<string, unknown> : undefined;
       const fn = tool?.function && typeof tool.function === "object" ? tool.function as Record<string, unknown> : undefined;
+      // Some compatible gateways emit a complete JSON object in a stream
+      // chunk. Preserve it without adding bytes to name-only chunks.
+      const argumentsDelta = typeof fn?.arguments === "string"
+        ? fn.arguments
+        : fn?.arguments && typeof fn.arguments === "object"
+          ? JSON.stringify(fn.arguments)
+          : "";
       if (tool || text || reasoning) return tool
-        ? { type: "tool_call_delta", toolCallId: typeof tool.id === "string" ? tool.id : undefined, toolItemId: typeof tool.id === "string" ? tool.id : undefined, toolName: typeof fn?.name === "string" ? fn.name : undefined, toolIndex: numberValue(tool?.index) ?? numberValue(record.index), argumentsDelta: typeof fn?.arguments === "string" ? fn.arguments : "", raw: value }
+        ? { type: "tool_call_delta", toolCallId: typeof tool.id === "string" ? tool.id : undefined, toolItemId: typeof tool.id === "string" ? tool.id : undefined, toolName: typeof fn?.name === "string" ? fn.name : undefined, toolIndex: numberValue(tool?.index) ?? numberValue(record.index), argumentsDelta, raw: value }
         : text
           ? { type: "text_delta", text, raw: value }
           : { type: "reasoning_delta", text: reasoning, raw: value };

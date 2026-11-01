@@ -363,6 +363,26 @@ describe("scoped native execution and report checkpoint", () => {
       expect(() => next.reconcileScopedAgentTurn(proof(f.identity.invocationId, f.originalRuntime))).toThrow(/exact native owner/);
       expect(next.projectState("p")).toEqual(before);
       next.reconcileScopedAgentTurn(proof(f.repair.invocationId, f.repair.runtimePath));
+      if (mode === "reserved") {
+        // No native turn opened: retain the authorized retry and its original
+        // ancestry under a fresh physical reservation, without another failure.
+        const retained = next.scopedAgentMissingReportRepair("p", f.execution.id, 2)!;
+        expect(retained).toMatchObject({ originalInvocationId: f.identity.invocationId });
+        const physical = next.scopedAgentTurn("p", f.execution.id, 2)!;
+        expect(physical.invocationId).not.toBe(f.repair.invocationId);
+        expect(physical.runtimePath).not.toBe(f.repair.runtimePath);
+        expect(physical).toMatchObject({ status: "reserved", ownershipEpoch: 2 });
+        expect(physical.openedAt).toBeUndefined();
+        expect(next.eventByRequestId("p", failureKey)).toBeUndefined();
+        expect(next.eventByRequestId("p", `scoped-failure:${f.execution.id}:2`)).toEqual(originalFailure);
+        expect(next.scopedAgentTaskCompletion("p", f.execution.id, 2)).toEqual(f.completion);
+        expect(next.scopedAgentReport("p", f.execution.id, 1)).toEqual(f.oldReport);
+        expect(next.scopedExecution("p", f.execution.id)).toMatchObject({ status: "running", ownershipEpoch: 2,
+          executionBranch: f.execution.executionBranch, worktreePath: f.execution.worktreePath });
+        expect(f.invoker.invoke).not.toHaveBeenCalled();
+        expect(f.git.checkpointAndPush).not.toHaveBeenCalled();
+        return;
+      }
       expect(next.failScopedAgentArrival(failure).replay).toBe(mode === "recorded_failure");
       expect(next.eventByRequestId("p", failureKey)?.payload.reason).toBe(failure.reason);
       if (mode === "recorded_failure") expect(next.eventByRequestId("p", failureKey)).toEqual(recorded);
@@ -1599,7 +1619,7 @@ function nativeInput(): ScopedAgentTurnInput {
 }
 
 function openInput(input: ScopedAgentTurnInput): CollaborationResidentOpenInput {
-  return { request: { project: { id: "p", orchestration: { schemaVersion: 3 }, agentSessionIds: { one: "same-session" } } as never,
+  return { initialTask: "来源：Leader\n内容：Continue the original scoped assignment in the retained session and supply finish_task.", request: { project: { id: "p", orchestration: { schemaVersion: 3 }, agentSessionIds: { one: "same-session" } } as never,
     agent: "one", invocationId: input.invocationId, kind: "worker", permission: "workspace", inboxPath: "/srv/p/inbox.md",
     projectPath: "/srv/p", workspacePath: input.execution.worktreePath, runtimePath: input.runtimePath,
     schemaPath: "/srv/worker.schema.json", skillPaths: [], availableSkillPaths: [], sessionContinuity: "strict",

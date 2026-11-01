@@ -149,7 +149,8 @@ describe("Main workflow proposals on the actual serial backend path", () => {
       expect(current.baseVersion.revision).toBe(2); expect(JSON.parse(original!.toString("utf8")).baseVersion.revision).toBe(1);
       await expect(service.stageWithResult(run.control!.capability, "stale-original-main-draft", { tool: "apply_workflow", path: "workflow.json", rationale: "Attempt to apply the retained old base" })).rejects.toThrow("workflow.json is stale");
       staleRejected = true;
-      expect((await readFile(run.inboxPath, "utf8")).includes(MAIN_AGENT_ORCHESTRATION_CURRENT_FILE)).toBe(true);
+      expect((await readFile(run.inboxPath, "utf8")).includes(MAIN_AGENT_ORCHESTRATION_CURRENT_FILE)).toBe(false);
+      expect(current.editingInstructions).toBeDefined();
     };
     const project = await create(f); await f.orchestrator.waitForIdle(project.id);
     const state = await f.storage.loadState(project.id);

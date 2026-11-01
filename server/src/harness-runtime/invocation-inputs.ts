@@ -17,7 +17,9 @@ const SAFE_INVOCATION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/;
 export async function prepareInvocationInputs(
   request: Pick<AgentRunRequest,
     "project" | "agent" | "invocationId" | "projectPath" | "workspacePath" | "inboxPath" |
-    "runtimePath" | "executionContext" | "terminalPushObservation" | "worktreeClosing">
+    "runtimePath" | "executionContext" | "terminalPushObservation" | "worktreeClosing" | "control">,
+  /** Trusted SDK host binding; never supplied by workflow or Agent input. */
+  resolveProjectWorkspace?: (projectId: string) => Promise<string | undefined>
 ): Promise<InvocationInputs> {
   try {
     if (!SAFE_INVOCATION_ID.test(request.invocationId)) {
@@ -42,8 +44,10 @@ export async function prepareInvocationInputs(
     if (collaborationWorktree && !path.isAbsolute(collaborationWorktree)) {
       throw new Error("Collaboration execution worktree must be absolute");
     }
+    const selectedWorkspace = request.project.git?.enabled === true
+      ? undefined : await resolveProjectWorkspace?.(request.project.id);
     const expectedWorkspace = await fs.realpath(
-      collaborationWorktree ?? path.join(projectRoot, "workspaces")
+      collaborationWorktree ?? selectedWorkspace ?? path.join(projectRoot, "workspaces")
     );
     const legacyRoleWorkspace = request.project.git?.enabled !== true
       ? path.join(projectRoot, "workspaces", request.agent, "shared")
@@ -118,11 +122,22 @@ export async function prepareInvocationInputs(
       throw new Error("Staged Inbox does not match the server authority copy");
     }
 
+    let workflowAuthoringPath: string | undefined;
+    if (selectedWorkspace && request.control?.workflowAuthoringPath) {
+      const expected = path.join(workspaceRoot, ".scienceevolve", "management", request.project.id, "proposal", "workflow.json");
+      const candidate = request.control.workflowAuthoringPath;
+      await assertRegularNonSymlinkFile(candidate, "Workflow proposal");
+      if (path.resolve(candidate) !== expected || await fs.realpath(candidate) !== expected) {
+        throw new Error("External workflow proposal escaped its bound project directory");
+      }
+      workflowAuthoringPath = expected;
+    }
     return {
       projectPath: projectRoot,
       ...await publishedWorkflowInput(projectRoot),
       workspacePath: workspaceRoot,
-      userInputsPath: await prepareProjectUserInputsPath(projectRoot),
+      ...(workflowAuthoringPath ? { workflowAuthoringPath } : {}),
+      userInputsPath: await prepareProjectUserInputsPath(projectRoot, selectedWorkspace),
       inboxPath: realMirror,
       memoryPath,
       runtimePath: runtimeRoot,
@@ -140,8 +155,10 @@ export async function prepareInvocationInputs(
 }
 
 /** Resolve the shared input folder without granting access to other project state. */
-export async function prepareProjectUserInputsPath(projectRoot: string): Promise<string | undefined> {
-  const workspace = path.join(projectRoot, "workspaces");
+export async function prepareProjectUserInputsPath(projectRoot: string, selectedWorkspace?: string): Promise<string | undefined> {
+  // Only a trusted host may select an external shared workspace; a business
+  // Git worktree is never the source of project-wide original inputs.
+  const workspace = selectedWorkspace ?? path.join(projectRoot, "workspaces");
   const directory = path.join(workspace, "user_inputs");
   const entry = await fs.lstat(directory).catch((error: NodeJS.ErrnoException) => {
     if (error.code === "ENOENT") return undefined;
@@ -152,7 +169,7 @@ export async function prepareProjectUserInputsPath(projectRoot: string): Promise
   const [realWorkspace, realInputs] = await Promise.all([fs.realpath(workspace), fs.realpath(directory)]);
   if (!workspaceEntry.isDirectory() || workspaceEntry.isSymbolicLink() ||
     !entry.isDirectory() || entry.isSymbolicLink() ||
-    !isWithin(realWorkspace, projectRoot) || !isWithin(realInputs, realWorkspace)) {
+    (selectedWorkspace === undefined ? !isWithin(realWorkspace, projectRoot) : selectedWorkspace !== realWorkspace) || !isWithin(realInputs, realWorkspace)) {
     throw new HarnessRuntimeError("INVOCATION_INPUT_STAGING_FAILED",
       "Project user_inputs must be a regular directory inside the shared workspace", {}, { source: "inputs" });
   }
@@ -435,14 +452,18 @@ async function publishedWorkflowInput(projectRoot: string): Promise<Pick<Invocat
 }
 
 async function ensurePrivateDirectory(directory: string, workspaceRoot: string): Promise<void> {
-  await fs.mkdir(directory, { recursive: true, mode: 0o700 });
-  const info = await fs.lstat(directory);
-  if (!info.isDirectory() || info.isSymbolicLink()) {
-    throw new Error("Invocation Inbox directory must be a real directory");
-  }
-  const realDirectory = await fs.realpath(directory);
-  if (!isWithin(realDirectory, workspaceRoot)) {
+  const root = await fs.realpath(workspaceRoot);
+  const selected = path.resolve(directory);
+  if (!isWithin(selected, root)) {
     throw new Error("Invocation Inbox directory resolves outside the workspace");
+  }
+  // Pin each parent before creating its child. A recursive mkdir would follow
+  // an existing .scienceevolve junction and write outside the selected workspace
+  // before the final boundary check could reject it.
+  let current = root;
+  for (const segment of path.relative(root, selected).split(path.sep).filter(Boolean)) {
+    current = path.join(current, segment);
+    await ensurePinnedDirectory(current, root);
   }
   await fs.chmod(directory, 0o700);
 }

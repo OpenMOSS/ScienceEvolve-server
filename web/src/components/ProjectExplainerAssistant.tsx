@@ -7,7 +7,10 @@ import { ApiError, cancelExplainerConversation, createExplainerConversation, exp
   undoExplainerDraft, updateExplainerConversationConfig, type ExplainerAssistantAction, type ExplainerAssistantContext } from "../api";
 import type { Catalog, CreateProjectInput, ProjectExplainerConfigInput, ProjectExplainerEvent, ProjectExplainerRuntimeConfig } from "../types";
 import "./project-explainer-assistant.css";
-import { foldExplainerMessages, isExplainerConversationMessage, mergeExplainerMessages } from "./project-explainer-events";
+import { foldExplainerMessages, isExplainerConversationMessage, mergeExplainerMessages, reconcileExplainerHistory,
+  explainerActionFromEvent as actionFromEvent, notifyExplainerAction, pendingExplainerMessage, restoreExplainerMessages } from "./project-explainer-events";
+import { ExplainerActionCard } from "./ExplainerActionCard";
+import { cacheResource, readCachedResource } from "../resource-cache";
 import { ProjectExplainerReplyStatus, ProjectExplainerTrace } from "./ProjectExplainerTrace";
 export { mergeExplainerMessages } from "./project-explainer-events";
 
@@ -36,7 +39,7 @@ export function useExplainerDraftBridge(input: { active: boolean; key: string; t
         latest.current.apply(draft, taskId, base);
         // Several committed tool receipts can arrive in one streamed chunk,
         // before React renders the first application.
-        latest.current = { ...latest.current, draft, ...(taskId ? { taskId } : {}) };
+        latest.current = { ...latest.current, draft, taskId };
       } });
   }, [assistant?.registerEditor, input.active, input.key]);
   return assistant;
@@ -57,10 +60,7 @@ const draftPayload = (input: CreateProjectInput) => {
   const { explainerConversationId: _conversation, sourceSavedTaskId: _source, inputUploadId: _upload, inputDescription: _description, ...draft } = input;
   return draft;
 };
-const actionFromEvent = (event: ProjectExplainerEvent) => {
-  const action = event.data?.assistantAction as ExplainerAssistantAction | undefined;
-  return action?.context?.id && ["draft.created", "draft.updated", "draft.saved", "draft.undone", "workflow.submitted", "projects.started"].includes(action.kind) ? action : undefined;
-};
+interface AssistantSnapshot { context: ExplainerAssistantContext; events: ProjectExplainerEvent[]; config: ProjectExplainerRuntimeConfig }
 
 export function ProjectExplainerAssistantProvider({ children, target }: { children: ReactNode; target: { newProject?: boolean; taskId?: string; projectId?: string } }) {
   const [open, setOpen] = useState(false);
@@ -93,9 +93,19 @@ export function ProjectExplainerAssistantProvider({ children, target }: { childr
   const show = useCallback((text?: string) => { if (text) setQuestion(text); setOpen(true); }, []);
   const load = useCallback(async (forceNew = false) => {
     const generation = ++epoch.current; setLoading(true); setError("");
+    const cached = !forceNew ? readCachedResource<AssistantSnapshot>(`assistant:${key}`) : undefined;
+    if (cached) {
+      contextRef.current = cached.context; setContext(cached.context); setEvents(restoreExplainerMessages(cached.events));
+      setConfig(cached.config); setConfigDraft(configInput(cached.config));
+      setCatalog(readCachedResource<Catalog>("catalog"));
+    } else if (forceNew || loadedKey.current !== key) {
+      contextRef.current = undefined; setContext(undefined); setEvents([]); setConfig(undefined); setRemoteActive(false);
+    }
     try {
       let conversation: ExplainerAssistantContext | undefined;
       const storageKey = `openfars.explainer.conversation.${key}`;
+      if (!forceNew && target.taskId && cached?.context.deletedTaskId === target.taskId && !cached.context.projectId)
+        conversation = await getExplainerConversation(cached.context.id);
       if (!forceNew && !target.taskId && !target.projectId) {
         try { const savedId = localStorage.getItem(storageKey); if (savedId) conversation = await getExplainerConversation(savedId); }
         catch (error) { if (!(error instanceof ApiError && error.status === 404)) throw error; }
@@ -106,8 +116,14 @@ export function ProjectExplainerAssistantProvider({ children, target }: { childr
       const [history, runtimeConfig, runtimeCatalog] = await Promise.all([getExplainerConversationHistory(conversation.id), getExplainerConversationConfig(conversation.id), getCatalog()]);
       if (generation !== epoch.current) return;
       const sameConversation = contextRef.current?.id === conversation.id;
+      if (sameConversation && contextRef.current!.revision > conversation.revision) conversation = contextRef.current!;
       contextRef.current = conversation; setContext(conversation);
-      setEvents(current => foldExplainerMessages(sameConversation && history.active ? [...history.events, ...current] : history.events));
+      const confirmedContext = conversation;
+      setEvents(current => {
+        const next = sameConversation ? reconcileExplainerHistory(current, history.events) : foldExplainerMessages(history.events);
+        cacheResource(`assistant:${key}`, { context: confirmedContext, config: runtimeConfig, events: next });
+        return next;
+      });
       loadedKey.current = key;
       setRemoteActive(history.active); setConfig(runtimeConfig); setConfigDraft(configInput(runtimeConfig)); setCatalog(runtimeCatalog);
       setPendingAction(undefined); setNotice("");
@@ -123,6 +139,9 @@ export function ProjectExplainerAssistantProvider({ children, target }: { childr
   }, [key, target.taskId, target.projectId]);
   useEffect(() => { if (open && loadedKey.current !== key) void load(); return () => { ++epoch.current; }; }, [open, load, key]);
   useEffect(() => () => request.current?.abort(), []);
+  useEffect(() => {
+    if (context && config && loadedKey.current === key) cacheResource(`assistant:${key}`, { context, config, events }, !runningId && !remoteActive);
+  }, [context, config, events, key, runningId, remoteActive]);
   useEffect(() => {
     const resize = () => {
       setMobile(window.innerWidth <= 620);
@@ -142,7 +161,7 @@ export function ProjectExplainerAssistantProvider({ children, target }: { childr
       inFlight = true;
       void getExplainerConversationHistory(context.id).then(history => {
         if (disposed || contextRef.current?.id !== context.id) return;
-        setEvents(current => foldExplainerMessages(history.active ? [...history.events, ...current] : history.events)); setRemoteActive(history.active);
+        setEvents(current => reconcileExplainerHistory(current, history.events)); setRemoteActive(history.active);
       }).catch(error => { if (!disposed) setError(message(error)); }).finally(() => { inFlight = false; });
     };
     const timer = window.setInterval(refresh, 2000);
@@ -157,7 +176,8 @@ export function ProjectExplainerAssistantProvider({ children, target }: { childr
     contextRef.current = action.context; setContext(action.context);
     const bridge = editor.current;
     const matches = bridge && (bridge.projectId ? bridge.projectId === action.context.projectId : bridge.taskId ? bridge.taskId === action.context.taskId : currentKey.current === "new");
-    if (matches && !["workflow.submitted", "draft.created", "projects.started"].includes(action.kind)) {
+    const editsDifferentTask = action.targetTaskId && action.targetTaskId !== action.context.taskId;
+    if (matches && !editsDifferentTask && !["workflow.submitted", "draft.created", "drafts.deleted", "projects.started"].includes(action.kind)) {
       const current = explainerDraftFingerprint(bridge.read());
       if (force || current === expected || current === explainerDraftFingerprint(previous.draft)) {
         bridge.apply(action.context.draft, action.context.taskId, action.context.workflowBase); setPendingAction(undefined);
@@ -165,9 +185,6 @@ export function ProjectExplainerAssistantProvider({ children, target }: { childr
         setPendingAction(action); setNotice("你在生成期间修改了草稿，已保留手动编辑。可以查看助手结果后选择应用，或继续说明新的要求。");
       }
     }
-    if (action.kind === "workflow.submitted") window.dispatchEvent(new CustomEvent("openfars:workflow-adjusted", { detail: { projectId: action.context.projectId } }));
-    if (action.kind === "projects.started") window.dispatchEvent(new Event("openfars:projects-started"));
-    if (action.kind === "draft.created" || action.context.taskId && !action.context.projectId) window.dispatchEvent(new Event("openfars:saved-tasks-changed"));
   };
   const bindDraft = async (taskId: string, draft: CreateProjectInput) => {
     const prior = contextRef.current; if (!prior || loadedKey.current !== currentKey.current) return;
@@ -176,9 +193,13 @@ export function ProjectExplainerAssistantProvider({ children, target }: { childr
   };
   const send = async () => {
     const text = question.trim(), prior = contextRef.current;
-    if (!text || !prior || runningId || remoteActive || loading || !config?.available) return;
+    if (!text || !prior || runningId || request.current || remoteActive || loading || !config?.available) return;
     const activeKey = currentKey.current;
     const controller = new AbortController(); request.current = controller;
+    const pending = pendingExplainerMessage(prior.projectId ?? prior.id, text, events);
+    setEvents(current => cacheResource(`assistant:${activeKey}`, { context: prior, config,
+      events: [...current.filter(event => !(event.data?.clientPending === "unconfirmed" && event.text === text)), pending] }).events);
+    setQuestion("");
     let expected = editor.current ? explainerDraftFingerprint(editor.current.read()) : undefined;
     setError(""); setNotice(""); setRunningId(prior.id);
     try {
@@ -187,26 +208,34 @@ export function ProjectExplainerAssistantProvider({ children, target }: { childr
           ...(editor.current.base ? { workflowBase: editor.current.base } : {}) });
         contextRef.current = next; setContext(next);
       }
-      setQuestion(""); setRemoteActive(true);
+      setRemoteActive(true);
       window.dispatchEvent(new CustomEvent("openfars:explainer-refresh", { detail: { projectId: prior.projectId, active: true } }));
       await streamExplainerConversation(prior.id, text, event => {
         window.dispatchEvent(new CustomEvent("openfars:explainer-event", { detail: { projectId: prior.projectId, event, source: "floating" } }));
+        const action = actionFromEvent(event);
+        if (action) notifyExplainerAction(action);
         if (contextRef.current?.id !== prior.id) return;
         setEvents(events => mergeExplainerMessages(events, event));
-        const action = actionFromEvent(event);
         if (action) { applyAction(action, activeKey === currentKey.current ? expected : undefined); expected = explainerDraftFingerprint(action.context.draft); }
       }, controller.signal);
     } catch (error) {
       if (!controller.signal.aborted) {
         setError(message(error));
+        setQuestion(current => current || text);
+        setEvents(current => current.map(event => event.id === pending.id ? { ...event, data: { ...event.data, clientPending: "unconfirmed" } } : event));
         try { const latest = await getExplainerConversation(prior.id); if (contextRef.current?.id === prior.id) { contextRef.current = latest; setContext(latest); } } catch { /* Keep confirmed state. */ }
       }
     } finally {
+      if (contextRef.current?.id === prior.id) setEvents(current => current.map(event =>
+        event.id === pending.id && event.data?.clientPending === "sending" ? { ...event, data: { ...event.data, clientPending: "unconfirmed" } } : event));
       if (request.current === controller) { request.current = undefined; setRunningId(undefined); }
       if (contextRef.current?.id === prior.id) {
         setRemoteActive(false);
         const history = await getExplainerConversationHistory(prior.id).catch(() => undefined);
-        if (history && !history.active) setEvents(foldExplainerMessages(history.events));
+        if (history && contextRef.current?.id === prior.id) {
+          setEvents(current => reconcileExplainerHistory(current, history.events));
+          setRemoteActive(history.active);
+        }
       }
       window.dispatchEvent(new CustomEvent("openfars:explainer-refresh", { detail: { projectId: contextRef.current?.projectId, active: false } }));
     }
@@ -239,7 +268,7 @@ export function ProjectExplainerAssistantProvider({ children, target }: { childr
       if (editor.current && explainerDraftFingerprint(editor.current.read()) !== explainerDraftFingerprint(prior.draft)) {
         setNotice("草稿已有新的手动修改，已保留。请告诉助手需要撤销的具体内容。"); return;
       }
-      const result = await undoExplainerDraft(prior.id, prior.revision); applyAction(result.action, explainerDraftFingerprint(prior.draft)); setNotice(result.action.summary);
+      const result = await undoExplainerDraft(prior.id, prior.revision); notifyExplainerAction(result.action); applyAction(result.action, explainerDraftFingerprint(prior.draft)); setNotice(result.action.summary);
     } catch (error) { setError(message(error)); }
   };
   const drag = (event: React.PointerEvent) => {
@@ -257,7 +286,7 @@ export function ProjectExplainerAssistantProvider({ children, target }: { childr
   const outputs = new Map(events.filter(event => event.kind === "tool_output").map(event => [traceKey(event), event]));
   const activeTurnId = events.at(-1)?.turnId;
   const turns = events.filter(event => event.kind === "user" || event.kind === "error" && isExplainerConversationMessage(event) || event.kind === "assistant" && event.text.trim() ||
-    event.kind === "reasoning" || event.kind === "tool" || event.kind === "tool_output" && !tools.has(traceKey(event)) ||
+    event.kind === "reasoning" || event.kind === "tool" || event.kind === "tool_output" && (!tools.has(traceKey(event)) || actionFromEvent(event)) ||
     event.kind === "status" && isExplainerConversationMessage(event));
   const active = !!runningId || remoteActive;
 
@@ -304,21 +333,16 @@ export function ProjectExplainerAssistantProvider({ children, target }: { childr
           <button type="button" disabled={loading || savingConfig || !configDraft} onClick={() => void saveConfig()}>{savingConfig ? "正在保存…" : "保存助手配置"}</button>
         </div>}
         <div className="explainer-floating-transcript" ref={transcript} role="log" aria-label="助手对话记录" aria-live="polite">
-          {loading && <p className="explainer-floating-empty"><LoaderCircle className="spin" size={18} />正在读取同一段会话…</p>}
-          {!loading && !turns.length && <div className="explainer-floating-empty"><MessageSquare size={25} /><strong>描述你想做的研究或 Workflow</strong><p>可以创建多份独立草稿、设计并行协作组，或调整当前配置。准备好后，可明确要求启动指定草稿。</p>
+          {loading && !turns.length && <p className="explainer-floating-empty"><LoaderCircle className="spin" size={18} />正在读取同一段会话…</p>}
+          {!loading && !turns.length && <div className="explainer-floating-empty"><MessageSquare size={25} /><strong>描述你想做的研究或 Workflow</strong><p>可以新建、修改和删除项目草稿，设计并行协作流程。准备好后，可明确要求启动指定草稿。</p>
             <button type="button" onClick={() => setQuestion("请根据我的课题设计 Workflow，至少包含一个协作组，组内至少三个 Agent 并行协作，最后独立复核。")}>试试：三个 Agent 并行协作</button></div>}
           {turns.map(event => {
             const action = actionFromEvent(event);
+            if (action) return <ExplainerActionCard key={event.id} action={action} />;
             if (["reasoning", "tool", "tool_output"].includes(event.kind)) return <ProjectExplainerTrace key={`${event.turnId}:${event.kind}:${event.itemId ?? event.id}`}
               event={event} output={outputs.get(traceKey(event))} active={active && event.turnId === activeTurnId} />;
-            return action ? <article key={event.id} className="explainer-action-card"><strong>{action.kind === "projects.started" ? "批量启动结果" : action.kind === "draft.created" ? "独立项目草稿已新建" : action.kind === "draft.saved" || action.kind === "draft.updated" && action.context.taskId && !action.context.projectId ? "项目草稿已保存" : action.kind === "workflow.submitted" ? "Workflow 修改已提交" : "草稿已更新"}</strong><p>{action.summary}</p>
-              {action.launches?.results.map(result => <div key={result.taskId}>
-                <span>{result.title || result.taskId}：{result.status === "started" ? "已提交启动" : result.status === "unconfirmed" ? "结果待核对" : "启动失败"}</span>
-                {result.error && <p>{result.error}</p>}
-                {result.status === "started" && result.projectId && /^prj_[a-f0-9]{32}$/.test(result.projectId) && <a href={`#/projects/${result.projectId}`}>打开项目</a>}
-              </div>)}
-              {action.href && /^\/(?:saved-tasks\/task_[a-f0-9]{32}\/edit|projects\/prj_[a-f0-9]{32})$/.test(action.href) && <a href={`#${action.href}`}>打开{action.href.startsWith("/saved-tasks/") ? "项目草稿" : "项目"}</a>}</article>
-              : <article key={`${event.turnId}:${event.itemId ?? event.id}`} className={`explainer-chat-message ${event.kind}`} role={event.kind === "error" ? "alert" : undefined}><small>{event.kind === "user" ? "你" : "Project Explainer"}</small><ReactMarkdown>{event.text}</ReactMarkdown></article>;
+            return <article key={`${event.turnId}:${event.itemId ?? event.id}`} className={`explainer-chat-message ${event.kind}`} role={event.kind === "error" ? "alert" : undefined}><small>{event.kind === "user" ? "你" : "Project Explainer"}</small><ReactMarkdown>{event.text}</ReactMarkdown>
+                {!!event.data?.clientPending && <small>{event.data.clientPending === "sending" ? "发送中…" : "发送未确认，请检查后重试"}</small>}</article>;
           })}
           <ProjectExplainerReplyStatus events={events} active={active} />
         </div>

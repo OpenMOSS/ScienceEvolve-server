@@ -20,8 +20,6 @@ import { mergeAgentConfigs } from "../src/validation.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { SiiExperimentService, assertSiiControlAction } from "../src/sii-experiments.js";
-import { cloneAgentOrchestrationTemplate } from "../src/agent-orchestration.js";
-import type { AgentPermission, AgentRunRequest } from "../src/types.js";
 import { CodexAdapter } from "../src/harness-runtime/adapters/codex-adapter.js";
 import { ClaudeCodeAdapter } from "../src/harness-runtime/adapters/claude-code-adapter.js";
 import { PiAdapter } from "../src/harness-runtime/adapters/pi-adapter.js";
@@ -91,7 +89,8 @@ describe.runIf(process.platform === "linux")("openBuiltinResidentAdapter", () =>
         prompt: `Preserve the completed work. ${"Relevant current constraint. ".repeat(120)}\nCURRENT_REQUIRED_ACTION: call finish_task and the assigned routing tool.` });
       const received = observed.join("\n");
       expect(received).toContain("CURRENT_REQUIRED_ACTION: call finish_task and the assigned routing tool.");
-      expect(received).toContain("user intervention is disabled for every Main, Leader and Worker");
+      expect(received).not.toContain("user intervention is disabled for every Main, Leader and Worker");
+      expect(received).toContain("项目入口：");
     } finally { await handle.close(); }
   }, 30_000);
   it.each(["codex", "claude-code", "pi", "dsh"])("automatically continues the same %s task after a terminal gateway failure", async harnessId => {
@@ -246,8 +245,9 @@ describe.runIf(process.platform === "linux")("openBuiltinResidentAdapter", () =>
       const result = await handle.submit({ inputId: "state-input", invocationId: "state-turn", prompt: "Inspect the current formal state" });
       expect(result.controlActions).toHaveLength(1);
       expect(calls).toEqual([{ operation: "get", object: { kind: "agent", id: "writer" } }]);
-      expect(turns.mock.calls[0][1].prompt).toContain("state_list");
-      expect(turns.mock.calls[0][1].prompt).toContain("all nested descendant groups");
+      expect(result.controlActions?.[0].action.tool).toBe("finish_task");
+      expect(turns.mock.calls[0][1].prompt).toContain("Inspect the current formal state");
+      expect(turns.mock.calls[0][1].prompt).not.toContain("all nested descendant groups");
       await expect(services.at(-1)!.requestProjectState(capabilities.at(-1)!, { operation: "list" })).rejects.toThrow(/revoked/);
     } finally { await handle.close(); }
   }, 30_000);
@@ -443,7 +443,8 @@ describe.runIf(process.platform === "linux")("openBuiltinResidentAdapter", () =>
     const prepared = await facade.prepareResidentScope(input);
     expect(prepared.spec.inputs.workflowReadDirectory).toBe(workflowDirectory);
     const authority = prepared.filesystemAuthority;
-    expect(authority.readRoots).not.toContain(fixture.projectPath);
+    expect(authority.readRoots).toContain(fixture.projectPath);
+    expect(authority.writeRoots).not.toContain(fixture.projectPath);
     const workflowRoot = authority.rootBindings.find(root => root.path === workflowDirectory)!;
     const workspaceRoot = authority.rootBindings.find(root => root.path === fixture.workspace)!;
     expect(workflowRoot).toMatchObject({ write: false });
@@ -514,6 +515,7 @@ describe.runIf(process.platform === "linux")("openBuiltinResidentAdapter", () =>
     const facade = new HarnessRuntimeFacade({ adapters: [new CodexAdapter(), configured] });
     const opens = vi.spyOn(facade, "prepareResidentScope");
     const turns = vi.spyOn(facade, "submitResidentTurn");
+    const contexts = vi.spyOn(facade, "prepareAgentContext");
     let routeSequence = 0;
     const adapter = new HarnessRuntimeResidentAdapter({ runtime: facade,
       routeFactory: async () => openTestInvocationRoute("chat-completions", `workflow-context-route-${++routeSequence}`) });
@@ -538,6 +540,9 @@ describe.runIf(process.platform === "linux")("openBuiltinResidentAdapter", () =>
       await expect(handle.submit({ inputId: "workflow-context-one", invocationId: request.invocationId, prompt: "Choose the next experiment step" }))
         .resolves.toMatchObject({ handoff: "pi-1" });
       const original = await handle.probe();
+      const firstContext = await contexts.mock.results.at(-1)!.value;
+      const firstDetails = JSON.parse(await fs.readFile(firstContext.workflowContext!.agentsPath, "utf8"));
+      expect(firstDetails.agents.scientist.skills).toEqual(["project:experiment-v1"]);
       request.project.workflowRevision = 2; request.project.eventSeq = 2;
       request.project.agents.scientist.skills = ["project:experiment-v2"];
       request.project.skillDefinitions = { "experiment-v2": { files: { "SKILL.md": "FULL_EXPERIMENT_SKILL_V2" } } };
@@ -545,19 +550,16 @@ describe.runIf(process.platform === "linux")("openBuiltinResidentAdapter", () =>
         .resolves.toMatchObject({ handoff: "pi-2" });
       expect(opens).toHaveBeenCalledTimes(1);
       const first = turns.mock.calls[0][1].prompt; const second = turns.mock.calls[1][1].prompt;
-      expect(first).toContain("Configuration revision: 1"); expect(first).toContain("project:experiment-v1");
-      expect(second).toContain("Configuration revision: 2"); expect(second).toContain("project:experiment-v2");
-      expect(second).not.toContain("project:experiment-v1");
+      expect(first).toContain("Choose the next experiment step");
+      expect(second).toContain("Use the updated experiment capability");
       for (const prompt of [first, second]) {
-        expect(prompt).toContain("Current group Workflow overview");
-        expect(prompt).toContain("experiment_node => Agent scientist");
-        expect(prompt).toContain("experiment-service");
-        expect(prompt).toContain("Read-only Agent / Skills / MCP details: rootId=");
+        expect(prompt).not.toContain("Configuration revision:");
+        expect(prompt).not.toContain("Current group Workflow overview");
+        expect(prompt).not.toContain("project:experiment-v");
         expect(prompt).not.toContain("private_other_node");
         expect(prompt).not.toContain("FULL_SCIENTIST_INSTRUCTIONS");
-        expect(prompt).not.toContain("FULL_EXPERIMENT_SKILL_");
       }
-      const detailsPath = second.match(/Agent instructions, Skills and MCP configuration: ([^\n]+)/)![1];
+      const detailsPath = (await contexts.mock.results.at(-1)!.value).workflowContext!.agentsPath;
       const details = JSON.parse(await fs.readFile(detailsPath, "utf8"));
       expect(Object.keys(details.agents).sort()).toEqual(["scientist", "writer"]);
       expect(details.agents.scientist.instructions).toBe("FULL_SCIENTIST_INSTRUCTIONS");
@@ -623,7 +625,7 @@ describe.runIf(process.platform === "linux")("openBuiltinResidentAdapter", () =>
     const retained: string[] = [];
     const reserveRepair = vi.fn(() => 1);
     const invoker = new ResidentScopedAgentTurnInvoker(launcher, {
-      prepare: async () => ({ ...prepared, controlScope: scope,
+      prepare: async () => ({ ...prepared, initialTask: "来源：Leader\n内容：Continue the original task in its retained session and inspect the missing delivery actions.", controlScope: scope,
         controlAuthorityFactory: async ({ turn: current }) => {
           const capability = createHash("sha256").update(current.inputId).digest("hex");
           return { control: { stagingPath: path.join(runtimePath, `${capability}.json`),
@@ -2096,6 +2098,22 @@ describe.runIf(process.platform === "linux")("openBuiltinResidentAdapter", () =>
     await opened.driver.close();
   });
 
+  it("validates shared authority before invoking an adapter-owned resident launch", async () => {
+    const fixture = await createFixture("pi", new PiAdapter());
+    const buildLaunch = vi.fn(async () => { throw new Error("extension launch reached"); });
+    const adapter: HarnessAdapter = {
+      ...fixture.launch.adapter,
+      descriptor: { ...fixture.launch.adapter.descriptor, id: "fixture-extension" },
+      resident: { ...fixture.launch.adapter.resident!, buildLaunch }
+    };
+    await expect(openBuiltinResidentAdapter({ ...fixture.launch, adapter,
+      spec: { ...fixture.launch.spec, inputs: { ...fixture.launch.spec.inputs, workspacePath: fixture.root } }
+    })).rejects.toThrow(/workspace does not match execution ownership/);
+    expect(buildLaunch).not.toHaveBeenCalled();
+    await expect(openBuiltinResidentAdapter({ ...fixture.launch, adapter })).rejects.toThrow("extension launch reached");
+    expect(buildLaunch).toHaveBeenCalledOnce();
+  });
+
   it("rejects fixed management with delivery writes or another invocation snapshot", async () => {
     const fixture = await createFixture("pi", new PiAdapter(), "leader", "workspace", true);
     await expect(openBuiltinResidentAdapter({ ...fixture.launch,
@@ -2357,8 +2375,8 @@ describe.runIf(process.platform === "linux")("openBuiltinResidentAdapter", () =>
     });
     expect(prepared.spec.prompt).toContain("leader management snapshot");
     expect(await fs.readFile(prepared.spec.inputs.inboxPath, "utf8")).toContain("leader management snapshot");
-    expect(prepared.spec.prompt).toContain(prepared.spec.policy.skillPaths[0]);
-    expect(prepared.spec.prompt).toContain("Web Search is enabled");
+    expect(await fs.readFile(prepared.spec.policy.skillPaths[0], "utf8")).toContain("Fixed read-only evidence skill");
+    expect(prepared.spec.prompt).not.toContain("Web Search is enabled");
     expect(traces).toContainEqual(expect.objectContaining({
       message: "Compiled invocation capability policy",
       data: expect.objectContaining({
@@ -2787,9 +2805,10 @@ describe.runIf(process.platform === "linux")("openBuiltinResidentAdapter", () =>
     for (const [, turn] of submittedTurns.mock.calls) {
       expect(turn.prompt).toContain("Standing resident mandate sentinel");
       expect(turn.prompt).not.toContain("resident fixture inbox");
-      expect(turn.prompt).toContain("Current task Inbox:");
-      expect(turn.prompt.includes("Descriptor filesystem tool references")).toBe(row.permission !== "yolo");
-      expect(turn.prompt.includes("The openfars-filesystem-authority MCP exposes callable tools")).toBe(row.permission !== "yolo");
+      expect(turn.prompt).toContain("项目入口：");
+      expect(turn.prompt).not.toContain("Current task Inbox:");
+      expect(turn.prompt).not.toContain("Descriptor filesystem tool references");
+      expect(turn.prompt).not.toContain("The openfars-filesystem-authority MCP exposes callable tools");
     }
     expect(routes.every((route) => route.closed)).toBe(true);
     expect((await handle.probe())).toMatchObject({
@@ -4158,7 +4177,7 @@ function turn(index: number): ResidentTurn {
 
 function fakeSource(harnessId: string, replayUserInput = false): string {
   const prelude = "#!/usr/bin/env node\nconst r=require('node:readline').createInterface({input:process.stdin});let n=0;const s=v=>process.stdout.write(JSON.stringify(v)+'\\n');";
-  if (harnessId === "codex") return `${prelude}r.on('line',l=>{const q=JSON.parse(l);if(q.method==='initialize')return s({id:q.id,result:{}});if(q.method==='initialized')return;if(q.method==='thread/start'||q.method==='thread/resume'){s({method:'configWarning',params:{summary:'fixture',details:null}});s({method:'mcpServer/startupStatus/updated',params:{threadId:'codex-session',name:'fixture',status:'ready',error:null,failureReason:null}});s({method:'thread/started',params:{thread:{id:'codex-session'}}});s({method:'thread/goal/cleared',params:{threadId:'codex-session'}});s({method:'warning',params:{threadId:'codex-session',message:'fixture warning'}});s({method:'account/rateLimits/updated',params:{rateLimits:{primary:{usedPercent:1}}}});s({method:'deprecationNotice',params:{summary:'fixture',details:'fixture details'}});s({id:q.id,result:{thread:{id:'codex-session'}}});return setTimeout(()=>s({method:'remoteControl/status/changed',params:{status:'disabled',serverName:'fixture',installationId:'fixture',environmentId:null}}),5)}if(q.method==='turn/start'){n++;const id='t'+n,u={totalTokens:2,inputTokens:1,cachedInputTokens:0,outputTokens:1,reasoningOutputTokens:0};s({id:q.id,result:{turn:{id}}});${replayUserInput ? "s({method:'item/completed',params:{threadId:'codex-session',turnId:id,item:{type:'userMessage',id:'user-'+n,content:q.params.input}}});" : ""}s({method:'thread/tokenUsage/updated',params:{threadId:'codex-session',turnId:id,tokenUsage:{total:u,last:u,modelContextWindow:null}}});return s({method:'turn/completed',params:{threadId:'codex-session',turn:{id,status:'completed',items:[{type:'agentMessage',text:'codex-'+n}]}}})}if(q.method==='thread/unsubscribe')s({id:q.id,result:{}})});`;
+  if (harnessId === "codex") return `${prelude}if(process.argv[2]==='debug'&&process.argv[3]==='models'&&process.argv.includes('--bundled')){s({models:[{slug:'fixture-model',use_responses_lite:false,tool_mode:null}]});process.exit(0);}r.on('line',l=>{const q=JSON.parse(l);if(q.method==='initialize')return s({id:q.id,result:{}});if(q.method==='initialized')return;if(q.method==='thread/start'||q.method==='thread/resume'){s({method:'configWarning',params:{summary:'fixture',details:null}});s({method:'mcpServer/startupStatus/updated',params:{threadId:'codex-session',name:'fixture',status:'ready',error:null,failureReason:null}});s({method:'thread/started',params:{thread:{id:'codex-session'}}});s({method:'thread/goal/cleared',params:{threadId:'codex-session'}});s({method:'warning',params:{threadId:'codex-session',message:'fixture warning'}});s({method:'account/rateLimits/updated',params:{rateLimits:{primary:{usedPercent:1}}}});s({method:'deprecationNotice',params:{summary:'fixture',details:'fixture details'}});s({id:q.id,result:{thread:{id:'codex-session'}}});return setTimeout(()=>s({method:'remoteControl/status/changed',params:{status:'disabled',serverName:'fixture',installationId:'fixture',environmentId:null}}),5)}if(q.method==='turn/start'){n++;const id='t'+n,u={totalTokens:2,inputTokens:1,cachedInputTokens:0,outputTokens:1,reasoningOutputTokens:0};s({id:q.id,result:{turn:{id}}});${replayUserInput ? "s({method:'item/completed',params:{threadId:'codex-session',turnId:id,item:{type:'userMessage',id:'user-'+n,content:q.params.input}}});" : ""}s({method:'thread/tokenUsage/updated',params:{threadId:'codex-session',turnId:id,tokenUsage:{total:u,last:u,modelContextWindow:null}}});return s({method:'turn/completed',params:{threadId:'codex-session',turn:{id,status:'completed',items:[{type:'agentMessage',text:'codex-'+n}]}}})}if(q.method==='thread/unsubscribe')s({id:q.id,result:{}})});`;
   if (harnessId === "claude-code") return `${prelude}r.on('line',l=>{const q=JSON.parse(l);n++;${replayUserInput ? "s({type:'user',session_id:q.session_id,message:q.message});" : ""}s({type:'assistant',session_id:q.session_id,message:{role:'assistant',content:[{type:'text',text:'claude-'+n}]}});s({type:'result',session_id:q.session_id,is_error:false,result:'claude-'+n})});`;
   if (harnessId === "pi") return `${prelude}const fs=require('node:fs'),path=require('node:path'),i=process.argv.indexOf('--session'),file=i>=0?process.argv[i+1]:undefined,sid='pi-official-session';if(file){fs.mkdirSync(path.dirname(file),{recursive:true});if(!fs.existsSync(file))fs.writeFileSync(file,JSON.stringify({type:'session',id:sid,cwd:process.cwd()})+'\\n')}r.on('line',l=>{const q=JSON.parse(l);if(q.type==='get_state')return s({id:q.id,type:'response',command:'get_state',success:true,data:{isStreaming:false,sessionId:sid,sessionFile:file}});if(q.type==='prompt'){n++;s({id:q.id,type:'response',command:'prompt',success:true});${replayUserInput ? "s({type:'message_end',message:{role:'user',content:q.message}});" : ""}return s({type:'agent_end',sessionId:sid})}if(q.type==='get_last_assistant_text')s({id:q.id,type:'response',command:'get_last_assistant_text',success:true,data:{text:'pi-'+n,sessionId:sid}})});`;
   return `${prelude}let seq=0;r.on('line',l=>{const q=JSON.parse(l);if(q.method==='initialize'){if(q.params&&q.params.reasoningEffort!==undefined)return s({jsonrpc:'2.0',id:q.id,error:{code:-32602,message:'provider does not support reasoning effort'}});return s({jsonrpc:'2.0',id:q.id,result:{serverInfo:{name:'deepseek-harness-sdk-runtime',version:'x'}}})}if(q.method==='session/resume'){seq=18;return s({jsonrpc:'2.0',id:q.id,result:{sessionId:q.params.sessionId,lastSequence:17}})}if(q.method==='session/prompt'){n++;const id=q.params.sessionId;s({jsonrpc:'2.0',id:q.id,result:{messageId:'m'+n}});${replayUserInput ? "s({jsonrpc:'2.0',method:'session.event',params:{sessionId:id,event:{type:'user/message',seq:seq++,surfaceOp:'append',data:{id:'user-'+n,role:'user',source:{kind:'user'},content:q.params.contentBlocks}}}});" : ""}s({jsonrpc:'2.0',method:'session.status',params:{sessionId:id,status:'running'}});s({jsonrpc:'2.0',method:'session.event',params:{sessionId:id,event:{type:'turn/start',seq:seq++,data:{turn:n}}}});s({jsonrpc:'2.0',method:'session.event',params:{sessionId:id,event:{type:'assistant/message',seq:seq++,data:{turn:n,message:{role:'assistant',content:[{type:'text',text:'dsh-'+n}]}}}}});s({jsonrpc:'2.0',method:'session.event',params:{sessionId:id,event:{type:'turn/end',seq:seq++,data:{turn:n,reason:{kind:'completed'}}}}});return s({jsonrpc:'2.0',method:'session.status',params:{sessionId:id,status:'idle'}})}if(q.method==='shutdown')s({jsonrpc:'2.0',id:q.id,result:{}})});`;

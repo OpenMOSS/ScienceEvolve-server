@@ -1662,7 +1662,7 @@ export class CollaborationStateDatabase {
       this.lease = { ...this.lease, expiresAtMs };
       return this.writerLease();
     } catch (error) {
-      this.database.exec("ROLLBACK");
+      this.rollbackAfterFailure();
       throw error;
     }
   }
@@ -1689,7 +1689,7 @@ export class CollaborationStateDatabase {
       this.database.exec("COMMIT");
       this.lease = { ...this.lease, expiresAtMs: Math.max(0, now - 1) };
     } catch (error) {
-      this.database.exec("ROLLBACK");
+      this.rollbackAfterFailure();
       throw error;
     }
   }
@@ -1712,6 +1712,14 @@ export class CollaborationStateDatabase {
     if (this.closed) {
       throw new CollaborationStateError("UNSAFE_CONFIGURATION", "Collaboration state database is closed");
     }
+  }
+
+  /** Cleanup must not replace the original SQLite error (including errcode).
+   * SQLite can already have rolled back after IOERR/FULL/other write failures. */
+  private rollbackAfterFailure(): void {
+    try {
+      if (this.database.isTransaction) this.database.exec("ROLLBACK");
+    } catch { /* Preserve the transaction failure even if cleanup also fails. */ }
   }
 
   private assertLeaseHeld(): void {
@@ -1744,7 +1752,7 @@ export class CollaborationStateDatabase {
       this.database.exec("COMMIT");
       return value;
     } catch (error) {
-      this.database.exec("ROLLBACK");
+      this.rollbackAfterFailure();
       throw error;
     }
   }
@@ -2047,6 +2055,36 @@ export class CollaborationStateDatabase {
     }).value;
   }
 
+  /** A final PR may already be merged when its client disconnects. Continue
+   * that same task only after a durable native Stop, under the current writer.
+   * This supplies the existing narrow LeaseManager supplemental-open proof;
+   * it never increments or bypasses the execution ownership fence. */
+  assertScopedFinalNativeReopenLaunch(input: ScopedFinalNativeTurn): { previousRuntimePath: string } | undefined {
+    return this.immediate(() => {
+      const turns = this.scopedFinalNativeTurns(input.projectId);
+      const current = turns.find((entry) => entry.invocationId === input.invocationId);
+      const integration = this.scopedFinalIntegration(input.projectId, input.groupRunId);
+      if (!current || current.status !== "reserved" || current.writerLeaseEpoch !== this.lease.epoch ||
+        current.executionId !== input.executionId || current.ownershipEpoch !== input.ownershipEpoch ||
+        current.agentId !== input.agentId || current.groupRunId !== input.groupRunId || current.runtimePath !== input.runtimePath ||
+        !integration || integration.id !== input.executionId || integration.ownershipEpoch !== input.ownershipEpoch ||
+        this.scopedGroupIntegrationRequest(input.projectId, input.groupRunId)?.integrationOwnerAgentId !== input.agentId) {
+        throw new CollaborationStateError("INVALID_STATE_TRANSITION", "Final supplemental launch requires its exact current-writer reservation and canonical owner");
+      }
+      this.currentScopedFinalGitOwner({ projectId: input.projectId, executionId: input.executionId,
+        ownershipEpoch: input.ownershipEpoch, expectedBranch: integration.executionBranch, operation: "provider.mutate" });
+      const previous = turns.filter((entry) => entry.invocationId !== input.invocationId &&
+        entry.executionId === input.executionId && entry.ownershipEpoch === input.ownershipEpoch).at(-1);
+      if (!previous) return undefined;
+      if (previous.status !== "stopped" || previous.agentId !== input.agentId || previous.groupRunId !== input.groupRunId ||
+        previous.runtimePath === input.runtimePath || path.dirname(previous.runtimePath) !== path.dirname(input.runtimePath) ||
+        !path.isAbsolute(previous.runtimePath) || path.normalize(previous.runtimePath) !== previous.runtimePath) {
+        throw new CollaborationStateError("INVALID_STATE_TRANSITION", "Final supplemental launch lacks its exact stopped original native lineage");
+      }
+      return { previousRuntimePath: previous.runtimePath };
+    });
+  }
+
   markScopedFinalNativeOpened(turn: ScopedFinalNativeTurn): void {
     this.appendEvent({ projectId: turn.projectId, agentId: turn.agentId, invocationId: turn.invocationId,
       requestId: `scoped-final-native:${turn.executionId}:${turn.invocationId}:opened`,
@@ -2289,7 +2327,7 @@ export class CollaborationStateDatabase {
 
   private scopedMissingReportRepairLineage(projectId: string, executionId: string, ownershipEpoch: number,
     turn: ScopedAgentTurnRecord | undefined, reservationWriterLeaseEpoch = this.lease.epoch): {
-    originalInvocationId: string; previousRuntimePath: string; attempt: number; coordination: ControlActionEnvelope;
+    originalInvocationId: string; previousRuntimePath: string; previousTurn: ScopedAgentTurnRecord; attempt: number; coordination: ControlActionEnvelope;
     interruptedOperationIds?: string[];
   } | undefined {
     if (!turn || turn.writerLeaseEpoch !== reservationWriterLeaseEpoch) return undefined;
@@ -2307,7 +2345,7 @@ export class CollaborationStateDatabase {
       previous.invocationId === turn.invocationId || previous.status !== "stopped" || !previous.stoppedAt ||
       previous.baseCommit !== turn.baseCommit || path.dirname(previous.runtimePath) !== path.dirname(turn.runtimePath)) return undefined;
     return { originalInvocationId: repair.originalInvocationId, previousRuntimePath: previous.runtimePath,
-      attempt: repair.attempt, coordination: repair.coordination,
+      previousTurn: previous, attempt: repair.attempt, coordination: repair.coordination,
       ...(repair.interruptedOperationIds ? { interruptedOperationIds: repair.interruptedOperationIds } : {}) };
   }
 
@@ -2805,6 +2843,15 @@ export class CollaborationStateDatabase {
     this.mutateProject(input.projectId, input.expectedRevision, (head) => {
       const execution = this.scopedExecution(input.projectId, input.executionId);
       const turn = this.scopedAgentTurn(input.projectId, input.executionId, input.ownershipEpoch);
+      const requestId = `scoped-reconcile:${input.executionId}:${input.ownershipEpoch}:writer:${this.lease.epoch}:${input.invocationId}`;
+      const prior = this.eventByRequestId(input.projectId, requestId);
+      if (prior) {
+        if (!execution || execution.ownershipEpoch !== input.ownershipEpoch ||
+          !isDeepStrictEqual(prior.payload.evidence, input.evidence)) {
+          throw new CollaborationStateError("IDEMPOTENCY_CONFLICT", "Scoped recovery proof changed on replay");
+        }
+        return { changed: false, value: undefined };
+      }
       if (!execution || execution.ownershipEpoch !== input.ownershipEpoch || !turn || turn.invocationId !== input.invocationId ||
         input.evidence.protocol !== "scoped-supervisor-stop-v1" || input.evidence.projectId !== input.projectId ||
         input.evidence.scopeId !== execution.id || input.evidence.agentId !== execution.agentId || input.evidence.role !== "delivery" ||
@@ -2812,15 +2859,49 @@ export class CollaborationStateDatabase {
         input.evidence.nativeProcessScanCleared !== true) {
         throw new CollaborationStateError("INVALID_STATE_TRANSITION", "Scoped recovery proof does not match its exact native owner");
       }
-      const requestId = `scoped-reconcile:${execution.id}:${input.ownershipEpoch}:writer:${this.lease.epoch}:${input.invocationId}`;
-      if (this.eventByRequestId(input.projectId, requestId)) return { changed: false, value: undefined };
-      this.database.prepare("UPDATE scoped_agent_turns SET status = 'stopped', stopped_at = COALESCE(stopped_at, ?) WHERE execution_id = ? AND ownership_epoch = ?")
-        .run(this.isoNow(), execution.id, input.ownershipEpoch);
+      // A released manager retry can be durably reserved before the SDK host
+      // closes. Reclaim that never-opened physical turn only after clearing its
+      // exact old authority; do not turn it into a second business failure or
+      // replace its original native-session ancestry with an unused runtime.
+      const repair = this.scopedMissingReportRepairLineage(input.projectId, execution.id, input.ownershipEpoch, turn, turn.writerLeaseEpoch);
+      const accepted = repair && this.eventByRequestId(input.projectId,
+        `scoped-leader-action:${repair.coordination.invocationId}:${repair.coordination.callId}`);
+      const manager = repair && this.scopedLeaderTurns(input.projectId).find(entry => entry.invocationId === repair.coordination.invocationId);
+      const action = repair?.coordination.action;
+      const reclaimReservedRepair = !turn.openedAt && ["reserved", "stopped"].includes(turn.status) &&
+        execution.status === "running" && !this.scopedAgentReport(input.projectId, execution.id, input.ownershipEpoch) &&
+        !this.projectCancellationIntent(input.projectId) && this.scopedGroupHierarchyActive(input.projectId, execution.groupRunId, head) &&
+        Boolean(repair && accepted && isDeepStrictEqual(accepted.payload.envelope, repair.coordination) &&
+          accepted.payload.executionId === execution.id && accepted.payload.failedOwnershipEpoch === input.ownershipEpoch &&
+          action?.tool === "coordinate_group_task" && action.operation === "retry" && action.arrivalRequestId === execution.arrivalRequestId &&
+          manager?.status === "released" && manager.coordinatorEpoch === repair.coordination.stateVersion);
+      if (reclaimReservedRepair) {
+        // Supervisor stop permanently fences the old physical runtime. Give
+        // the retained logical retry a fresh physical reservation instead of
+        // deleting that fence or attempting to revive expired capabilities.
+        const invocationId = `inv_${createHash("sha256").update(JSON.stringify([turn.invocationId, "writer-recovery", this.lease.epoch])).digest("hex").slice(0, 32)}`;
+        const runtimePath = path.join(path.dirname(turn.runtimePath), invocationId);
+        if (this.database.prepare("SELECT 1 FROM project_events WHERE project_id = ? AND invocation_id = ? LIMIT 1")
+          .get(input.projectId, invocationId)) throw new CollaborationStateError("IDEMPOTENCY_CONFLICT", "Recovery physical invocation already exists");
+        this.insertEvent(head, { projectId: input.projectId, eventId: `evt_${randomUUID()}`, requestId: `${requestId}:reservation`,
+          agentId: execution.agentId, invocationId, ts: this.isoNow(), type: "scoped.agent.missing_report_repair.requested",
+          payload: { executionId: execution.id, groupRunId: execution.groupRunId, ownershipEpoch: input.ownershipEpoch,
+            originalInvocationId: repair!.originalInvocationId, previousTurn: repair!.previousTurn, runtimePath,
+            completionInvocationId: this.scopedAgentTaskCompletion(input.projectId, execution.id, input.ownershipEpoch)?.invocationId ?? null,
+            attempt: repair!.attempt, coordination: repair!.coordination, replacesReservedInvocationId: turn.invocationId } });
+        this.database.prepare(`UPDATE scoped_agent_turns SET invocation_id = ?, runtime_path = ?, status = 'reserved',
+          writer_lease_epoch = ?, stopped_at = NULL WHERE execution_id = ? AND ownership_epoch = ?`)
+          .run(invocationId, runtimePath, this.lease.epoch, execution.id, input.ownershipEpoch);
+      } else {
+        this.database.prepare("UPDATE scoped_agent_turns SET status = 'stopped', stopped_at = COALESCE(stopped_at, ?) WHERE execution_id = ? AND ownership_epoch = ?")
+          .run(this.isoNow(), execution.id, input.ownershipEpoch);
+      }
       this.insertEvent(head, { projectId: input.projectId, eventId: `evt_${randomUUID()}`, requestId,
         workflowRevision: this.scopedGroupRun(input.projectId, execution.groupRunId)!.workflowRevision, agentId: execution.agentId,
         invocationId: input.invocationId, ts: this.isoNow(), type: "scoped.agent.reconciled",
         payload: { executionId: execution.id, groupRunId: execution.groupRunId, ownershipEpoch: input.ownershipEpoch,
-          writerLeaseEpoch: this.lease.epoch, originalWriterLeaseEpoch: turn.writerLeaseEpoch, evidence: input.evidence } });
+          writerLeaseEpoch: this.lease.epoch, originalWriterLeaseEpoch: turn.writerLeaseEpoch,
+          reclaimedReservedRepair: reclaimReservedRepair, evidence: input.evidence } });
       return { changed: true, value: undefined };
     });
   }
@@ -5049,7 +5130,7 @@ export class CollaborationStateDatabase {
       const records = this.readWorkflowAdjustments(projectId);
       this.database.exec("COMMIT");
       return records;
-    } catch (error) { this.database.exec("ROLLBACK"); throw error; }
+    } catch (error) { this.rollbackAfterFailure(); throw error; }
   }
 
   /** Single-request and active-queue reads share the caller's SQLite snapshot.
@@ -5080,7 +5161,7 @@ export class CollaborationStateDatabase {
     if (this.database.isTransaction) return read();
     this.database.exec("BEGIN");
     try { const result = read(); this.database.exec("COMMIT"); return result; }
-    catch (error) { this.database.exec("ROLLBACK"); throw error; }
+    catch (error) { this.rollbackAfterFailure(); throw error; }
   }
 
   private readWorkflowAdjustments(projectId: string, initialConfiguration?: ScopedAgentConfiguration, requestIds?: string[]): WorkflowAdjustmentRecord[] {
@@ -16589,6 +16670,19 @@ export class CollaborationStateDatabase {
     return count;
   }
 
+  /** Current batch only: older completed handoffs remain in project records. */
+  latestGroupAssignmentTaskIds(projectId: string, groupRunId: string): string[] {
+    this.assertOpen();
+    const row = this.database.prepare(`SELECT payload_json FROM project_events
+      WHERE project_id = ? AND group_run_id = ? AND event_type = 'group.tasks.assigned'
+      ORDER BY seq DESC LIMIT 1`).get(projectId, groupRunId) as Row | undefined;
+    if (!row) return [];
+    const payload = parseJson<{ taskIds?: unknown }>(row.payload_json, {});
+    if (!Array.isArray(payload.taskIds) || !payload.taskIds.every(id => typeof id === "string"))
+      throw new CollaborationStateError("DATABASE_INTEGRITY_FAILED", "Current group assignment has invalid task identities");
+    return payload.taskIds;
+  }
+
   appendFailureAttempt(input: AppendFailureAttemptInput): {
     revision: number;
     attempt: FailureAttempt;
@@ -18480,7 +18574,22 @@ export class CollaborationStateDatabase {
   }
 
   terminalPushOwnerNodeRunId(projectId: string, executionId: string): string {
-    return requiredString(this.terminalPushOwnerRow(projectId, executionId).node_run_id, "original receipt node");
+    const owner = this.terminalPushOwnerRow(projectId, executionId);
+    if (owner.node_run_id) return requiredString(owner.node_run_id, "original receipt node");
+    // Scoped Agent arrivals need not allocate a node_runs row. Their retained
+    // execution belongs to the outer workflow node of the original root group,
+    // even if that group has completed and another workflow node is now active.
+    let group = this.scopedGroupRun(projectId, String(owner.group_run_id));
+    const ancestors = new Set<string>();
+    while (group?.parentGroupRunId) {
+      if (ancestors.has(group.id)) throw new OperationStoreViolationError("Original receipt group ancestry contains a cycle");
+      ancestors.add(group.id);
+      group = this.scopedGroupRun(projectId, group.parentGroupRunId);
+    }
+    const node = group ? this.database.prepare("SELECT node_run_id FROM node_runs WHERE project_id = ? AND activation_request_id = ?")
+      .get(projectId, group.activationRequestId) as Row | undefined : undefined;
+    if (!node?.node_run_id) throw new OperationStoreViolationError("Original receipt group lost its retained workflow node");
+    return requiredString(node.node_run_id, "original receipt node");
   }
 
   terminalPushObservationTurns(projectId: string): TerminalPushObservationTurn[] {

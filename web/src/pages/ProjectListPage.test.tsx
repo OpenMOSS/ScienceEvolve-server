@@ -37,6 +37,7 @@ import type {
 } from "../types";
 import { classifyProjectStatus, ProjectListPage } from "./ProjectListPage";
 import { cacheProjectOverview, readCachedProjectOverview } from "../project-overview-cache";
+import { cacheResource } from "../resource-cache";
 import {
   cacheProjectList,
   clearProjectListMemoryCache,
@@ -57,6 +58,7 @@ vi.mock("../api", () => ({
   importAgentConfigPreset: vi.fn(),
   getAgentConfigPresets: vi.fn(),
   getCatalog: vi.fn(),
+  getHarnessPrompt: vi.fn(async () => ({ status: "source-unavailable", reason: "Native source is unavailable in this UI fixture" })),
   getGitHubAccounts: vi.fn(),
   getProjects: vi.fn(),
   getQueue: vi.fn(),
@@ -205,6 +207,27 @@ const queue: QueueSnapshot = {
 };
 
 describe("ProjectListPage task overview", () => {
+  const generatedTask: SavedResearchTask = { schemaVersion: 2, kind: "scienceevolve-saved-research-task",
+    id: `task_${"c".repeat(32)}`, title: "助手刚生成的草稿", requirement: "核对成功生成后的草稿立即出现在主界面。",
+    agents: DEFAULT_AGENTS, orchestration: DEFAULT_AGENT_ORCHESTRATION, git: { enabled: false },
+    createdAt: "2026-10-28T08:00:00Z", updatedAt: "2026-10-28T08:00:00Z" };
+
+  it("refreshes the saved drafts themselves when the assistant publishes a new draft", async () => {
+    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    await waitFor(() => expect(getSavedResearchTasks).toHaveBeenCalledOnce());
+    vi.mocked(getSavedResearchTasks).mockResolvedValue([generatedTask]);
+    act(() => { window.dispatchEvent(new Event("openfars:saved-tasks-changed")); });
+    expect(await screen.findByText(generatedTask.title)).toBeVisible();
+    expect(getSavedResearchTasks).toHaveBeenCalledTimes(2);
+  });
+
+  it("renders cached drafts while a returning page revalidates in the background", () => {
+    cacheResource("saved-tasks", [generatedTask]);
+    vi.mocked(getSavedResearchTasks).mockImplementation(() => new Promise(() => undefined));
+    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    expect(screen.getByText(generatedTask.title)).toBeVisible();
+  });
+
   beforeEach(() => {
     localStorage.clear();
     clearProjectListMemoryCache();

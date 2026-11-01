@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { constants, promises as fs } from "node:fs";
 import path from "node:path";
+import { syncDirectory } from "./harness-runtime/directory-sync.js";
 import type { GitExecutionAuthority, GitHubRepositoryFact } from "./collaboration-git/contracts.js";
 
 export interface AcceptanceFaultArm {
@@ -99,8 +100,7 @@ export async function writeAcceptanceEvidence(bound: BoundArm, kind: "consumed" 
       runId: arm.runId, projectId: arm.projectId, at: new Date().toISOString(), armSha256, target: arm.target }, null, 2) + "\n");
     await handle.sync();
   } finally { await handle.close(); }
-  const parent = await fs.open(directory, "r");
-  try { await parent.sync(); } finally { await parent.close(); }
+  await syncDirectory(directory);
   return true;
 }
 

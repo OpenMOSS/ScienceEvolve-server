@@ -6,9 +6,7 @@ import { codexGatewayConfigOverrides, codexIndexToolOutputConfig } from "../../c
 import { EXPLAINER_MCP_NAME } from "../../internal/shared/explainer-tools.js";
 import { prepareCodexGatewayModelCatalog } from "../../codex-gateway-model-catalog.js";
 import type {
-  HarnessAdapter,
-  LaunchPlan,
-  ResidentInactivityPolicy
+  LaunchPlan
 } from "../contracts.js";
 import {
   validatePreparedFilesystemMcp,
@@ -17,8 +15,7 @@ import {
 import { HarnessRuntimeError } from "../errors.js";
 import {
   buildInvocationEnvironment,
-  DEFAULT_RAW_LOG_LIMIT_BYTES,
-  type ResidentProcessLauncher
+  DEFAULT_RAW_LOG_LIMIT_BYTES
 } from "../process-host.js";
 import {
   ResidentNativeDriver,
@@ -30,22 +27,19 @@ import {
 import { modelFacingMcpNamespaceWildcard } from "../tool-catalog.js";
 import type { AdapterMcpRow } from "./adapter-utils.js";
 import { harnessExecutableLaunch, gatewayModelContextWindow, safeName, sleepMcpRow } from "./adapter-utils.js";
-import { assertDshSessionArtifact, dshMcpPatch, dshNativeSdkPatch, dshSessionArtifactPath } from "./dsh-adapter.js";
+import { assertDshSessionArtifact, dshMcpPatch, dshNativeSdkPatch, dshSessionArtifactPath, resolveDshSessionArtifactPath, prepareDshSettings } from "./dsh-adapter.js";
 import { piMcpConfig, readResumedPiSession } from "./pi-adapter.js";
+import { CONTROL_PROXY_TIMEOUT_MS } from "../../control-request-lifetime.js";
 import type {
   ResidentAdapterLaunchEvidence,
-  ResidentScopeOpenRequest
+  ResidentAdapterLaunchRequest,
+  ResidentAdapterLaunchDefinition
 } from "../resident-lease.js";
 import { residentScopeId } from "../resident-lease.js";
 import { validateStagedInvocationInputs } from "../invocation-inputs.js";
 import { installWindowsCodexPatch } from "../windows-codex-patch.js";
 
-export interface ResidentAdapterLaunchRequest extends ResidentScopeOpenRequest {
-  adapter: HarnessAdapter;
-  executable: string;
-  processHost: ResidentProcessLauncher;
-  inactivityPolicy?: Partial<ResidentInactivityPolicy>;
-}
+export type { ResidentAdapterLaunchRequest, ResidentAdapterLaunchDefinition } from "../resident-lease.js";
 
 export interface OpenedResidentAdapter {
   driver: ResidentNativeDriver;
@@ -53,7 +47,7 @@ export interface OpenedResidentAdapter {
   unstartedReservation?: true;
 }
 
-/** Trusted launch boundary shared by all four built-in resident Adapters. */
+/** Trusted launch boundary shared by all built-in resident Adapters. */
 export async function openBuiltinResidentAdapter(
   input: ResidentAdapterLaunchRequest
 ): Promise<OpenedResidentAdapter> {
@@ -75,7 +69,7 @@ export async function openBuiltinResidentAdapter(
     }
   );
   try {
-    if (input.adapter.descriptor.id === "codex") {
+    if (input.adapter.descriptor.id === "codex" && !("nativeCodexProfileHome" in input.launchRoute)) {
       await installWindowsCodexPatch(residentHarnessHome(input, "codex-home"),
         input.executable, input.executionRuntimePath);
     }
@@ -114,39 +108,41 @@ export async function openBuiltinResidentAdapter(
   }
 }
 
-async function buildLaunch(input: ResidentAdapterLaunchRequest): Promise<{
-  plan: LaunchPlan;
-  codec: ReturnType<typeof codexAppServerCodec>;
-  unstartedReservation?: true;
-}> {
+async function buildLaunch(input: ResidentAdapterLaunchRequest): Promise<ResidentAdapterLaunchDefinition> {
   const harnessId = input.adapter.descriptor.id;
   if (harnessId === "codex") return buildCodexLaunch(input);
+  if ("nativeCodexProfileHome" in input.launchRoute) throw launchError("Native Codex profile cannot launch another Harness");
   if (harnessId === "claude-code") return buildClaudeLaunch(input);
   if (harnessId === "pi") return buildPiLaunch(input);
   if (harnessId === "dsh") return buildDshLaunch(input);
+  if (input.adapter.resident?.buildLaunch) return input.adapter.resident.buildLaunch(input);
   throw launchError(`No trusted resident launch mapping exists for ${harnessId}`);
 }
 
 async function buildCodexLaunch(input: ResidentAdapterLaunchRequest) {
   const { request, spec } = input;
   const config = request.project.agents[request.agent];
-  if (!config?.gatewaySnapshot) throw launchError("Codex resident launch has no Gateway snapshot");
-  const home = residentHarnessHome(input, "codex-home");
-  await fs.mkdir(home, { recursive: true, mode: 0o700 });
-  const routedGateway = {
-    ...config.gatewaySnapshot,
-    url: input.launchRoute.baseUrl,
-    apiKey: input.launchRoute.token,
+  const native = "nativeCodexProfileHome" in input.launchRoute ? input.launchRoute : undefined;
+  if (!config?.gatewaySnapshot && !native) throw launchError("Codex resident launch has no model route");
+  const home = native?.nativeCodexProfileHome ?? residentHarnessHome(input, "codex-home");
+  if (!native) await fs.mkdir(home, { recursive: true, mode: 0o700 });
+  const routedGateway = native ? undefined : {
+    ...config!.gatewaySnapshot!,
+    url: gatewayLaunchRoute(input).baseUrl,
+    apiKey: gatewayLaunchRoute(input).token,
     protocol: "responses" as const,
     nativeProtocol: "responses" as const,
     routeMode: "direct" as const
   };
   const yolo = request.permission === "yolo";
-  const gatewayModelCatalog = await prepareCodexGatewayModelCatalog(
+  const gatewayModelCatalog = native ? undefined : await prepareCodexGatewayModelCatalog(
     input.executable, spec.model, input.executionRuntimePath
   );
   const args = [
-    "--strict-config",
+    // app-server has no ignore-user-config flag. Native login homes can carry
+    // older, harmless config fields; keep explicit route/capability overrides
+    // without turning those legacy preferences into a launch failure.
+    ...(!native ? ["--strict-config"] : []),
     "--disable", "multi_agent",
     "--disable", "plugins",
     "--disable", "apps",
@@ -154,15 +150,15 @@ async function buildCodexLaunch(input: ResidentAdapterLaunchRequest) {
     "-a", "never",
     "-s", yolo ? "danger-full-access" : "read-only",
     "-C", spec.inputs.workspacePath,
-    ...codexGatewayConfigOverrides(routedGateway, undefined, spec.model)
-      .flatMap((value) => ["-c", value]),
+    ...(routedGateway ? codexGatewayConfigOverrides(routedGateway, undefined, spec.model).flatMap((value) => ["-c", value])
+      : ["-c", 'model_provider="openai"']),
     ...(gatewayModelCatalog ? ["-c", `model_catalog_json=${JSON.stringify(gatewayModelCatalog)}`] : []),
     "-c", "skills.bundled.enabled=false",
     "-c", codexSkillConfig([...spec.policy.skillPaths, ...spec.policy.autoSkillPaths]),
     "-c", codexMcpConfig(await residentMcpRows(input), input.spec.policy.mcpServers, input.fixedMcpToken, {
       siiUrl: input.request.siiMcp?.url,
-      ...(spec.policy.webSearch ? { webSearch: {
-        url: `${input.launchRoute.baseUrl.replace(/\/$/, "")}/web-mcp`, token: input.launchRoute.token
+      ...(spec.policy.webSearch && !native ? { webSearch: {
+        url: `${gatewayLaunchRoute(input).baseUrl.replace(/\/$/, "")}/web-mcp`, token: gatewayLaunchRoute(input).token
       } } : {}),
       yolo
     }),
@@ -180,7 +176,7 @@ async function buildCodexLaunch(input: ResidentAdapterLaunchRequest) {
     codec: codexAppServerCodec({
       cwd: spec.inputs.workspacePath,
       model: spec.model,
-      modelProvider: "openfars_gateway",
+      modelProvider: native ? "openai" : "openfars_gateway",
       sandbox: yolo ? "danger-full-access" : "read-only"
     })
   };
@@ -282,7 +278,7 @@ async function buildPiLaunch(input: ResidentAdapterLaunchRequest) {
       await fs.mkdir(sessionRoot, { recursive: true, mode: 0o700 });
     }
   }
-  await preparePiHome(home, input.launchRoute.baseUrl, spec.model,
+  await preparePiHome(home, gatewayLaunchRoute(input).baseUrl, spec.model,
     gatewayModelContextWindow(request, spec.model));
   const extension = await resolvePiResidentExtension();
   const yolo = request.permission === "yolo";
@@ -307,7 +303,7 @@ async function buildPiLaunch(input: ResidentAdapterLaunchRequest) {
     PI_TELEMETRY: "0",
     PI_OFFLINE: "1",
     SCIENCEEVOLVE_PI_MCP_CONFIG: JSON.stringify(
-      piMcpConfig(await residentMcpRows(input), input.fixedMcpToken, input.launchRoute.token)
+      piMcpConfig(await residentMcpRows(input), input.fixedMcpToken, gatewayLaunchRoute(input).token)
     )
   });
   return {
@@ -330,11 +326,11 @@ async function buildDshLaunch(input: ResidentAdapterLaunchRequest) {
   const { request, spec } = input;
   const home = residentHarnessHome(input, "dsh-home");
   await fs.mkdir(home, { recursive: true, mode: 0o700 });
-  await prepareDshHome(home, input.launchRoute.baseUrl, spec.model,
+  await prepareDshHome(home, gatewayLaunchRoute(input).baseUrl, spec.model,
     gatewayModelContextWindow(request, spec.model));
   const nativeSessionResume = input.adapter.resident?.recoveryStrategy === "native-session-resume";
   if (nativeSessionResume && input.session.resumedAt) {
-    await assertDshSessionArtifact({ artifactPath: dshSessionArtifactPath(home, spec.inputs.workspacePath, input.session.nativeId),
+    await assertDshSessionArtifact({ artifactPath: await resolveDshSessionArtifactPath(dshSessionArtifactPath(home, spec.inputs.workspacePath, input.session.nativeId)),
       sessionRoot: path.join(home, "sessions"), expectedSessionId: input.session.nativeId,
       expectedWorkspacePath: spec.inputs.workspacePath });
   }
@@ -352,7 +348,7 @@ async function buildDshLaunch(input: ResidentAdapterLaunchRequest) {
   }
   const args = [
     "--profile", "sdk",
-    "--patch", patchPath
+    "--patch", path.join(home, "gateway.patch.yml"), "--patch", patchPath
   ];
   const launch = harnessExecutableLaunch(input.executable, args);
   const environment = residentEnvironment(input, {
@@ -386,20 +382,26 @@ function usesFixedAgentWorkspace(input: ResidentAdapterLaunchRequest): boolean {
   return input.spec.inputs.workspacePath === path.join(input.spec.inputs.projectPath, "git-worktrees", "agents", input.request.agent);
 }
 
-function residentEnvironment(
+function gatewayLaunchRoute(input: ResidentAdapterLaunchRequest): { baseUrl: string; token: string } {
+  if ("nativeCodexProfileHome" in input.launchRoute) throw launchError("Gateway route required for this resident feature");
+  return input.launchRoute;
+}
+
+export function residentEnvironment(
   input: ResidentAdapterLaunchRequest,
   adapter: NodeJS.ProcessEnv
 ): NodeJS.ProcessEnv {
-  const route = input.adapter.descriptor.nativeProtocol === "anthropic-messages"
+  const gateway = "nativeCodexProfileHome" in input.launchRoute ? undefined : input.launchRoute;
+  const route = !gateway ? {} : input.adapter.descriptor.nativeProtocol === "anthropic-messages"
     ? {
-        SCIENCEEVOLVE_GATEWAY_API_KEY: input.launchRoute.token,
-        ANTHROPIC_BASE_URL: input.launchRoute.baseUrl.replace(/\/v1\/?$/, ""),
-        ANTHROPIC_AUTH_TOKEN: input.launchRoute.token
+        SCIENCEEVOLVE_GATEWAY_API_KEY: gateway.token,
+        ANTHROPIC_BASE_URL: gateway.baseUrl.replace(/\/v1\/?$/, ""),
+        ANTHROPIC_AUTH_TOKEN: gateway.token
       }
     : {
-        SCIENCEEVOLVE_GATEWAY_API_KEY: input.launchRoute.token,
-        OPENAI_BASE_URL: input.launchRoute.baseUrl,
-        OPENAI_API_KEY: input.launchRoute.token
+        SCIENCEEVOLVE_GATEWAY_API_KEY: gateway.token,
+        OPENAI_BASE_URL: gateway.baseUrl,
+        OPENAI_API_KEY: gateway.token
       };
   return buildInvocationEnvironment({
     common: { ...(input.processBinding.commonEnvironment ?? {}) },
@@ -408,7 +410,7 @@ function residentEnvironment(
   });
 }
 
-function launchPlan(
+export function launchPlan(
   input: ResidentAdapterLaunchRequest,
   command: string,
   args: string[],
@@ -515,8 +517,7 @@ async function assertResidentLaunchAuthority(input: ResidentAdapterLaunchRequest
   } else if (input.controlMcp) {
     throw launchError("Resident control binding was supplied without control authority");
   }
-  if (input.processBinding.route.baseUrl !== input.launchRoute.baseUrl ||
-    input.processBinding.route.token !== input.launchRoute.token ||
+  if (JSON.stringify(input.processBinding.route) !== JSON.stringify(input.launchRoute) ||
     input.processBinding.workspacePath !== input.spec.inputs.workspacePath ||
     input.processBinding.session().nativeId !== input.session.nativeId) {
     throw launchError("Resident ProcessHost binding does not match launch authority");
@@ -542,17 +543,17 @@ async function assertResidentLaunchAuthority(input: ResidentAdapterLaunchRequest
   }
 }
 
-async function residentMcpRows(input: ResidentAdapterLaunchRequest): Promise<readonly AdapterMcpRow[]> {
+export async function residentMcpRows(input: ResidentAdapterLaunchRequest): Promise<readonly AdapterMcpRow[]> {
   return [
     await sleepMcpRow(),
     ...input.mcpRows,
-    ...(input.spec.policy.webSearch && input.adapter.descriptor.route?.webSearchMcp
+    ...(input.spec.policy.webSearch && input.adapter.descriptor.route?.webSearchMcp && !("nativeCodexProfileHome" in input.launchRoute)
       ? [{
           name: "openfars-web",
           namespace: "openfars-web",
           transport: "streamable-http" as const,
-          url: `${input.launchRoute.baseUrl.replace(/\/$/, "")}/web-mcp`,
-          headers: { Authorization: `Bearer ${input.launchRoute.token}` }
+          url: `${gatewayLaunchRoute(input).baseUrl.replace(/\/$/, "")}/web-mcp`,
+          headers: { Authorization: `Bearer ${gatewayLaunchRoute(input).token}` }
         }]
       : []),
     ...(input.filesystemMcp ? [input.filesystemMcp.row] : []),
@@ -613,7 +614,8 @@ function codexMcpConfig(
       const env = Object.entries(row.env ?? {})
         .map(([key, value]) => `${JSON.stringify(key)} = ${JSON.stringify(value)}`)
         .join(", ");
-      return `${JSON.stringify(row.name)} = { command = ${JSON.stringify(row.command)}, args = [${args}], env = { ${env} }${sleepTimeout}${approval}${indexOutput} }`;
+      const controlBudget = row.namespace === "openfars-resident-control" ? `, tool_timeout_sec = ${Math.ceil(CONTROL_PROXY_TIMEOUT_MS / 1_000) + 10}` : "";
+      return `${JSON.stringify(row.name)} = { command = ${JSON.stringify(row.command)}, args = [${args}], env = { ${env} }${sleepTimeout}${approval}${indexOutput}${controlBudget} }`;
     }
     if (!row.headers) {
       return `${JSON.stringify(row.name)} = { url = ${JSON.stringify(row.url)}${approval}${indexOutput} }`;
@@ -699,25 +701,7 @@ async function prepareDshHome(
   model: string,
   contextWindow: number
 ): Promise<void> {
-  const content = [
-    "llm-pi-ai:", "  providers:", "    openfars:",
-    "      displayName: OpenFARS selected gateway",
-    "      apiKeyEnv: SCIENCEEVOLVE_GATEWAY_API_KEY",
-    "      api: openai-completions",
-    `      baseURL: ${JSON.stringify(baseUrl)}`,
-    "      compat:",
-    "        supportsReasoningEffort: false",
-    "        supportsDeveloperRole: false",
-    "      models:",
-    `        - id: ${JSON.stringify(model)}`,
-    `          name: ${JSON.stringify(model)}`,
-    `          contextWindow: ${contextWindow}`,
-    "agent-default-model:",
-    "  provider: openfars",
-    `  model: ${JSON.stringify(model)}`,
-    ""
-  ].join("\n");
-  await fs.writeFile(path.join(home, "settings.yaml"), content, { encoding: "utf8", mode: 0o600 });
+  await prepareDshSettings(home, baseUrl, model, contextWindow);
 }
 
 const DSH_DISABLED_TOOLS = [

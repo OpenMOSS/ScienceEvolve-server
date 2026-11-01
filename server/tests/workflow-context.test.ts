@@ -118,21 +118,22 @@ describe("management Workflow context", () => {
     expect(metrics.utf8).toBeLessThanOrEqual(budget.utf8);
     expect(metrics.lines).toBeLessThanOrEqual(budget.lines);
     for (const agentId of agentIds) {
-      expect(prompt).toContain(`| ${agentId} |`);
+      expect(prompt).not.toContain(`| ${agentId} |`);
       expect(details.agents[agentId].instructions).toBe(f.state.agents[agentId].instructions);
     }
-    expect(prompt).toContain(context.preview);
-    expect(prompt).toContain("Configuration revision: 7; state revision: 12;");
-    expect(prompt).toContain("Current Agent: main; role:");
-    expect(prompt).toContain(`Legal route candidates for this turn (exact node IDs): ${JSON.stringify(candidates)}`);
+    expect(prompt).not.toContain(context.preview);
+    expect(await fs.readFile(context.definitionPath, "utf8")).toContain("workflowRevision");
+    expect(prompt).not.toContain("Configuration revision: 7; state revision: 12;");
+    expect(prompt).not.toContain("Current Agent: main; role:");
+    expect(context.preview).toContain(`Legal route candidates for this turn (exact node IDs): ${JSON.stringify(candidates)}`);
     expect(prompt).toContain("OpenFARS permission mode:");
     expect(prompt).not.toContain("gateway-credential-must-stay-private");
-    if (scope === "group") expect(prompt).toContain("it does not complete the project");
-    else expect(prompt).toContain("Project completion:");
+    if (scope === "group") expect(context.preview).toContain("it does not complete the project");
+    else expect(context.preview).toContain("Project completion:");
     if (extraAgents) {
-      expect(prompt).toContain("budget_node_64 => Agent budget_agent_64");
-      expect(prompt).toContain("budget_node_64 --strong--> finish");
-      expect(prompt).toContain("budget_agent_64");
+      expect(context.preview).toContain("budget_node_64 => Agent budget_agent_64");
+      expect(context.preview).toContain("budget_node_64 --strong--> finish");
+      expect(context.preview).toContain("budget_agent_64");
     }
   });
 
@@ -203,8 +204,9 @@ describe("management Workflow context", () => {
     expect(JSON.stringify(details)).not.toContain("gateway-credential-must-stay-private");
     expect((await fs.stat(context.agentsPath)).mode & 0o777).toBe(0o400);
     const prompt = compileWorkflowPrompt(f.request, prepared, compileInvocationPolicy(f.state.agents.main, f.request), { inlineInbox: "L".repeat(32_001) });
-    expect(prompt).toContain("Global Workflow overview");
-    expect(prompt).toContain("| Skills | autoSkills | MCP services |");
+    expect(prompt).not.toContain("Global Workflow overview");
+    expect(prompt).toContain("L".repeat(32_001));
+    expect(prompt).not.toContain("| Skills | autoSkills | MCP services |");
     expect(prompt).not.toContain("<openfars_inbox>");
     expect(prompt).not.toContain("FULL_INSTRUCTIONS_execution");
   });

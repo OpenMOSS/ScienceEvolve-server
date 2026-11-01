@@ -25,3 +25,4 @@ protocol-route/.home/
 # Local validation and diagnostic artifacts may contain runtime state or sessions.
 /temp/
 /tmp-diag-*/
+/shared-core/.sync.lock

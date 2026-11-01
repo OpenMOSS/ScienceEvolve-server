@@ -5,6 +5,7 @@ import * as api from "../api";
 import { DEFAULT_AGENTS, DEFAULT_AGENT_ORCHESTRATION } from "../lib";
 import type { Catalog, CreateProjectInput, ProjectExplainerEvent, ProjectExplainerRuntimeConfig } from "../types";
 import { ProjectExplainerAssistantProvider, useExplainerDraftBridge } from "./ProjectExplainerAssistant";
+import { cacheResource, readCachedResource } from "../resource-cache";
 
 vi.mock("../api", async importOriginal => ({ ...await importOriginal<typeof import("../api")>(),
   createExplainerConversation: vi.fn(), getExplainerConversation: vi.fn(), getExplainerConversationHistory: vi.fn(),
@@ -73,6 +74,95 @@ beforeEach(() => {
 });
 
 describe("shared Project Explainer floating assistant", () => {
+  it("shows deletion receipts without dead links, removes stale draft snapshots and preserves manual editor changes", async () => {
+    backend.taskId = taskId;
+    const otherId = `task_${"d".repeat(32)}`;
+    cacheResource(`saved-task:${taskId}`, { title: "Deleted snapshot" });
+    cacheResource(`saved-task:${otherId}`, { title: "Keep snapshot" });
+    const stream = deferredStream(), refresh = vi.fn();
+    window.addEventListener("openfars:saved-tasks-changed", refresh);
+    try {
+      render(<ProjectExplainerAssistantProvider target={{ newProject: true }}><Editor /></ProjectExplainerAssistantProvider>);
+      await open(); await send("删除当前保存的草稿");
+      fireEvent.change(screen.getByRole("textbox", { name: "手动课题名称" }), { target: { value: "保留手动编辑" } });
+      const receipt: api.ExplainerAssistantAction = { kind: "drafts.deleted", context: { ...backend, revision: backend.revision + 1,
+        taskId: undefined, deletedTaskId: taskId, canUndo: false }, summary: "已删除指定项目草稿。", deletedTasks: [
+          { id: taskId, title: "Deleted draft", updatedAt: new Date().toISOString() }
+        ] };
+      await act(async () => { await stream.emit(event("status", receipt.summary, { assistantAction: receipt })); stream.finish(); });
+      expect(screen.getByText("项目草稿已删除")).toBeVisible();
+      expect(screen.queryByRole("link", { name: "打开项目草稿" })).toBeNull();
+      expect(screen.getByRole("textbox", { name: "手动课题名称" })).toHaveValue("保留手动编辑");
+      expect(readCachedResource(`saved-task:${taskId}`)).toBeUndefined();
+      expect(readCachedResource(`saved-task:${otherId}`)).toEqual({ title: "Keep snapshot" });
+      expect((refresh.mock.calls[0]![0] as CustomEvent).detail).toEqual({ deletedTaskIds: [taskId] });
+      expect(api.createProject).not.toHaveBeenCalled();
+    } finally { window.removeEventListener("openfars:saved-tasks-changed", refresh); }
+  });
+
+  it("updates a different saved draft without applying its receipt to the current editor", async () => {
+    const stream = deferredStream(), otherId = `task_${"d".repeat(32)}`;
+    render(<ProjectExplainerAssistantProvider target={{ newProject: true }}><Editor /></ProjectExplainerAssistantProvider>);
+    await open(); await send("修改草稿库中的另一份草稿");
+    const receipt: api.ExplainerAssistantAction = { kind: "draft.updated", targetTaskId: otherId,
+      savedTask: { id: otherId, title: "另一份草稿", updatedAt: new Date().toISOString() },
+      context: { ...backend, revision: backend.revision + 1, draft: draft("服务端当前快照") }, summary: "已更新指定草稿。" };
+    await act(async () => { await stream.emit(event("status", receipt.summary, { assistantAction: receipt })); stream.finish(); });
+    expect(screen.getByRole("textbox", { name: "手动课题名称" })).toHaveValue("当前课题");
+    expect(screen.getByRole("link", { name: "打开项目草稿" })).toHaveAttribute("href", `#/saved-tasks/${otherId}/edit`);
+    expect(screen.queryByText(/生成期间修改了草稿/)).toBeNull();
+  });
+
+  it("reopens the retained conversation for a deleted draft without trying to bind its deleted target", async () => {
+    backend.taskId = taskId;
+    const stream = deferredStream();
+    const view = render(<ProjectExplainerAssistantProvider target={{ taskId }}>草稿编辑页</ProjectExplainerAssistantProvider>);
+    await open(); await send("删除这份保存的草稿");
+    backend = { ...backend, revision: backend.revision + 1, taskId: undefined, deletedTaskId: taskId };
+    const receipt: api.ExplainerAssistantAction = { kind: "drafts.deleted", context: structuredClone(backend), summary: "已删除草稿。",
+      deletedTasks: [{ id: taskId, title: "草稿", updatedAt: new Date().toISOString() }] };
+    await act(async () => { await stream.emit(event("status", receipt.summary, { assistantAction: receipt })); stream.finish(); });
+    await waitFor(() => expect(readCachedResource<{ context: api.ExplainerAssistantContext }>(`assistant:task:${taskId}`)?.context.deletedTaskId).toBe(taskId));
+    const creates = vi.mocked(api.createExplainerConversation).mock.calls.length;
+    view.unmount();
+    render(<ProjectExplainerAssistantProvider target={{ taskId }}>保留的未保存副本</ProjectExplainerAssistantProvider>);
+    await open();
+    await waitFor(() => expect(api.getExplainerConversation).toHaveBeenCalledWith(id));
+    expect(api.createExplainerConversation).toHaveBeenCalledTimes(creates);
+    expect(screen.getByText("项目草稿已删除")).toBeVisible();
+  });
+
+  it("echoes a submitted message before a slow editor synchronization and deduplicates its acknowledgement", async () => {
+    let synchronize!: (value: api.ExplainerAssistantContext) => void;
+    vi.mocked(api.syncExplainerConversation).mockImplementation(() => new Promise(done => { synchronize = done; }));
+    vi.mocked(api.streamExplainerConversation).mockImplementation(async (_id, text, receive) => {
+      const ack = event("user", text); history.push(ack); await receive(ack);
+    });
+    render(<ProjectExplainerAssistantProvider target={{ newProject: true }}><Editor /></ProjectExplainerAssistantProvider>);
+    await open();
+    fireEvent.change(screen.getByRole("textbox", { name: "给 Project Explainer 的消息" }), { target: { value: "马上显示这条消息" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    expect(screen.getByText("马上显示这条消息")).toBeVisible();
+    expect(screen.getByText("发送中…")).toBeVisible();
+    expect(api.streamExplainerConversation).not.toHaveBeenCalled();
+    await act(async () => synchronize(structuredClone(backend)));
+    await waitFor(() => expect(api.streamExplainerConversation).toHaveBeenCalled());
+    expect(screen.getAllByText("马上显示这条消息")).toHaveLength(1);
+    expect(screen.queryByText("发送中…")).toBeNull();
+  });
+
+  it("keeps a draft navigation card when final history lags and derives its link from the real saved task receipt", async () => {
+    vi.mocked(api.streamExplainerConversation).mockImplementation(async (_id, _text, receive) => {
+      const receipt = action(); delete receipt.href;
+      const incoming = { ...event("tool_output", "Draft saved", { assistantAction: receipt }), itemId: "save-result" };
+      await receive(incoming);
+    });
+    render(<ProjectExplainerAssistantProvider target={{}}>首页</ProjectExplainerAssistantProvider>);
+    await open(); await send();
+    await waitFor(() => expect(screen.getByRole("button", { name: "发送" })).toBeInTheDocument());
+    expect(screen.getByRole("link", { name: "打开项目草稿" })).toHaveAttribute("href", `#/saved-tasks/${taskId}/edit`);
+  });
+
   it("does not overlap slow history polls for a remotely active conversation", async () => {
     vi.mocked(api.getExplainerConversationHistory).mockResolvedValueOnce({ active: true, events: [] });
     vi.useFakeTimers();
@@ -114,6 +204,18 @@ describe("shared Project Explainer floating assistant", () => {
     expect(screen.getAllByLabelText("Project Explainer 回复状态")).toHaveLength(1);
     expect(screen.queryByText(quarantine)).not.toBeInTheDocument();
     expect(screen.getByText("当前研究正在进行中。")).toBeVisible();
+  });
+
+  it("distinguishes context preparation from connecting to the model", async () => {
+    const stream = deferredStream();
+    render(<ProjectExplainerAssistantProvider target={{}}>首页</ProjectExplainerAssistantProvider>);
+    await open(); await send();
+    await act(async () => { await stream.emit({ ...event("status", "Preparing", { stage: "preparing-context" }), phase: "started" }); });
+    expect(screen.getByRole("status", { name: "Project Explainer 回复状态" })).toHaveTextContent("正在准备对话上下文…");
+    await act(async () => { await stream.emit({ ...event("status", "Starting", { stage: "connecting-model", preparationMs: 27 }), phase: "started" }); });
+    expect(screen.getByRole("status", { name: "Project Explainer 回复状态" })).toHaveTextContent("正在连接模型…");
+    await act(async () => { await stream.emit(event("status", "回答完成", { turnComplete: true })); stream.finish(); });
+    await waitFor(() => expect(screen.getByRole("status", { name: "Project Explainer 回复状态" })).toHaveTextContent("回答完成"));
   });
 
   it("keeps a fatal streamed error visible with its actual explanation", async () => {

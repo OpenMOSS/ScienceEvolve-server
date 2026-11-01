@@ -92,6 +92,29 @@ async function setup() {
 }
 
 describe("shared Project Explainer core", () => {
+  it("reports preparation before loading evidence and never starts the model when stopped during preparation", async () => {
+    const { service, host, invocations } = await setup();
+    const project = host.project;
+    let release!: () => void, entered!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const loading = new Promise<void>(resolve => { entered = resolve; });
+    host.project = async (...args) => { entered(); await gate; return project(...args); };
+    const controller = new AbortController();
+    const events: ProjectExplainerEvent[] = [];
+    const turn = service.ask("project", "Delete a selected draft", event => { events.push(event); }, controller.signal);
+    await loading;
+    expect(events.map(event => event.kind)).toEqual(["user", "status"]);
+    expect(events[1].data).toMatchObject({ stage: "preparing-context" });
+    expect(service.isActive("project")).toBe(true);
+    controller.abort(); release(); await turn;
+    expect(invocations).toHaveLength(0);
+    expect(service.isActive("project")).toBe(false);
+    expect((await service.history("project")).events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "user", text: "Delete a selected draft" }),
+      expect.objectContaining({ kind: "status", text: "解说已停止。" })
+    ]));
+  });
+
   it("does not build project evidence or trigger context organization when polling chat history", async () => {
     const { service, host, invocations } = await setup();
     const project = await host.project("project");

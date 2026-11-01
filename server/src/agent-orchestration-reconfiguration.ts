@@ -322,6 +322,7 @@ function configInput(
   return {
     model: patch.model ?? base.model,
     harness: patch.harness ?? base.harness ?? DEFAULT_HARNESS_ID,
+    ...(base.nativeCodexProfileId ? { nativeCodexProfileId: base.nativeCodexProfileId } : {}),
     ...((patch.gatewayId ?? base.gatewayId)
       ? { gatewayId: patch.gatewayId ?? base.gatewayId }
       : {}),
@@ -347,6 +348,7 @@ function sameExecutionRoute(left: AgentConfig, right: AgentConfig): boolean {
     (left.harness ?? DEFAULT_HARNESS_ID) ===
       (right.harness ?? DEFAULT_HARNESS_ID) &&
     left.gatewayId === right.gatewayId &&
+    left.nativeCodexProfileId === right.nativeCodexProfileId &&
     left.gatewayReasoningOption === right.gatewayReasoningOption;
 }
 
@@ -510,6 +512,7 @@ export function parseAgentOrchestrationProposal(
           ...defaults,
           model: mainRoute.model,
           harness: mainRoute.harness,
+          ...(mainRoute.nativeCodexProfileId ? { nativeCodexProfileId: mainRoute.nativeCodexProfileId } : {}),
           ...(mainRoute.gatewayId ? { gatewayId: mainRoute.gatewayId } : {})
         };
       }

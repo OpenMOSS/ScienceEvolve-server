@@ -17,6 +17,20 @@ describe("application configuration", () => {
   });
   afterEach(() => vi.unstubAllEnvs());
 
+  it("configures the collaboration lease for large retained state without changing the default for other deployments", () => {
+    const root = path.join(path.sep, "workspace", "scienceevolve");
+    expect(loadConfig(root).collaborationLeaseDurationMs).toBe(30_000);
+    vi.stubEnv("SCION_AR_COLLABORATION_LEASE_MS", "120000");
+    expect(loadConfig(root).collaborationLeaseDurationMs).toBe(120_000);
+    vi.stubEnv("SCIENCEEVOLVE_COLLABORATION_LEASE_MS", "300000");
+    expect(loadConfig(root).collaborationLeaseDurationMs).toBe(300_000);
+  });
+
+  it.each(["0", "999", "86400001", "NaN", "300000oops", "300000.5"])("rejects invalid collaboration lease %s", value => {
+    vi.stubEnv("SCIENCEEVOLVE_COLLABORATION_LEASE_MS", value);
+    expect(() => loadConfig(path.join(path.sep, "workspace", "scienceevolve"))).toThrow(/COLLABORATION_LEASE_MS/);
+  });
+
   it("loads only explicit absolute per-project directory aliases from internal deployment configuration", () => {
     const id = "prj_99999999999999999999999999999999";
     const directory = path.join(path.sep, "original-deployment", "data", "projects", id);

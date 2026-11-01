@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -14,6 +14,7 @@ import {
   createUserSkill,
   getAgentConfigPresets,
   getCatalog,
+  getHarnessPrompt,
   getGitHubAccounts,
   getSavedResearchTask,
   recommendProjectConfig,
@@ -36,6 +37,7 @@ import {
   type SavedResearchTask
 } from "../types";
 import { NewProjectPage } from "./NewProjectPage";
+import { cacheResource } from "../resource-cache";
 
 const agentPrompts = {
   main: "Built-in Main prompt",
@@ -79,6 +81,7 @@ vi.mock("../api", () => ({
   createUserSkill: vi.fn(),
   getAgentConfigPresets: vi.fn(),
   getCatalog: vi.fn(),
+  getHarnessPrompt: vi.fn(async () => ({ status: "source-unavailable", reason: "Native source is unavailable in this UI fixture" })),
   getGitHubAccounts: vi.fn(),
   getSavedResearchTask: vi.fn(),
   recommendProjectConfig: vi.fn(),
@@ -277,8 +280,15 @@ describe("NewProjectPage agent configuration", () => {
       defaultGatewayId: runtimeGateway.id,
       harnesses: runtimeHarnesses,
       defaultHarnessId: "codex",
-      agentPrompts
+      agentPrompts,
+      mainSystemPrompt: "FIXED_MAIN_SYSTEM"
     });
+    vi.mocked(getHarnessPrompt).mockReset().mockImplementation(async config => ({
+      harness: config.harness ?? "codex", model: config.model, resolvedModel: config.model,
+      installedVersion: "0.153.4", status: "available", sourceType: "bundled-default",
+      source: "installed bundled models", scope: "base-default", collectedAt: "2026-10-28T07:00:00Z",
+      configurationDigest: "fixture", text: `NATIVE_${config.harness}_${config.model}`
+    }));
     vi.mocked(getGitHubAccounts).mockReset().mockResolvedValue({
       accounts: [githubAccount],
       defaultAccountId: GITHUB_ACCOUNT_ID,
@@ -288,6 +298,47 @@ describe("NewProjectPage agent configuration", () => {
     vi.mocked(testGateway).mockReset();
     vi.mocked(updateAgentConfigPreset).mockReset();
     vi.mocked(updateSavedResearchTask).mockReset();
+  });
+
+  it("shows matching read-only Harness prompts in text configuration and the canvas without changing user instructions", async () => {
+    const user = userEvent.setup();
+    renderExpanded(<NewProjectPage onBack={vi.fn()} onCreated={vi.fn()} />);
+    await waitFor(() => expect(screen.getByLabelText("Main Agent自定义 Prompt")).toHaveValue(agentPrompts.main));
+    const main = screen.getByRole("region", { name: "main 提示词来源" });
+    expect(within(main).getByLabelText("System Prompt")).toHaveValue("FIXED_MAIN_SYSTEM");
+    expect(within(main).getByLabelText("System Prompt")).toHaveAttribute("readonly");
+    const idea = screen.getByRole("region", { name: "idea 提示词来源" });
+    expect(within(idea).getByLabelText("System Prompt")).toHaveProperty("value", expect.stringContaining("OpenFARS permission mode:"));
+    await user.selectOptions(screen.getByLabelText("构思智能体模型"), "route-model");
+    await waitFor(() => expect(within(idea).getByLabelText("Harness Prompt")).toHaveValue("NATIVE_codex_route-model"));
+    expect(within(idea).getByLabelText("Harness Prompt")).toBeVisible();
+    expect(within(idea).getByLabelText("Harness Prompt")).toHaveAttribute("readonly");
+    expect(screen.getByLabelText("构思智能体自定义 Prompt")).toHaveValue(agentPrompts.idea);
+
+    await user.click(screen.getByRole("button", { name: "打开 Workflow 画布编辑器" }));
+    const dialog = screen.getByRole("dialog", { name: "编辑 Workflow 画布" });
+    await user.click(dialog.querySelector('[data-node-id="idea"]')!);
+    const canvas = within(dialog).getByRole("region", { name: "idea 提示词来源" });
+    await waitFor(() => expect(within(canvas).getByLabelText("Harness Prompt")).toHaveValue("NATIVE_codex_route-model"));
+    expect(within(canvas).getByLabelText("Harness Prompt")).toBeVisible();
+    expect(within(canvas).getByLabelText("Harness Prompt")).toHaveAttribute("readonly");
+    expect(createProject).not.toHaveBeenCalled();
+  });
+
+  it("restores a cached saved draft immediately and preserves edits made while its server refresh is pending", async () => {
+    const task: SavedResearchTask = { schemaVersion: 2, kind: "scienceevolve-saved-research-task",
+      id: `task_${"c".repeat(32)}`, title: "缓存中的草稿", requirement: "已保存的完整研究要求与配置，刷新时立即恢复。",
+      agents: defaultPresetAgents, orchestration: DEFAULT_AGENT_ORCHESTRATION, git: { enabled: false },
+      createdAt: "2026-10-28T08:00:00Z", updatedAt: "2026-10-28T08:00:00Z" };
+    cacheResource(`saved-task:${task.id}`, task);
+    let finish!: (value: SavedResearchTask) => void;
+    vi.mocked(getSavedResearchTask).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    render(<NewProjectPage savedTaskId={task.id} onBack={vi.fn()} onCreated={vi.fn()} />);
+    expect(screen.getByLabelText("项目名称")).toHaveValue(task.title);
+    fireEvent.change(screen.getByLabelText("项目名称"), { target: { value: "后台刷新期间的手动标题" } });
+    finish({ ...task, title: "服务器稍后返回的标题" });
+    await screen.findByText("已保留你在后台刷新期间的草稿编辑。");
+    expect(screen.getByLabelText("项目名称")).toHaveValue("后台刷新期间的手动标题");
   });
 
   it("keeps launch clickable, reports all missing fields, and starts only a valid draft with intervention disabled", async () => {
@@ -363,6 +414,26 @@ describe("NewProjectPage agent configuration", () => {
     await waitFor(() => expect(screen.queryByText(/运行目录仍在加载/)).not.toBeInTheDocument());
     expect(title).toHaveValue("载入期间的手动修改");
     expect(screen.getByRole("textbox", { name: "课题方向与具体要求" })).toHaveValue(task.requirement);
+  });
+
+  it("preserves an open deleted draft as an unsaved copy instead of updating its deleted ID", async () => {
+    const task: SavedResearchTask = { schemaVersion: 2, kind: "scienceevolve-saved-research-task",
+      id: `task_${"c".repeat(32)}`, title: "将删除的草稿", requirement: "删除后保留当前编辑内容，保存时应创建独立新草稿。",
+      agents: structuredClone(defaultPresetAgents), orchestration: structuredClone(DEFAULT_AGENT_ORCHESTRATION),
+      git: { enabled: false }, createdAt: "2026-10-18T00:00:00Z", updatedAt: "2026-10-18T00:00:00Z" };
+    vi.mocked(getSavedResearchTask).mockResolvedValue(task);
+    vi.mocked(createSavedResearchTask).mockResolvedValue({ ...task, id: `task_${"d".repeat(32)}` });
+    render(<NewProjectPage savedTaskId={task.id} onBack={vi.fn()} onCreated={vi.fn()} />);
+    const title = screen.getByRole("textbox", { name: "项目名称" });
+    await waitFor(() => expect(title).toHaveValue(task.title));
+    fireEvent.change(title, { target: { value: "删除期间的手动编辑" } });
+    act(() => window.dispatchEvent(new CustomEvent("openfars:saved-tasks-changed", { detail: { deletedTaskIds: [task.id] } })));
+    expect(title).toHaveValue("删除期间的手动编辑");
+    expect(screen.getByText("当前草稿已删除。编辑内容保留为未保存副本，再次保存会创建新草稿。")).toBeVisible();
+    await waitFor(() => expect(screen.getByRole("button", { name: "保存课题" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "保存课题" }));
+    await waitFor(() => expect(createSavedResearchTask).toHaveBeenCalled());
+    expect(updateSavedResearchTask).not.toHaveBeenCalled();
   });
 
   it("saves a new task from the top button and keeps the saved copy after discarding later edits", async () => {
@@ -529,6 +600,7 @@ describe("NewProjectPage agent configuration", () => {
     await user.type(screen.getByRole("textbox", { name: "课题方向与具体要求" }), "研究内容草稿需要保留");
 
     const originalCatalog = await vi.mocked(getCatalog).mock.results[0].value;
+    const catalogReadsBeforeReturn = vi.mocked(getCatalog).mock.calls.length;
     vi.mocked(getCatalog).mockResolvedValueOnce({
       ...originalCatalog,
       gateways: [{ ...runtimeGateway, name: "刚配置的网关" }]
@@ -539,7 +611,7 @@ describe("NewProjectPage agent configuration", () => {
     expect((await screen.findAllByText("刚配置的网关"))[0]).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "项目名称" })).toHaveValue("未保存的课题");
     expect(screen.getByRole("textbox", { name: "课题方向与具体要求" })).toHaveValue("研究内容草稿需要保留");
-    expect(getCatalog).toHaveBeenCalledTimes(2);
+    expect(getCatalog).toHaveBeenCalledTimes(catalogReadsBeforeReturn + 1);
   });
 
   it("fails closed on Catalog load failure while keeping explicit draft save available", async () => {

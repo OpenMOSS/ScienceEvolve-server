@@ -88,6 +88,7 @@ export class PiAdapter extends AdapterBase implements HarnessAdapter {
   }
 
   async run(context: HarnessAdapterContext): Promise<AgentRunResult> {
+    if ("nativeCodexProfileHome" in context.route) throw new Error("Pi requires a Gateway route");
     const executable = await this.resolveExecutable();
     if (!executable) {
       throw new HarnessRuntimeError(
@@ -145,7 +146,9 @@ export class PiAdapter extends AdapterBase implements HarnessAdapter {
         ? ["--session", spec.session.nativeId]
         : ["--no-session"]),
       "--no-extensions",
-      ...(explainer ? ["--no-tools", "--no-skills", ...(extension ? ["--extension", extension] : [])] : ["--extension", extension!]),
+      ...(explainer
+        ? [extension ? "--no-builtin-tools" : "--no-tools", "--no-skills", ...(extension ? ["--extension", extension] : [])]
+        : ["--extension", extension!]),
       "--no-prompt-templates",
       "--no-context-files",
       ...(explainer ? [] : skills.flatMap((skill) => ["--skill", skill])),

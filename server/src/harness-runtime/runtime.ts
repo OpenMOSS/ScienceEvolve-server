@@ -1,4 +1,5 @@
 import { proxyFailureError } from "./errors.js";
+import { redactTrace } from "../utils.js";
 import { createHash, randomUUID } from "node:crypto";
 import { EXPLAINER_MCP_NAME, isExplainerMcp } from "../internal/shared/explainer-tools.js";
 import { SiiExperimentService, canUseSiiExperiments, type SiiMcpBinding, type SiiFilesystemInput } from "../sii-experiments.js";
@@ -28,6 +29,7 @@ import { isTerminalPushObservationScope, terminalPushObservationActionAllowed } 
 import { isTerminalPushCoordinationScope, terminalPushCoordinationActionAllowed } from "../internal/terminal-push-coordination.js";
 import { assertWorktreeClosingControl, assertWorktreeClosingRequest, isWorktreeClosingScope, worktreeClosingActionAllowed } from "../internal/worktree-closing.js";
 import { HANDOFF_CHARACTER_LIMIT } from "../content-limits.js";
+import { MAIN_AGENT_ORCHESTRATION_FILE } from "../main-workflow-files.js";
 import { controlDecisionsConflict, isControlDecision } from "../orchestration-control-decisions.js";
 import type {
   AdapterSmokeProbeInput,
@@ -79,7 +81,12 @@ import {
 } from "./errors.js";
 import {
   openInvocationGatewayRoute,
-  type InvocationGatewayRoute
+  openInvocationModelRoute,
+  modelRouteBinding,
+  type InvocationModelRoute,
+  type AdapterModelRoute,
+  type ModelRouteBinding,
+  type NativeCodexProfileResolver
 } from "./gateway-route.js";
 import {
   prepareInvocationInputs,
@@ -157,6 +164,10 @@ export interface HarnessRuntimeOptions extends HarnessHostOptions {
   /** Code-level extension point: one Adapter object carries its own descriptor. */
   additionalAdapters?: HarnessAdapter[];
   processHost?: CommonProcessHost;
+  /** Standalone host-owned route resolver; omitted by the Web host. */
+  resolveNativeCodexProfile?: NativeCodexProfileResolver;
+  /** Trusted SDK host workspace binding; omitted by the Web host. */
+  resolveProjectWorkspace?: (projectId: string) => Promise<string | undefined>;
 }
 
 function freezeRuntimeValue<T>(value: T, seen = new WeakSet<object>()): T {
@@ -261,16 +272,30 @@ function protocolRecoveryExhaustedError(
   );
 }
 
+function sessionRecoveryExhaustedError(error: unknown, harnessId: string): HarnessRuntimeError {
+  return new HarnessRuntimeError(
+    "SESSION_RESUME_FAILED",
+    "Unable to continue the original native Session after one recovery attempt; the task and Session were preserved",
+    { harnessId, recoveryAttempted: true, recoveryLimit: 1 },
+    { source: "adapter", retryable: false, cause: error }
+  );
+}
+
+function protocolCorrectionFeedback(error: unknown, secrets: Array<string | undefined>): string {
+  let feedback = error instanceof HarnessRuntimeError
+    ? String(error.details.protocolMessage ?? error.safeMessage)
+    : "Invalid JSON tool arguments";
+  for (const secret of secrets) {
+    if (secret) feedback = feedback.split(secret).join("[REDACTED]");
+  }
+  return redactTrace(feedback).slice(0, 1000);
+}
+
 function adapterVisibleRequest(
   request: AgentRunRequest,
   inputs: InvocationSpec["inputs"],
   descriptor: HarnessDescriptor,
-  route?: {
-    baseUrl: string;
-    token: string;
-    sourceProtocol: HarnessDescriptor["nativeProtocol"];
-    targetProtocol: HarnessDescriptor["nativeProtocol"];
-  }
+  route?: AdapterModelRoute
 ): HarnessAdapterRequest {
   const adapterSafeRequest = { ...request };
   delete adapterSafeRequest.gatewayModelFetch;
@@ -307,8 +332,8 @@ function adapterVisibleRequest(
         // Before the invocation route exists, Session allocation receives no
         // provider endpoint or credential. During Adapter execution it sees
         // only the loopback endpoint and invocation-scoped token.
-        url: route?.baseUrl ?? "about:blank",
-        apiKey: route?.token ?? "",
+        url: route && "baseUrl" in route ? route.baseUrl : "about:blank",
+        apiKey: route && "token" in route ? route.token : "",
         protocol: descriptor.nativeProtocol,
         nativeProtocol: descriptor.nativeProtocol,
         routeMode: "direct" as const,
@@ -375,14 +400,14 @@ function invocationAuthorityEnvironment(
   request: AgentRunRequest,
   inputs: InvocationSpec["inputs"],
   descriptor: HarnessDescriptor,
-  route: { baseUrl: string; token: string },
+  route: ModelRouteBinding,
   options: HarnessHostOptions,
   hostEnvironment: Readonly<NodeJS.ProcessEnv>,
   fixedToken: string | undefined
 ): Record<string, string> {
   const config = request.project.agents[request.agent];
   const sourceGateway = config.gatewaySnapshot;
-  const routedGateway = sourceGateway ? {
+  const routedGateway = sourceGateway && "baseUrl" in route ? {
     ...sourceGateway,
     url: descriptor.nativeProtocol === "anthropic-messages"
       ? route.baseUrl.replace(/\/v1\/?$/, "")
@@ -432,7 +457,7 @@ function residentAuthorityEnvironment(
   request: AgentRunRequest,
   inputs: InvocationSpec["inputs"],
   descriptor: HarnessDescriptor,
-  route: { baseUrl: string; token: string },
+  route: ModelRouteBinding,
   options: HarnessHostOptions,
   hostEnvironment: Readonly<NodeJS.ProcessEnv>,
   fixedToken: string | undefined
@@ -686,7 +711,8 @@ function createCanonicalEventIngress(options: {
       ? error
       : new HarnessEventStreamError(
           options.descriptor.id,
-          "Unable to accept a canonical Harness event"
+          "Unable to accept a canonical Harness event",
+          { cause: error }
         );
     failure ??= normalized;
     return failure;
@@ -695,10 +721,11 @@ function createCanonicalEventIngress(options: {
   const publishEvent = async (event: HarnessEvent): Promise<void> => {
     try {
       await options.publish(event);
-    } catch {
+    } catch (error) {
       throw new HarnessEventStreamError(
         options.descriptor.id,
-        "Unable to publish a canonical Harness event"
+        "Unable to publish a canonical Harness event",
+        { cause: error }
       );
     }
   };
@@ -1157,7 +1184,7 @@ function validControlAction(action: Record<string, unknown>, tool: string): bool
       boundedControlString(action.context);
   }
   if (tool === "apply_workflow") {
-    return action.path === "workflow.json" &&
+    return action.path === MAIN_AGENT_ORCHESTRATION_FILE &&
       boundedControlString(action.rationale, true);
   }
   if (tool === "complete_project") return boundedControlString(action.rationale, true);
@@ -1247,13 +1274,9 @@ function validControlCollaborationScope(
     }
     if (tool === "request_user") return control.allowUserIntervention;
     if (tool === "apply_workflow") {
-      return (
-        control.allowAgentOrchestrationReconfiguration === true &&
-          action.path === "agent-orchestration.json"
-      ) || (
-        control.allowWorkflowReconfiguration === true &&
-          action.path === "workflow.json"
-      );
+      return (control.allowAgentOrchestrationReconfiguration === true ||
+        control.allowWorkflowReconfiguration === true) &&
+        action.path === MAIN_AGENT_ORCHESTRATION_FILE;
     }
     if (tool === "complete_project") return control.canComplete;
     if (["git_push", "git_get_operation", "git_reconcile_push", "github_create_pr", "github_get_pr", "github_merge_pr", "github_close_pr", "git_prepare_conflict", "git_log", "git_show", "git_diff", "git_revert"].includes(tool)) {
@@ -1425,6 +1448,7 @@ export class HarnessRuntimeFacade implements AgentRunner, AdapterSmokeProbeRunne
       throw new Error("HarnessRuntimeFacade cannot replace and extend Adapters at the same time");
     }
     const adapterOptions: AdapterRuntimeOptions = {
+      resolveProjectWorkspace: options.resolveProjectWorkspace,
       inspireBin: options.inspireBin,
       inspireConfigPath: options.inspireConfigPath,
       inspireNoProxy: options.inspireNoProxy,
@@ -1500,7 +1524,7 @@ export class HarnessRuntimeFacade implements AgentRunner, AdapterSmokeProbeRunne
     request: AgentRunRequest,
     onTrace: TraceSink,
     signal: AbortSignal
-  ): Promise<InvocationGatewayRoute> {
+  ): Promise<InvocationModelRoute> {
     const harnessId = request.project.agents[request.agent]?.harness;
     if (!harnessId) {
       throw new HarnessRuntimeError(
@@ -1511,14 +1535,14 @@ export class HarnessRuntimeFacade implements AgentRunner, AdapterSmokeProbeRunne
       );
     }
     const descriptor = this.registry.adapter(harnessId, "workflow").descriptor;
-    return openInvocationGatewayRoute(descriptor, request, onTrace, signal, {
+    return openInvocationModelRoute(descriptor, request, onTrace, signal, {
       protocolProxyFactory: this.options.protocolProxyFactory,
       ...(this.options.protocolProxyTimeoutMs !== undefined
         ? { protocolProxyTimeoutMs: this.options.protocolProxyTimeoutMs }
         : {}),
       validateGatewayTarget: this.options.validateGatewayTarget,
       bufferedResponseCache: new Map<string, Promise<BufferedProtocolResponse>>()
-    });
+    }, this.options.resolveNativeCodexProfile);
   }
 
   /** Build one invocation-owned canonical ingress for raw resident protocol frames. */
@@ -1692,7 +1716,7 @@ export class HarnessRuntimeFacade implements AgentRunner, AdapterSmokeProbeRunne
 
     const stagedInputs = context.role === "leader"
       ? await validateLeaderResidentInputs(request, input.inputs)
-      : await prepareInvocationInputs(request);
+      : await prepareInvocationInputs(request, this.options.resolveProjectWorkspace);
     const inputs = await this.prepareAgentContext(request, stagedInputs);
     await fs.mkdir(input.executionRuntimePath, { recursive: true, mode: 0o700 });
     await prepareComputeRuntime({
@@ -1746,7 +1770,7 @@ export class HarnessRuntimeFacade implements AgentRunner, AdapterSmokeProbeRunne
     }
     const inlineInbox = await fs.readFile(inputs.inboxPath, "utf8");
     const prompt = fitContextInjection(compileWorkflowPrompt(request, inputs, policy, { inlineInbox }),
-      agentContextWindow(config), contextReplacements(inputs), policy.constraintPrompt).prompt;
+      agentContextWindow(config), [], policy.constraintPrompt).prompt;
 
     // Every resident execution needs a durable boundary even when the Agent's
     // ordinary one-shot preference is ephemeral.
@@ -1842,7 +1866,7 @@ export class HarnessRuntimeFacade implements AgentRunner, AdapterSmokeProbeRunne
         ? { projectWorktrees: input.filesystemAuthorityInput.projectWorktrees }
         : {}),
       protectedRoots: input.filesystemAuthorityInput.protectedRoots,
-      inputReadRoots: [path.dirname(inputs.inboxPath), ...contextReadRoots,
+      inputReadRoots: [inputs.projectPath, path.dirname(inputs.inboxPath), ...contextReadRoots,
         ...(inputs.workflowCurrentPath ? [path.dirname(path.dirname(inputs.workflowCurrentPath))] : []),
         ...(inputs.workflowReadDirectory ? [inputs.workflowReadDirectory] : []),
         ...(inputs.userInputsPath ? [inputs.userInputsPath] : [])]
@@ -2118,7 +2142,7 @@ export class HarnessRuntimeFacade implements AgentRunner, AdapterSmokeProbeRunne
     if (!this.options.siiExperiments || !canUseSiiExperiments(request)) return undefined;
     // Compile against the same staged memory/root contract as the native
     // broker. First-use business memory may need its existing staging path.
-    const inputs = preparedInputs ?? await prepareInvocationInputs(request);
+    const inputs = preparedInputs ?? await prepareInvocationInputs(request, this.options.resolveProjectWorkspace);
     return this.options.siiExperiments.bind(request, signal,
       filesystem ? { ...filesystem, ownedMemoryPath: inputs.memoryPath } : undefined);
   }
@@ -2232,7 +2256,7 @@ export class HarnessRuntimeFacade implements AgentRunner, AdapterSmokeProbeRunne
         { harnessId }
       );
     }
-    let inputs = await this.prepareAgentContext(request, await prepareInvocationInputs(request));
+    let inputs = await this.prepareAgentContext(request, await prepareInvocationInputs(request, this.options.resolveProjectWorkspace));
     await prepareComputeRuntime({
       permission: request.permission,
       workspacePath: inputs.workspacePath,
@@ -2278,21 +2302,21 @@ export class HarnessRuntimeFacade implements AgentRunner, AdapterSmokeProbeRunne
       const views: AgentContextIndex[] = [];
       for (const index of inputs.additionalContextIndexes) {
         const view = (await this.contextIndexes.delivery(index, inputs.projectPath, request.agent, preparedSession.session))!;
-        inlineInbox = inlineInbox.split(index.preview).join(view.preview); views.push(view);
+        views.push(view);
       }
       inputs = { ...inputs, additionalContextIndexes: views };
     }
     const prompt = fitContextInjection(compileWorkflowPrompt(request, inputs, policy, {
       inlineInbox,
-      ...(preparedSession.resumed || preparedSession.replaced
+      ...(preparedSession.replaced
         ? {
             recoveryNote: sessionRecoveryNote(
               preparedSession.resumeFailure?.reason ??
-                "Continuing a durable Session from an earlier invocation."
+                "The previous native Session could not be resumed."
             )
           }
         : {})
-    }), agentContextWindow(config), contextReplacements(inputs), policy.constraintPrompt).prompt;
+    }), agentContextWindow(config), [], policy.constraintPrompt).prompt;
     if (preparedSession.resumeFailure) {
       await onTrace("status", "Session resume failed; created a replacement in the same Harness", {
         diagnostic: true,
@@ -2437,7 +2461,7 @@ export class HarnessRuntimeFacade implements AgentRunner, AdapterSmokeProbeRunne
     const bufferedResponseCache = new Map<string, Promise<BufferedProtocolResponse>>();
     let pendingCanonicalTraces: HarnessEvent[] = [];
     let eventIngress!: CanonicalEventIngress;
-    const route = await openInvocationGatewayRoute(
+    const route = await openInvocationModelRoute(
       adapter.descriptor,
       request,
       onTrace,
@@ -2452,7 +2476,7 @@ export class HarnessRuntimeFacade implements AgentRunner, AdapterSmokeProbeRunne
         ...(adapter.descriptor.capabilities.assistantStreaming === "proxy-visible-output"
           ? { onVisibleAssistantDelta: (text: string) => eventIngress.acceptProxyDelta(text) }
           : {})
-      }
+      }, this.options.resolveNativeCodexProfile
     );
     let adapterRequest: HarnessAdapterRequest = adapterVisibleRequest(
       request,
@@ -2482,7 +2506,7 @@ export class HarnessRuntimeFacade implements AgentRunner, AdapterSmokeProbeRunne
         signal,
         recoveryBudget,
         session: () => spec.session!,
-        route: { baseUrl: route.baseUrl, token: route.token },
+        route: modelRouteBinding(route),
         commonEnvironment,
         authorityEnvironment: commonEnvironment,
         hostHome: facadeHostHome,
@@ -2591,105 +2615,87 @@ export class HarnessRuntimeFacade implements AgentRunner, AdapterSmokeProbeRunne
           if (protocolFailure && protocolRecoveryAttempted) {
             throw protocolRecoveryExhaustedError(route.getFailure(), harnessId, error);
           }
+          if (resumeRecoveryAttempted && (turnInactivityFailure || isSessionResumeFailure(error))) {
+            throw sessionRecoveryExhaustedError(error, harnessId);
+          }
           if (!protocolFailure && !sessionResumeFailure && !contextFailure) throw error;
-          if (request.control) {
+          const retainSession = spec.session!.durable;
+          // Receipts belong to the invocation, not the process. A resumed
+          // Session must retain successful effects and the decision lock.
+          if (!retainSession && request.control) {
             await fs.rm(request.control.stagingPath, { force: true });
           }
           if (protocolFailure) protocolRecoveryAttempted = true;
           if (sessionResumeFailure) resumeRecoveryAttempted = true;
           if (contextFailure) contextRecoveryAttempted = true;
           await eventIngress.resetAttempt();
-          // The failed CLI had write access to its mirror. Rebuild it from the
-          // server-authoritative Inbox before replacement Session allocation,
-          // because createSession is allowed to inspect the staged inputs.
-          inputs = await this.prepareAgentContext(request, await prepareInvocationInputs(request));
-          const replacement = await this.sessions.replace(
-            adapter,
-            sessionRequest,
-            inputs,
-            spec.session!,
-            protocolFailure
-              ? "Gateway returned invalid JSON tool arguments; replacing the native Session"
-              : error instanceof Error ? error.message : "Native session resume failed"
-          ).catch((replacementError: unknown) => {
-            throw normalizeHarnessRuntimeError(replacementError, adapter.descriptor.id);
-          });
-          if (contextFailure) {
-            await onTrace("status", "Native compaction could not recover the context limit; starting one replacement Session from project files", {
-              diagnostic: true, diagnosticSource: "gateway", errorCode: error.code,
-              ...error.details, replacementGeneration: replacement.session.generation,
-              automaticRecovery: true, recoveryLimit: 1
-            });
-          } else if (protocolFailure) {
-            await onTrace("status", "Invalid tool arguments detected; retrying once with a same-Harness replacement Session", {
-              diagnostic: true,
-              diagnosticSource: "proxy",
-              errorCode: "PROTOCOL_TOOL_ARGUMENTS_INVALID",
-              harness: harnessId,
-              replacementGeneration: replacement.session.generation,
-              automaticRecovery: true,
-              recoveryLimit: 1
-            });
-          } else {
-            await onTrace(
-              "status",
-              turnInactivityFailure
-                ? "DSH turn inactivity deadline reached; retrying with a same-Harness replacement"
-                : "Native session resume failed; retrying once with a same-Harness replacement",
-              {
-                diagnostic: true,
-                diagnosticSource: "adapter",
-                errorCode: turnInactivityFailure ? "INVOCATION_TIMED_OUT" : "SESSION_RESUME_FAILED",
-                harness: harnessId,
-                replacementGeneration: replacement.session.generation
-              }
+          // Restore the server-authoritative Inbox after the failed process
+          // exits, before submitting another input to the original Session.
+          inputs = await this.prepareAgentContext(request, await prepareInvocationInputs(request, this.options.resolveProjectWorkspace));
+          const recovered = retainSession
+            ? this.sessions.resume(adapter, observedWorkflowSession ?? spec.session!)
+            : await this.sessions.replace(
+              adapter, sessionRequest, inputs, spec.session!,
+              error instanceof Error ? error.message : "Native invocation failed"
             );
-          }
-          const replacementReason = contextFailure
-            ? "the previous native Session exceeded the model context window after native compaction failed. This is the single context-limit recovery for the SAME invocation, not a new assignment."
+          const recoveryStrategy = retainSession ? "native-session-resume" : "ephemeral-session-replacement";
+          await onTrace("status", retainSession
+            ? protocolFailure
+              ? "Invalid tool arguments detected; retrying once in the original Session"
+              : "Native session recovery retrying the original Session"
+            : "Invalid tool arguments detected; retrying once with an ephemeral replacement Session", {
+            diagnostic: true,
+            diagnosticSource: protocolFailure || contextFailure ? "gateway" : "adapter",
+            errorCode: error instanceof HarnessRuntimeError ? error.code : "SESSION_RESUME_FAILED",
+            harness: harnessId,
+            sessionGeneration: recovered.session.generation,
+            recoveryStrategy,
+            automaticRecovery: true,
+            recoveryLimit: 1
+          });
+          const protocolFeedback = protocolFailure
+            ? protocolCorrectionFeedback(error, [config.gatewaySnapshot?.apiKey, route.token]) : "";
+          const recoveryReason = contextFailure
+            ? "the previous turn exceeded the model context window. This is the single context-limit recovery for the SAME invocation; continue the original task using native compaction and bounded file reads."
             : protocolFailure
-              ? "the previous native Session emitted invalid JSON tool arguments. Emit each new tool argument as one complete JSON object without trailing text."
+              ? `the previous native Session emitted invalid JSON tool arguments. Protocol validation feedback: ${protocolFeedback}. Correct the rejected arguments and emit each tool argument as one complete JSON object without trailing text.`
               : turnInactivityFailure
-                ? "the previous durable DSH turn exceeded its inactivity deadline and was replaced in the same Harness."
-                : error instanceof Error
-                  ? error.message
-                  : "the previous native Session could not be resumed.";
-          const replacementRecoveryNote = [
-            sessionRecoveryNote(replacementReason),
+                ? "the previous durable DSH turn exceeded its inactivity deadline. Continue the same task in the original Session."
+                : error instanceof Error ? error.message : "the previous native turn failed.";
+          const recoveryNote = [
+            retainSession ? "Continue the SAME task in the SAME native Session. Retain its conversation history and completed work." : undefined,
+            sessionRecoveryNote(recoveryReason),
             contextFailure
-              ? "Reconstruct current state from the Inbox, Memory.md, and referenced project files in bounded sections; preserve the canonical requirement, pending route decision, artifact catalog, and completed work."
+              ? "Read the Inbox, Memory.md, and referenced project files in bounded sections; preserve the canonical requirement, pending route decision, artifact catalog, and completed work."
               : undefined,
-            request.control
+            retainSession && request.control
               ? `Already staged control actions are recorded at ${request.control.stagingPath}; inspect that record and do not repeat them.`
               : undefined
           ].filter((item): item is string => Boolean(item)).join("\n");
           spec = {
             ...spec,
             inputs,
-            session: replacement.session,
-            durableSession: replacement.session.durable,
-            prompt: compileWorkflowPrompt(request, inputs, policy, {
-              inlineInbox,
-              recoveryNote: replacementRecoveryNote
-            })
+            session: recovered.session,
+            durableSession: recovered.session.durable,
+            prompt: compileWorkflowPrompt(request, inputs, policy, { inlineInbox, recoveryNote })
           };
-          observedWorkflowSession = undefined;
+          observedWorkflowSession = retainSession ? recovered.session : undefined;
           pendingWorkflowInput = undefined;
           workflowInputId = "";
           workflowSupplement = "";
-          const replacementLegacyIds = {
-            ...(adapterRequest.project.agentSessionIds ?? {})
-          };
-          delete replacementLegacyIds[request.agent];
+          const recoveredLegacyIds = { ...(adapterRequest.project.agentSessionIds ?? {}) };
+          const recoveredLegacyId = retainSession ? legacySessionId(recovered.session) : undefined;
+          if (recoveredLegacyId) recoveredLegacyIds[request.agent] = recoveredLegacyId;
+          else delete recoveredLegacyIds[request.agent];
           adapterRequest = freezeRuntimeValue({
             ...adapterRequest,
-            resumeThreadId: undefined,
+            resumeThreadId: recoveredLegacyId,
             project: {
               ...adapterRequest.project,
-              agentSessionIds: replacementLegacyIds,
+              agentSessionIds: recoveredLegacyIds,
               agentSessions: {
                 ...(adapterRequest.project.agentSessions ?? {}),
-                [request.agent]: replacement.session
+                [request.agent]: recovered.session
               },
               agentSessionMeta: {
                 ...(adapterRequest.project.agentSessionMeta ?? {}),
@@ -2698,26 +2704,25 @@ export class HarnessRuntimeFacade implements AgentRunner, AdapterSmokeProbeRunne
                     contextSeq: 0,
                     resumeFailureCount: 0
                   }),
-                  generation: replacement.session.generation
+                  generation: recovered.session.generation
                 }
-              }
+              },
+              ...(retainSession && request.taskSessionId ? {
+                taskSessionRefs: { ...(adapterRequest.project.taskSessionRefs ?? {}), [request.taskSessionId]: recovered.session },
+                taskSessionIds: { ...(adapterRequest.project.taskSessionIds ?? {}), [request.taskSessionId]: recoveredLegacyId! }
+              } : {})
             },
             inboxPath: inputs.inboxPath,
             projectPath: inputs.projectPath,
             workspacePath: inputs.workspacePath,
             runtimePath: inputs.runtimePath
           });
-          // Some Adapters (notably Codex) allocate a pending placeholder and
-          // only learn the official identity after launch. Publish eager
-          // replacement identities only when the Adapter itself accepts them.
-          if (
-            adapterAcceptsNativeSession(adapter, replacement.session.nativeId)
-          ) {
-            await publishDurableSession(replacement.session);
+          if (adapterAcceptsNativeSession(adapter, recovered.session.nativeId)) {
+            await publishDurableSession(recovered.session);
           }
           route.resetFailure();
           // The failed attempt's process capability was finalized before this
-          // replacement. Give the replacement a fresh lease while retaining the
+          // continuation. Give the next process a fresh lease while retaining the
           // same Facade-owned recovery budget.
           invocationProcessHost = createInvocationProcessHost();
         }
@@ -2753,7 +2758,7 @@ export class HarnessRuntimeFacade implements AgentRunner, AdapterSmokeProbeRunne
     adapter: HarnessAdapter,
     request: HarnessAdapterRequest,
     spec: InvocationSpec,
-    route: Awaited<ReturnType<typeof openInvocationGatewayRoute>>,
+    route: InvocationModelRoute,
     onTrace: TraceSink,
     signal: AbortSignal,
     recoveryBudget: InvocationRecoveryController,
@@ -2766,12 +2771,12 @@ export class HarnessRuntimeFacade implements AgentRunner, AdapterSmokeProbeRunne
     let adapterFailed = false;
     try {
       const selectedConfig = request.project.agents[request.agent]!;
-      const fitted = fitContextInjection(spec.prompt, agentContextWindow(selectedConfig), contextReplacements(spec.inputs), spec.policy.constraintPrompt);
+      const fitted = fitContextInjection(spec.prompt, agentContextWindow(selectedConfig), [], spec.policy.constraintPrompt);
       spec = { ...spec, prompt: fitted.prompt };
       route.setInjectionBudget?.(spec.prompt, spec.policy.constraintPrompt);
       const prepareBudgetedInput = async (prompt: string): Promise<string> => {
         const prepared = prepareNativeInput ? await prepareNativeInput(prompt) : prompt;
-        const final = fitContextInjection(prepared, agentContextWindow(selectedConfig), contextReplacements(spec.inputs), spec.policy.constraintPrompt);
+        const final = fitContextInjection(prepared, agentContextWindow(selectedConfig), [], spec.policy.constraintPrompt);
         route.setInjectionBudget?.(final.prompt, spec.policy.constraintPrompt);
         return final.prompt;
       };
@@ -2789,7 +2794,7 @@ export class HarnessRuntimeFacade implements AgentRunner, AdapterSmokeProbeRunne
         processHost,
         recoveryBudget: recoveryView,
         onTrace,
-        route: freezeRuntimeValue({
+        route: freezeRuntimeValue("nativeCodexProfileHome" in route ? modelRouteBinding(route) as import("./gateway-route.js").NativeCodexProfileBinding : {
           baseUrl: route.baseUrl,
           token: route.token,
           sourceProtocol: route.sourceProtocol,

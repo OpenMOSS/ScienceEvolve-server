@@ -107,6 +107,7 @@ export const BUILTIN_HARNESS_DESCRIPTORS: readonly HarnessDescriptor[] = [
     explainerIsolation: "adapter-read-only-tools",
     route: {
       requireMainControlTools: true,
+      nativeProfileAuth: true,
     },
     capabilities: {
       ...COMMON_CAPABILITIES,
@@ -452,4 +453,10 @@ export function isRejectedHarnessExecutable(
 ): boolean {
   return descriptor.default === true &&
     /(?:^|[\\/])\.runtime[\\/]codex(?:-aigw)?[\\/]codex$/.test(value);
+}
+
+/** Trusted catalog capability, independent of product dispatch rules. */
+export function harnessSupportsNativeProfile(harnessId: HarnessId): boolean {
+  return harnessCatalogRegistry.has(harnessId) &&
+    harnessCatalogRegistry.descriptor(harnessId).route?.nativeProfileAuth === true;
 }

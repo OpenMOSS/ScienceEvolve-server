@@ -8,7 +8,7 @@
     "token-usage-ledger.ts": "ee85bf71b9584d67120274bd80d28adc56f7afc59d2468735fafbe5c2ae166dd",
     "gateway-reasoning.ts": "74bd1c0515f41eb73dbc8644192b7d3ef44ff8659803e1650b2ce8664799c50b",
     "configuration-recommendation.ts": "94f01653bd4e0bd390f89681d7b2954b92bb2ef21a31f791b808f666816896bd",
-    "project-explainer.ts": "f884a39e8c9efae31d378540ac36fa729bc82f08c819d7ae68160780e7ddf071",
+    "project-explainer.ts": "58ab9541611291fac822a25d0304b52442e44348e2414051bd0a866037bb41d8",
     "main-orchestration-policy.ts": "6e190001021739dbafd21821947e338489122e5da07c722c2abe5193c36182e8"
   }
 }

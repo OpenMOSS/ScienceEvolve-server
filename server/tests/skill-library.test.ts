@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -25,6 +25,27 @@ async function fixture() {
 }
 
 describe("categorized builtin Skills", () => {
+  it("skips scans for empty/project-only selections and shares cached or concurrent refreshes", async () => {
+    const f = await fixture(); await f.write("builtin/method", "method");
+    const catalog = new SkillCatalog([f.builtin]);
+    const list = vi.spyOn(catalog, "list");
+    expect(await catalog.forSelections([])).toEqual([]);
+    expect(await catalog.forSelections(["project:local"])).toEqual([]);
+    expect(list).not.toHaveBeenCalled();
+    const readdir = vi.spyOn(fs, "readdir");
+    try {
+      const [first, second, third] = await Promise.all([catalog.list(), catalog.list(), catalog.list(true)]);
+      expect(first).toBe(second); expect(first).toBe(third);
+      const scans = readdir.mock.calls.filter(([directory]) => directory === f.builtin).length;
+      expect(scans).toBe(1);
+      expect(await catalog.forSelections(["builtin:method"])).toBe(first);
+      await f.write("builtin/new-method", "new-method");
+      expect(await catalog.list()).toHaveLength(1);
+      expect(await catalog.list(true)).toHaveLength(2);
+      expect(readdir.mock.calls.filter(([directory]) => directory === f.builtin)).toHaveLength(2);
+    } finally { readdir.mockRestore(); }
+  });
+
   it("discovers categories with stable IDs, stops at Skill leaves, and preserves external-root behavior", async () => {
     const f = await fixture();
     await f.write("builtin/general/role", "role");
@@ -39,6 +60,45 @@ describe("categorized builtin Skills", () => {
     expect(skills.filter(skill => skill.source === "builtin").map(skill => skill.id)).toEqual(["builtin:method", "builtin:role"]);
     expect(skills.find(skill => skill.name === "external")!.id).toMatch(/^external:/);
     expect(await catalog.list()).toBe(skills);
+  });
+
+  it("ignores file and broken symlinks while discovering linked Skill directories", async () => {
+    const f = await fixture();
+    await f.write("builtin/general/role", "role");
+    const linkedSkill = await f.write("linked-skill", "linked");
+    await f.write("linked-category/nested", "not-a-linked-category-skill");
+    const outside = path.join(f.root, "outside.md");
+    await fs.writeFile(outside, "A support document, not a Skill directory.");
+    await fs.symlink(outside, path.join(f.builtin, "general", "outside-link.md"), "file");
+    await fs.symlink(path.join(f.root, "missing"), path.join(f.builtin, "general", "broken-link"), "dir");
+    await fs.symlink(path.dirname(linkedSkill), path.join(f.builtin, "general", "linked"), "dir");
+    await fs.symlink(path.join(f.root, "linked-category"), path.join(f.builtin, "general", "linked-category"), "dir");
+    const skills = await new SkillCatalog([f.builtin]).list();
+    expect(skills.map(skill => skill.id)).toEqual(["builtin:linked", "builtin:role"]);
+    expect(skills.find(skill => skill.name === "linked")!.path).toBe(linkedSkill);
+  });
+
+  it("excludes dependencies left in builtin categories from the Skill catalog", async () => {
+    const f = await fixture();
+    await f.write("builtin/general/role", "role");
+    await f.write("builtin/node_modules/package", "not-a-root-dependency-skill");
+    await f.write("builtin/general/node_modules/package", "not-a-nested-dependency-skill");
+    const leftover = path.join(f.builtin, "inspire", "node_modules", "openfars-acceptance");
+    await fs.mkdir(leftover, { recursive: true });
+    const outside = path.join(f.root, "outside.md");
+    await fs.writeFile(outside, "Old acceptance fixture.");
+    await fs.symlink(outside, path.join(leftover, "outside-link.md"), "file");
+    const skills = await new SkillCatalog([f.builtin]).list();
+    expect(skills.map(skill => skill.id)).toEqual(["builtin:role"]);
+  });
+
+  it("continues discovering Skills when another configured root is missing or a file", async () => {
+    const f = await fixture();
+    await f.write("builtin/general/role", "role");
+    const fileRoot = path.join(f.root, "not-a-directory");
+    await fs.writeFile(fileRoot, "A configured path that is not a directory.");
+    const skills = await new SkillCatalog([f.builtin, fileRoot, path.join(f.root, "missing")]).list();
+    expect(skills.map(skill => skill.id)).toEqual(["builtin:role"]);
   });
 
   it("resolves previously saved flat builtin file/directory paths without renaming IDs", async () => {

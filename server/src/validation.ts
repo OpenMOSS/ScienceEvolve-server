@@ -176,6 +176,7 @@ export const agentConfigSchema = z.object({
   model: agentModelSchema.default(DEFAULT_AGENT_MODEL),
   harness: harnessIdSchema.default(DEFAULT_HARNESS_ID),
   gatewayId: z.string().trim().regex(/^gwy_[a-f0-9]{32}$/).optional(),
+  nativeCodexProfileId: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/).optional(),
   gatewayReasoningOption: gatewayReasoningOptionIdSchema.optional(),
   skills: z.array(z.string().trim().min(1).max(4_096)).max(32).default([]),
   autoSkills: z.array(z.string().trim().min(1).max(4_096)).max(32).default([]),

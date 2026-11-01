@@ -5,6 +5,7 @@ import type { CapabilityContext } from "../src/orchestration-control-mcp.js";
 import {
   BUILTIN_HARNESS_DESCRIPTORS,
   HarnessRegistry,
+  harnessSupportsNativeProfile,
   installedHarnessCandidates,
   resolveHarnessExecutable
 } from "../src/harness-runtime/registry.js";
@@ -108,7 +109,10 @@ describe("HarnessRegistry", () => {
     const byId = Object.fromEntries(
       BUILTIN_HARNESS_DESCRIPTORS.map((item) => [item.id, item])
     );
-    expect(byId.codex?.route).toEqual({ requireMainControlTools: true });
+    expect(byId.codex?.route).toEqual({ requireMainControlTools: true, nativeProfileAuth: true });
+    expect(harnessSupportsNativeProfile("codex")).toBe(true);
+    for (const id of ["pi", "dsh", "claude-code", "unregistered-harness"])
+      expect(harnessSupportsNativeProfile(id)).toBe(false);
     expect(byId["claude-code"]?.route).toMatchObject({ requireMainControlTools: true });
     expect(byId.dsh?.route).toEqual({ webSearchMcp: true });
     expect(byId.pi?.route).toEqual({ webSearchMcp: true });

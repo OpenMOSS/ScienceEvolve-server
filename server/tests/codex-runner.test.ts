@@ -269,6 +269,10 @@ describe("CodexRunner", () => {
     await fs.writeFile(
       executable,
       `#!/usr/bin/env node
+if (process.argv[2] === "debug" && process.argv[3] === "models") {
+  console.log(JSON.stringify({ models: [{ slug: "fixture-model", use_responses_lite: false, tool_mode: null }] }));
+  process.exit(0);
+}
 import fs from "node:fs";
 fs.writeSync(2, "HTTP 401 Unauthorized: invalid API key\\n");
 process.exit(1);
@@ -316,6 +320,10 @@ process.exit(1);
     await fs.writeFile(
       executable,
       `#!/usr/bin/env node
+if (process.argv[2] === "debug" && process.argv[3] === "models") {
+  console.log(JSON.stringify({ models: [{ slug: "fixture-model", use_responses_lite: false, tool_mode: null }] }));
+  process.exit(0);
+}
 import fs from "node:fs";
 const message = JSON.stringify({
   error: {
@@ -383,6 +391,10 @@ process.exit(1);
     await fs.writeFile(
       executable,
       `#!/usr/bin/env node
+if (process.argv[2] === "debug" && process.argv[3] === "models") {
+  console.log(JSON.stringify({ models: [{ slug: "fixture-model", use_responses_lite: false, tool_mode: null }] }));
+  process.exit(0);
+}
 import fsSync from "node:fs";
 const events = [
   {type:"thread.started",thread_id:"thread_schema_error"},
@@ -459,6 +471,10 @@ process.exit(1);
     await fs.writeFile(
       executable,
       `#!/usr/bin/env node
+if (process.argv[2] === "debug" && process.argv[3] === "models") {
+  console.log(JSON.stringify({ models: [{ slug: "fixture-model", use_responses_lite: false, tool_mode: null }] }));
+  process.exit(0);
+}
 import fs from "node:fs";
 const args = process.argv.slice(2);
 const prompt = fs.readFileSync(0, "utf8");
@@ -1035,6 +1051,10 @@ fs.writeSync(2, "api_key=runner-super-secret-token\\n");
     await fs.writeFile(
       executable,
       `#!/usr/bin/env node
+if (process.argv[2] === "debug" && process.argv[3] === "models") {
+  console.log(JSON.stringify({ models: [{ slug: "fixture-model", use_responses_lite: false, tool_mode: null }] }));
+  process.exit(0);
+}
 import fs from "node:fs";
 const args = process.argv.slice(2);
 for await (const _chunk of process.stdin) {}
@@ -1228,6 +1248,10 @@ fi
     await fs.writeFile(
       executable,
       `#!/usr/bin/env node
+if (process.argv[2] === "debug" && process.argv[3] === "models") {
+  console.log(JSON.stringify({ models: [{ slug: "fixture-model", use_responses_lite: false, tool_mode: null }] }));
+  process.exit(0);
+}
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync, writeSync } from "node:fs";
 import path from "node:path";
@@ -1542,6 +1566,10 @@ await new Promise((resolve) => setTimeout(resolve, 20));
     await fs.writeFile(
       executable,
       `#!/usr/bin/env node
+if (process.argv[2] === "debug" && process.argv[3] === "models") {
+  console.log(JSON.stringify({ models: [{ slug: "fixture-model", use_responses_lite: false, tool_mode: null }] }));
+  process.exit(0);
+}
 for await (const _chunk of process.stdin) {}
 console.error("orphan-ready");
 setInterval(() => {}, 1000);
@@ -1641,6 +1669,10 @@ setInterval(() => {}, 1000);
     await fs.writeFile(
       executable,
       `#!/usr/bin/env node
+if (process.argv[2] === "debug" && process.argv[3] === "models") {
+  console.log(JSON.stringify({ models: [{ slug: "fixture-model", use_responses_lite: false, tool_mode: null }] }));
+  process.exit(0);
+}
 import fs from "node:fs";
 const context = JSON.parse(process.env.SCIENCEEVOLVE_CONTROL_CONTEXT);
 fs.writeFileSync(context.stagingPath, JSON.stringify([{
@@ -1756,11 +1788,15 @@ fs.writeSync(1, events.map((event) => JSON.stringify(event)).join("\\n") + "\\n"
     await fs.writeFile(
       executable,
       `#!/usr/bin/env node
+if (process.argv[2] === "debug" && process.argv[3] === "models") {
+  console.log(JSON.stringify({ models: [{ slug: "fixture-model", use_responses_lite: false, tool_mode: null }] }));
+  process.exit(0);
+}
 import fs from "node:fs";
 const prompt = fs.readFileSync(0, "utf8");
 const context = JSON.parse(process.env.SCIENCEEVOLVE_CONTROL_CONTEXT);
-const inboxMatch = prompt.match(/Read the complete agent inbox at (.*?), complete the assigned work/);
-const inbox = inboxMatch ? fs.readFileSync(inboxMatch[1], "utf8") : "";
+const inboxMatch = prompt.includes("本轮直接消息：");
+const inbox = prompt;
 if (inbox.includes("VERIFIED_MAIN_WORK")) {
   fs.writeFileSync(process.env.SCIENCEEVOLVE_ROLE_WORKSPACE + "/main-result.md", "VERIFIED_MAIN_WORK\\n");
 }
@@ -1776,7 +1812,7 @@ fs.writeFileSync(context.stagingPath, JSON.stringify([{
 fs.writeFileSync(context.stagingPath + ".prompt", JSON.stringify({
   fullInboxPrompt: Boolean(inboxMatch),
   readBusinessRequirement: inbox.includes("VERIFIED_MAIN_WORK"),
-  allowsBusinessWork: prompt.includes("complete the assigned work") && !prompt.includes("only permitted action for this turn"),
+  allowsBusinessWork: prompt.includes("VERIFIED_MAIN_WORK") && !prompt.includes("only permitted action for this turn"),
   noControlContextFallback: !prompt.includes("SCIENCEEVOLVE_CONTROL_CONTEXT"),
   noCapabilityFallback: !prompt.includes("SCIENCEEVOLVE_CONTROL_CAPABILITY"),
   noSocketFallback: !prompt.includes("socket.socket"),

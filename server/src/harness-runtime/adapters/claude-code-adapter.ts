@@ -80,6 +80,7 @@ export class ClaudeCodeAdapter extends AdapterBase implements HarnessAdapter {
   }
 
   async run(context: HarnessAdapterContext): Promise<AgentRunResult> {
+    if ("nativeCodexProfileHome" in context.route) throw new Error("Claude Code requires a Gateway route");
     const executable = await this.resolveExecutable();
     if (!executable) {
       throw new HarnessRuntimeError(

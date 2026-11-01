@@ -28,7 +28,9 @@ describe("browser-reachable Server dependencies", () => {
     const server = path.resolve(process.cwd(), "src");
     const entries = browserServerEntries(path.join(web, "src"), server, options);
     expect(entries.map(file => path.relative(server, file).split(path.sep).join("/"))).toEqual([
-      "internal/shared/agent-permission-metadata.ts", "internal/shared/project-runtime-status.ts", "internal/shared/workflow-loop-validation.ts"
+      "internal/shared/agent-permission-metadata.ts", "internal/shared/agent-permission-prompts.ts",
+      "internal/shared/explainer-tools.ts",
+      "internal/shared/project-runtime-status.ts", "internal/shared/workflow-loop-validation.ts"
     ]);
     expect(assertBrowserDependencies(entries, options).size).toBeGreaterThanOrEqual(entries.length);
     expect(() => assertBrowserDependencies([path.join(server, "internal/shared/project-explainer.ts")], options)).toThrow(/Node module node:crypto/);

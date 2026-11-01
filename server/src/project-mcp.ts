@@ -3,7 +3,7 @@ import path from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import { fork, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
 import { materializeVersion, projectNameSchema, relativeFileSchema, textFilesSchema } from "./project-files.js";
 import type { AgentConfigMap, AgentMcpServer } from "./types.js";
@@ -73,7 +73,7 @@ async function hostModule(): Promise<{ file: string; execArgv: string[] }> {
   try { await fs.access(base); return { file: base, execArgv: [] }; } catch { /* source tests */ }
   const source = base.replace(/\.js$/, ".ts");
   await fs.access(source);
-  return { file: source, execArgv: ["--import", createRequire(import.meta.url).resolve("tsx")] };
+  return { file: source, execArgv: ["--import", pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href] };
 }
 async function stopHost(child: ChildProcess, exited: Promise<void>): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;

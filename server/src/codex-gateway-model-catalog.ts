@@ -4,7 +4,6 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
-const CODE_MODE_MODEL = /^gpt-5\.6-(?:sol|terra|luna)$/;
 
 /**
  * The Codex 0.152 bundled catalog sends no tools for GPT-5.6 through a
@@ -17,7 +16,6 @@ export async function prepareCodexGatewayModelCatalog(
   model: string,
   runtimePath: string
 ): Promise<string | undefined> {
-  if (!CODE_MODE_MODEL.test(model)) return undefined;
   const script = /\.(?:[cm]?js)$/i.test(executable);
   const command = script ? process.execPath : executable;
   const args = [...(script ? [executable] : []), "debug", "models", "--bundled"];
@@ -37,9 +35,16 @@ export async function prepareCodexGatewayModelCatalog(
   const models = catalog && typeof catalog === "object" && "models" in catalog
     ? (catalog as { models: unknown }).models : undefined;
   if (!Array.isArray(models)) throw new Error("Installed Codex returned an invalid model catalog");
-  const selected = models.find((entry) => entry && typeof entry === "object" && entry.slug === model);
-  if (!selected) return undefined;
-  if (selected.use_responses_lite !== true || selected.tool_mode !== "code_mode_only") return undefined;
+  const known = models.find((entry) => entry && typeof entry === "object" && entry.slug === model);
+  // An unknown gateway slug can inherit the CLI's first, code-only catalog
+  // entry. Use a normal tool-loop template, without renaming the actual model.
+  const template = known ?? models.find((entry) => entry && typeof entry === "object" &&
+    entry.use_responses_lite === false && entry.tool_mode == null);
+  if (!template) throw new Error("Installed Codex has no ordinary Responses tool-loop template");
+  if (known && known.use_responses_lite !== true && known.tool_mode !== "code_mode_only") return undefined;
+  const selected = known ?? { ...template, slug: model, display_name: model,
+    supported_reasoning_levels: [], default_reasoning_level: null,
+    supports_reasoning_summary_parameter: false, input_modalities: ["text"] };
   const outputPath = path.join(runtimePath, "codex-gateway-model-catalog.json");
   await fs.writeFile(outputPath, JSON.stringify({ models: [{
     ...selected,

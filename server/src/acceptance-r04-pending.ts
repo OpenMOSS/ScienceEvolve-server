@@ -83,9 +83,20 @@ export async function observeR04PendingFile(input: AcceptanceBoundary & {
   let bytes: Buffer;
   try {
     const stat = await handle.stat();
-    assert.ok(stat.isFile() && stat.size <= 16_384, "Invalid R04 pending diagnostic");
-    assert.equal(await fs.realpath(`/proc/self/fd/${handle.fd}`), target, "R04 pending descriptor escaped its checkout");
+    assert.ok(stat.isFile() && stat.nlink === 1 && stat.size <= 16_384, "Invalid R04 pending diagnostic");
+    const assertIdentity = async () => {
+      const current = await fs.lstat(target);
+      assert.ok(current.isFile() && !current.isSymbolicLink() && current.nlink === 1 &&
+        current.dev === stat.dev && current.ino === stat.ino &&
+        await fs.realpath(target) === target && await fs.realpath(root) === root,
+      "R04 pending descriptor escaped its checkout");
+    };
+    if (process.platform === "linux") {
+      assert.equal(await fs.realpath(`/proc/self/fd/${handle.fd}`), target, "R04 pending descriptor escaped its checkout");
+    }
+    await assertIdentity();
     bytes = await handle.readFile();
+    await assertIdentity();
   } finally { await handle.close(); }
   if (bytes.toString("utf8") !== request.content) return;
   if (!input.git.observeExecutionWorktree) throw new Error("R04 observation requires trusted worktree status");

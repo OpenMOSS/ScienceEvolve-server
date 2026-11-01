@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { readCachedResource } from "../resource-cache";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -237,10 +238,11 @@ function draftErrors(draft: GatewayInput, editing: boolean): Record<string, stri
 }
 
 export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
-  const [gateways, setGateways] = useState<GatewayRecord[]>([]);
-  const [harnesses, setHarnesses] = useState<HarnessCatalogEntry[]>([]);
-  const [defaultGatewayId, setDefaultGatewayId] = useState<string>();
-  const [loading, setLoading] = useState(true);
+  const [cachedCatalog] = useState(() => readCachedResource<Awaited<ReturnType<typeof getCatalog>>>("catalog"));
+  const [gateways, setGateways] = useState<GatewayRecord[]>(cachedCatalog?.gateways ?? []);
+  const [harnesses, setHarnesses] = useState<HarnessCatalogEntry[]>(cachedCatalog?.harnesses ?? []);
+  const [defaultGatewayId, setDefaultGatewayId] = useState<string | undefined>(cachedCatalog?.defaultGatewayId);
+  const [loading, setLoading] = useState(!cachedCatalog);
   const [pageError, setPageError] = useState("");
   const [notice, setNotice] = useState("");
   const [busyGatewayId, setBusyGatewayId] = useState("");
@@ -272,7 +274,7 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
   };
 
   const load = async () => {
-    setLoading(true);
+    setLoading(!readCachedResource("catalog"));
     setPageError("");
     try {
       const catalog = await getCatalog();

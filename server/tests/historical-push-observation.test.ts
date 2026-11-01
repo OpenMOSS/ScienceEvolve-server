@@ -443,6 +443,7 @@ describe("Finite original-session terminal push observation", () => {
       // An original completed scoped-version snapshot, with its exact native
       // proof already stored through the production lifecycle methods above.
       f.raw.exec("UPDATE scoped_executions SET status='completed'; UPDATE scoped_arrivals SET status='completed'; DELETE FROM lane_leases");
+      expect(f.database.terminalPushOwnerNodeRunId("p", f.oldId)).toBe("node-G");
       const before = f.database.projectState("p"); const invocationId = "scoped-terminal-observation";
       const turn = f.database.beginTerminalPushObservation({ projectId: "p", executionId: f.oldId, ownershipEpoch: 2,
         agentId: "worker", operationId: f.operationId, originalInvocationId, previousInvocationId: originalInvocationId,

@@ -1,0 +1,16 @@
+.canvas-prompt-panels { grid-column: 1 / -1; min-width: 0; }
+.canvas-prompt-panel { border: 1px solid var(--border, #dce2df); border-radius: 10px; padding: 12px; margin-bottom: 10px; min-width: 0; background: var(--surface, #fff); }
+.canvas-prompt-panel summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+.canvas-prompt-panel summary small { float: right; border-radius: 4px; background: #eef4f0; padding: 2px 5px; font-size: 10px; font-weight: 400; color: #64756b; }
+.canvas-prompt-panel textarea { width: 100%; box-sizing: border-box; margin-top: 6px; min-height: 150px; max-height: 360px; overflow: auto; resize: vertical; border: 1px solid var(--border, #dce2df); border-radius: 6px; padding: 10px; background: #f7f9f8; color: var(--text, #263c30); font: 11px/1.6 ui-monospace, monospace; }
+.canvas-prompt-panel .runtime-help { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0 4px; font-size: 11px; line-height: 1.6; }
+.canvas-prompt-tools { display: flex; justify-content: flex-end; }
+.canvas-prompt-tools .button { min-height: 26px; padding: 4px 6px; gap: 4px; font-size: 11px; }
+.canvas-prompt-actions { display: grid; gap: 6px; }
+.canvas-prompt-actions .button { width: 100%; justify-content: center; min-height: 34px; font-size: 12px; }
+.canvas-prompt-actions .runtime-help { margin: 0; text-align: center; font-size: 11px; }
+.canvas-prompt-error { color: #a13e38; font-size: 12px; overflow-wrap: anywhere; }
+.workflow-runtime-detail:has(.canvas-prompt-panels) { width: 360px; max-width: calc(100% - 28px); max-height: min(70vh, calc(100% - 28px)); overflow: auto; overscroll-behavior: contain; }
+.workflow-runtime-detail .canvas-prompt-panels { padding: 0; margin: 8px 0 0; border: 0; }
+.workflow-runtime-detail .runtime-user-prompt { display: grid; gap: 6px; }
+.workflow-runtime-detail .runtime-user-prompt textarea { width: 100%; box-sizing: border-box; min-height: 100px; resize: vertical; font: 11px/1.5 ui-monospace, monospace; }

@@ -28,6 +28,10 @@ async function fakeCodex(
   await fs.writeFile(
     executable,
     `#!/usr/bin/env node
+if (process.argv[2] === "debug" && process.argv[3] === "models") {
+  console.log(JSON.stringify({ models: [{ slug: "fixture-model", use_responses_lite: false, tool_mode: null }] }));
+  process.exit(0);
+}
 import fs from "node:fs";
 const args = process.argv.slice(2);
 const resumed = args.includes("resume");
@@ -47,14 +51,14 @@ const lineValue = (prefix, suffix) => {
     : value;
 };
 const inboxPath = lineValue("Read the invocation Inbox at ", ".") ||
-  lineValue("Current task Inbox: ").split(". Open it")[0].split(". Its exact")[0];
+  lineValue("Current task Inbox: ").split(". Open it")[0].split(". Its exact")[0] || process.cwd() + "/.scienceevolve/inbox/" + process.env.SCIENCEEVOLVE_INVOCATION_ID + ".md";
 const memoryPath = lineValue(
   "Read persistent project memory at ",
   " before acting."
 ) || lineValue(
   "Read persistent Agent memory at ",
   " before acting."
-) || lineValue("Persistent project memory: ").split(". Consult relevant portions")[0];
+) || lineValue("Persistent project memory: ").split(". Consult relevant portions")[0] || process.cwd() + "/Memory.md";
 fs.appendFileSync(${JSON.stringify(capture)}, JSON.stringify({
   args,
   resumed,
@@ -279,8 +283,8 @@ describe("Codex Adapter durable session identity", () => {
         `${path.sep}.scienceevolve${path.sep}inbox${path.sep}`
       );
       expect(capture.memoryPath).toMatch(/Memory\.md$/);
-      expect(capture.prompt).toContain(capture.inboxPath);
-      expect(capture.prompt).toContain(capture.memoryPath);
+      expect(capture.prompt).toContain(capture.inbox);
+      expect(capture.prompt).not.toContain("Persistent project memory:");
       expect(capture.codexHome).toContain(
         `${path.sep}runtime${path.sep}harness-sessions${path.sep}`
       );
@@ -388,7 +392,7 @@ describe("Codex Adapter durable session identity", () => {
     expect(onSessionStarted).not.toHaveBeenCalled();
   });
 
-  it("turns a resumed identity mismatch into a same-Harness replacement", async () => {
+  it("bounds resumed identity mismatch recovery to the original Session without persisting a replacement", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-codex-id-resume-"));
     roots.push(root);
     const fake = await fakeCodex(root, "resume-mismatch");
@@ -417,31 +421,14 @@ describe("Codex Adapter durable session identity", () => {
     request.onSessionStarted = onSessionStarted;
     request.onOfficialHarnessEvent = onOfficialHarnessEvent;
 
-    const result = await runtime.run(
-      request,
-      (_kind, message) => { traces.push(message); },
-      new AbortController().signal
-    );
-
-    expect(result).toMatchObject({
-      handoff: "Codex fixture complete.",
-      threadId: "thread-official-replacement"
-    });
-    expect(traces).toContain(
-      "Native session resume failed; retrying once with a same-Harness replacement"
-    );
-    expect(onSessionStarted).toHaveBeenCalledWith(expect.objectContaining({
-      harnessId: "codex",
-      generation: 7,
-      nativeId: "thread-official-replacement",
-      durable: true
-    }));
-    // The rejected resume is stopped at the identity boundary. None of its
-    // frames are allowed into the persisted canonical trace.
-    expect(onOfficialHarnessEvent).toHaveBeenCalledTimes(4);
-    expect(onOfficialHarnessEvent.mock.calls.map(([event]) => event.seq)).toEqual([
-      0, 1, 2, 3
-    ]);
+    await expect(runtime.run(request, (_kind, message) => { traces.push(message); },
+      new AbortController().signal)).rejects.toMatchObject({ code: "SESSION_RESUME_FAILED" });
+    expect(request.project.agentSessions.main).toEqual(previous);
+    expect(onSessionStarted).toHaveBeenCalledOnce();
+    expect(onSessionStarted).toHaveBeenCalledWith(expect.objectContaining({ nativeId: previous.nativeId,
+      generation: previous.generation, resumedAt: expect.any(String) }));
+    // Mismatched threads never enter canonical history or gain business authority.
+    expect(onOfficialHarnessEvent).not.toHaveBeenCalled();
     const captures = (await fs.readFile(fake.capture, "utf8"))
       .trim()
       .split("\n")
@@ -458,8 +445,9 @@ describe("Codex Adapter durable session identity", () => {
       emittedThread: "thread-unexpected"
     });
     expect(captures[1]).toMatchObject({
-      resumed: false,
-      emittedThread: "thread-official-replacement"
+      resumed: true,
+      requestedThread: previous.nativeId,
+      emittedThread: "thread-unexpected"
     });
     expect(captures[0]?.codexHome).toBe(captures[1]?.codexHome);
   });

@@ -1554,3 +1554,6 @@ export interface FixedMcpDefinition {
 }
 
 export type ConnectionState = "connecting" | "live" | "reconnecting" | "offline";
+
+// Read-only metadata. This is never part of AgentConfig or its update payload.
+export type HarnessPromptResult = import("../../server/src/internal/shared/harness-prompt-contract.js").HarnessPromptResult;

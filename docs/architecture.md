@@ -412,6 +412,18 @@ is injected only into an actual resumed or replacement Session; a fresh Session
 does not receive fake recovery instructions. Ephemeral Codex Workers disable
 native Goals, while persistent Main keeps the product policy.
 
+Within a durable workflow task, malformed tool-call JSON triggers one correction
+attempt in the original native Session. The Facade keeps the task identity,
+Session generation, completed files and control receipts, rebuilds the Inbox
+from server authority, and includes the concrete protocol validation error in
+the next native input. A fresh process lease does not create a fresh Session.
+If correction fails again, `PROTOCOL_RECOVERY_EXHAUSTED` is non-retryable;
+the scheduler preserves the interrupted task for explicit recovery, including
+across service restarts. It must not reset the correction allowance by starting
+another whole invocation. A native Session that still cannot be resumed after
+one retry is likewise retained rather than replaced. Ephemeral callers retain
+their bounded replacement policy.
+
 Legacy pending Main decisions migrate to `weak-branch` only when their source
 can be proven to have multiple weak candidates; all other old pending states
 become `autonomous`. Loop counters, token ledgers, Explainer history and legacy

@@ -8,18 +8,25 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { redactTrace } from "./utils.js";
 import type { AssistantAction, ExplainerAssistantStore } from "./explainer-assistant.js";
-import { EXPLAINER_MCP_NAME, EXPLAINER_DRAFT_FIELD_GUIDANCE } from "./internal/shared/explainer-tools.js";
+import { EXPLAINER_CONTEXT_SECTIONS, EXPLAINER_MCP_NAME, EXPLAINER_DRAFT_FIELD_GUIDANCE } from "./internal/shared/explainer-tools.js";
 
 export { EXPLAINER_MCP_NAME } from "./internal/shared/explainer-tools.js";
 const mutationProperties = {
-  expectedRevision: { type: "integer", minimum: 0, description: "Exact revision returned by get_context." },
+  expectedRevision: { type: "integer", minimum: 0, description: "Latest exact revision from get_context or the previous mutation receipt's context.revision. Mutation tools must run one at a time, never in parallel, even when editing different saved drafts." },
   operationId: { type: "string", minLength: 8, maxLength: 160, pattern: "^[A-Za-z0-9_-]+$", description: "Stable unique operation identity. Reuse only for an exact retry." },
   explanation: { type: "string", description: "Brief user-facing explanation of the change." }
 };
+const draftPatch = { type: "object", additionalProperties: false,
+  description: "A real JSON object, never a quoted/stringified JSON value. Read the selected draft first. Preserve the research requirement on configuration-only edits. Read get_context section=schema for exact field placement and constraints.",
+  properties: { title: { type: "string" }, requirement: { type: "string", description: EXPLAINER_DRAFT_FIELD_GUIDANCE.requirement },
+    agents: { type: ["object", "null"], description: EXPLAINER_DRAFT_FIELD_GUIDANCE.agents },
+    orchestration: { type: ["object", "null"], description: EXPLAINER_DRAFT_FIELD_GUIDANCE.orchestration },
+    git: { type: ["object", "null"], description: EXPLAINER_DRAFT_FIELD_GUIDANCE.git },
+    skillDefinitions: { type: ["object", "null"] }, mcpDefinitions: { type: ["object", "null"] } } };
 export const EXPLAINER_TOOLS = [
-  { name: "get_context", description: "Default: current revision, section names and the complete Agent index only. Every metadata index includes all entries without pagination; detail bodies are opened individually. Read a selected draft field with section=draft,key=<field>; one Agent with section=agent,key=<agentId>; list catalog fields with section=catalog, then key=<field> and entry=<listed entry> for one full record. Project/workflow sections likewise use key. Read only needed details before editing, and refresh after a stale revision rejection.",
+  { name: "get_context", description: "Default: current revision, section names and the complete Agent index only. Every metadata index includes all entries without pagination; detail bodies are opened individually. Read a selected draft field with section=draft,key=<field>; one Agent with section=agent,key=<agentId>; list catalog fields with section=catalog, then key=<field> and entry=<listed entry> for one full record. Read the actual input contract with section=schema,key=draft|orchestration|agents|git|skillDefinitions|mcpDefinitions; entry=<top-level property> opens just that field. Project/workflow sections likewise use key. Read only needed details before editing, and refresh after a stale revision rejection.",
     inputSchema: { type: "object", properties: {
-      section: { type: "string", enum: ["overview", "draft", "drafts", "agent", "catalog", "project", "workflow", "evidence"] },
+      section: { type: "string", enum: EXPLAINER_CONTEXT_SECTIONS },
       key: { type: "string", minLength: 1, maxLength: 256 }, entry: { type: "string", minLength: 1, maxLength: 1024 }
     }, additionalProperties: false }, annotations: { readOnlyHint: true } },
   { name: "start_projects", description: "Start one or multiple selected saved drafts as real research projects, ONLY when the user explicitly asks to start them. Read section=drafts first and use each exact taskId/updatedAt. Returns an individual project link or error for every draft; successful items are not launched again on an exact retry. May initialize Git repositories. Does not change the current editor/project target.",
@@ -29,24 +36,28 @@ export const EXPLAINER_TOOLS = [
       }, required: ["taskId", "expectedUpdatedAt"], additionalProperties: false } }
     }, required: ["expectedRevision", "operationId", "tasks"], additionalProperties: false },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true } },
+  { name: "delete_drafts", description: "Delete one or several selected saved drafts ONLY when explicitly requested by the user. Read get_context section=drafts to resolve exact task IDs and latest updatedAt values. All selected versions must still match; a conflict deletes nothing. An exact retry returns the durable deletion receipt. This does not delete or stop running research projects. Never use this tool merely to review, organize, start or edit drafts.",
+    inputSchema: { type: "object", properties: { ...mutationProperties,
+      tasks: { type: "array", minItems: 1, maxItems: 100, items: { type: "object", properties: {
+        taskId: { type: "string", pattern: "^task_[a-f0-9]{32}$" }, expectedUpdatedAt: { type: "string", format: "date-time" }
+      }, required: ["taskId", "expectedUpdatedAt"], additionalProperties: false } }
+    }, required: ["expectedRevision", "operationId", "tasks"], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false } },
   ...[
-    ["create_draft", "Create a NEW independent project draft in the homepage library. Use this for every new/additional/alternative draft, once per draft with a unique operationId. A JSON merge patch starts from the current draft. Preserves all previous saved drafts and the current editor/project target, including when bound to a running project. Returns savedTask.id and its actual link. Never starts research or creates a repository."],
+    ["create_draft", "Create a NEW independent project draft in the homepage library. Call once per new draft with a unique operationId. Fields inherit from the current draft, but providing orchestration.agents declares a NEW COMPLETE workflow: orchestration replaces the old graph and only settings for retained Agent names inherit. Provide the complete new graph and new Agents' settings; do not enumerate old roles just to delete them. Without a new roster, ordinary JSON merge-patch cloning applies. Read section=schema for exact configuration structure before designing a new graph. Preserves prior drafts and the current editor/project target. Returns savedTask.id and its link. Never starts research or creates a repository."],
     ["update_draft", "Update the current draft using an RFC 7396 JSON merge patch. Valid project designs automatically save to the homepage draft library and return a link; running-project adjustment drafts remain proposals. Never starts research or creates a repository. Objects merge, arrays replace, null removes. Provide a complete valid graph whenever changing graph structure."],
+    ["update_saved_draft", "Edit a specifically selected saved draft from any conversation using its exact taskId and expectedUpdatedAt from get_context section=drafts. Read its full detail before applying an RFC 7396 merge patch. Preserves unrelated fields, other drafts and the current editor/project target. Never starts research or creates a repository. A stale version is rejected."],
     ["save_draft", "Save the CURRENT project draft in the homepage library, updating its existing task ID. This is NOT create-new or save-as; use create_draft for a new independent draft. Never launches research or creates a Git repository. Returns the actual saved task ID and navigation link."],
-    ["undo_draft", "Undo the last assistant draft edit when the user asks. User edits made since then are preserved through revision checks."],
+    ["undo_draft", "Undo the last assistant edit of the CURRENT draft when the user asks. Edits to other saved drafts and deletions clear this undo history. User edits made since then are preserved through revision checks."],
     ["submit_workflow_adjustment", "Submit the current adjustment draft to an existing running project, only when the user asks to apply their changes. The existing Workflow mechanism decides the actual safe application time. Never launches projects."]
   ].map(([name, description]) => ({ name: name!, description: description!,
     inputSchema: { type: "object", properties: { ...mutationProperties,
-      ...(["create_draft", "update_draft"].includes(name!) ? { patch: { type: "object", additionalProperties: false,
-        description: "Read get_context first. Omit unrelated fields. Workflow/configuration edits must preserve requirement; requirement is the research brief for downstream research Agents, not your workflow-design instructions.",
-        properties: { title: { type: "string" }, requirement: { type: "string", description: EXPLAINER_DRAFT_FIELD_GUIDANCE.requirement },
-          agents: { type: ["object", "null"], description: EXPLAINER_DRAFT_FIELD_GUIDANCE.agents },
-          orchestration: { type: ["object", "null"], description: EXPLAINER_DRAFT_FIELD_GUIDANCE.orchestration },
-          git: { type: ["object", "null"], description: EXPLAINER_DRAFT_FIELD_GUIDANCE.git },
-          skillDefinitions: { type: ["object", "null"] }, mcpDefinitions: { type: ["object", "null"] } } },
+      ...(["create_draft", "update_draft", "update_saved_draft"].includes(name!) ? { patch: draftPatch,
+        ...(name === "update_saved_draft" ? { taskId: { type: "string", pattern: "^task_[a-f0-9]{32}$" }, expectedUpdatedAt: { type: "string", format: "date-time" } } : {}),
         ...(name === "update_draft" ? { workflowBase: { type: "object", properties: { revision: { type: "integer" }, hash: { type: "string" } }, required: ["revision", "hash"], additionalProperties: false,
           description: "Set only after reviewing and rebasing the draft against this exact current official Workflow version." } } : {}) } : {}) },
-      required: ["expectedRevision", "operationId", ...(["create_draft", "update_draft"].includes(name!) ? ["patch"] : [])], additionalProperties: false },
+      required: ["expectedRevision", "operationId", ...(["create_draft", "update_draft", "update_saved_draft"].includes(name!) ? ["patch"] : []),
+        ...(name === "update_saved_draft" ? ["taskId", "expectedUpdatedAt"] : [])], additionalProperties: false },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } }))
 ];
 
@@ -134,12 +145,13 @@ export async function openExplainerAssistantMcp(store: ExplainerAssistantStore |
   const route = `/mcp/${randomBytes(24).toString("hex")}`;
   const active = new Set<Server>();
   const pending = new Set<Promise<unknown>>();
+  const enabled = new Set(store ? store.availableToolNames(await store.get(id)) : []);
   const server = http.createServer(async (request, response) => {
     if (request.url !== route || signal.aborted) { response.writeHead(404).end(); return; }
     if (request.method !== "POST") { response.writeHead(405).end(); return; }
     const mcp = new Server({ name: EXPLAINER_MCP_NAME, version: "1.0.0" }, { capabilities: { tools: {} } });
     active.add(mcp);
-    const tools = [...(store ? EXPLAINER_TOOLS.filter(tool => tool.name !== "start_projects" || store.host.startProjects) : []), ...(readDirectory ? [EXPLAINER_READ_CONTEXT_TOOL] : [])];
+    const tools = [...EXPLAINER_TOOLS.filter(tool => enabled.has(tool.name)), ...(readDirectory ? [EXPLAINER_READ_CONTEXT_TOOL] : [])];
     mcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
     mcp.setRequestHandler(CallToolRequestSchema, async request => {
       try {
@@ -156,9 +168,10 @@ export async function openExplainerAssistantMcp(store: ExplainerAssistantStore |
         const value = result.action ? { kind: result.action.kind, summary: result.action.summary,
           changedFields: result.action.changedFields, href: result.action.href, requestId: result.action.requestId,
           savedTask: result.action.savedTask, launches: result.action.launches,
+          targetTaskId: result.action.targetTaskId, deletedTasks: result.action.deletedTasks,
           context: { id: result.action.context.id, revision: result.action.context.revision,
             taskId: result.action.context.taskId, projectId: result.action.context.projectId,
-            canUndo: result.action.context.canUndo } } : result.result;
+            canUndo: result.action.context.canUndo, deletedTaskId: result.action.context.deletedTaskId } } : result.result;
         return { content: [{ type: "text", text: JSON.stringify(value) }] };
       } catch (error) {
         return { isError: true, content: [{ type: "text", text: redactTrace(error instanceof Error ? error.message : "Project Explainer tool failed") }] };

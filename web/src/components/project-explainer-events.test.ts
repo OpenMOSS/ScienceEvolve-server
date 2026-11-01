@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ProjectExplainerEvent } from "../types";
-import { explainerReplyProgress, foldExplainerMessages, isExplainerConversationMessage, mergeExplainerMessages } from "./project-explainer-events";
+import { explainerReplyProgress, foldExplainerMessages, isExplainerConversationMessage, mergeExplainerMessages, pendingExplainerMessage, reconcileExplainerHistory, restoreExplainerMessages } from "./project-explainer-events";
 
 const event = (kind: ProjectExplainerEvent["kind"], text: string, extra: Partial<ProjectExplainerEvent> = {}): ProjectExplainerEvent =>
   ({ id: `${kind}:${text}`, projectId: "project", turnId: "current", ts: "2026-10-14T00:00:00Z", kind, text, ...extra });
@@ -75,4 +75,40 @@ describe("Explainer conversation presentation", () => {
     expect(explainerReplyProgress([completed], true)).toEqual({ phase: "working", text: "正在处理…" });
     expect(explainerReplyProgress([], false)).toBeUndefined();
   });
+});
+
+const historyEvent = (id: string, text: string, phase: ProjectExplainerEvent["phase"] = "delta"): ProjectExplainerEvent => ({
+  id, projectId: "p", turnId: "turn", itemId: "answer", kind: "assistant", text, phase, ts: `2026-10-28T08:00:0${id}.000Z`
+});
+
+it("does not remove live replies or action receipts when history temporarily lags", () => {
+  const live = [historyEvent("1", "Reply", "completed"), { ...historyEvent("2", "Draft saved", "completed"), kind: "status" as const, data: { assistantAction: {} } }];
+  expect(reconcileExplainerHistory(live, [])).toEqual(live);
+});
+it("reconciles already folded deltas without repeating text", () => {
+  const first = historyEvent("1", "A"), second = historyEvent("2", "B");
+  const live = foldExplainerMessages([first, second]);
+  expect(reconcileExplainerHistory(live, [first])[0].text).toBe("AB");
+  expect(reconcileExplainerHistory(live, [first, second])[0].text).toBe("AB");
+  expect(reconcileExplainerHistory(live, [first, second, historyEvent("3", "Complete", "completed")])[0].text).toBe("Complete");
+});
+it("replaces the local user echo with exactly one acknowledged server message", () => {
+  const pending = pendingExplainerMessage("p", "Create a draft");
+  const ack = { ...pending, id: "server", turnId: "actual-turn", data: undefined, phase: "completed" as const };
+  expect(mergeExplainerMessages([pending], ack)).toEqual([ack]);
+  const restored = restoreExplainerMessages(JSON.parse(JSON.stringify([pending])));
+  expect(restored[0].data?.clientPending).toBe("unconfirmed");
+  expect(mergeExplainerMessages(restored, ack)).toEqual([ack]);
+});
+it("retains aggregated text after a reload with no in-memory delta identity map", () => {
+  const first = historyEvent("1", "A");
+  const cached = JSON.parse(JSON.stringify(foldExplainerMessages([first, { ...historyEvent("2", "B"), ts: first.ts }])));
+  expect(reconcileExplainerHistory(cached, [first])[0].text).toBe("AB");
+});
+it("does not mistake an earlier identical question for acknowledgement of a newly submitted one", () => {
+  const earlier = { ...historyEvent("1", "Same question", "completed"), kind: "user" as const, itemId: undefined };
+  const pending = pendingExplainerMessage("p", earlier.text, [earlier]);
+  expect(reconcileExplainerHistory([earlier, pending], [earlier])).toHaveLength(2);
+  const acknowledged = { ...earlier, id: "new-server-question", turnId: "new-turn" };
+  expect(reconcileExplainerHistory([earlier, pending], [earlier, acknowledged])).toHaveLength(2);
 });

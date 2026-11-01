@@ -1,5 +1,6 @@
 import { workflowAdjustmentPageFixture } from "../test/workflow-adjustment-history";
 import { runtimeProjectFixture } from "../test/runtime-project";
+import { cacheResource } from "../resource-cache";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -1490,13 +1491,20 @@ describe("Workspace task progress", () => {
     expect(JSON.stringify(events)).toBe(original);
   });
 
+  it("renders a cached project while a slow background snapshot is still pending", () => {
+    cacheResource(`project:${project.id}`, project);
+    vi.mocked(getProject).mockImplementation(() => new Promise(() => undefined));
+    render(<WorkspacePage projectId={project.id} onBack={vi.fn()} />);
+    expect(screen.getByRole("heading", { name: project.title })).toBeVisible();
+  });
+
   it("retains actual Explainer errors while hiding lifecycle diagnostics", async () => {
     vi.mocked(getProjectExplainerHistory).mockResolvedValue({ active: false, events: [{
       id: "fatal-error", projectId: project.id, turnId: "failed-turn", ts: "2026-10-14T00:00:00Z", kind: "error",
       text: "网关连接失败，请稍后重试。", phase: "completed", data: { diagnostic: true }
     }] });
     render(<ProjectExplainerPanel projectId={project.id} />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("网关连接失败，请稍后重试。");
+    expect(await screen.findByText("网关连接失败，请稍后重试。")).toHaveAttribute("role", "alert");
     expect(screen.getByRole("status", { name: "Project Explainer 回复状态" })).toHaveTextContent("回答失败");
   });
 

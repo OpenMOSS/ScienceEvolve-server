@@ -488,7 +488,7 @@ describe("CollaborationRuntimeCoordinator", () => {
     } finally { await coordinator.shutdown(); }
   });
 
-  it.each(["missing", "missing-sha", "provider-error"] as const)("isolates an unconfirmed remote main during actual project startup (%s)", async outcome => {
+  it.each(["missing", "missing-sha", "provider-error", "frozen-authorization-error"] as const)("isolates an unconfirmed remote main during actual project startup (%s)", async outcome => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-startup-remote-failure-")); temporaryRoots.push(root);
     const storage = new ProjectStorage(root, new EventHub()); await storage.initialize();
     const blocked = projectState("prj_41414141414141414141414141414141"), untouched = projectState("prj_42424242424242424242424242424242");
@@ -504,12 +504,14 @@ describe("CollaborationRuntimeCoordinator", () => {
     blocked.status = "queued"; await storage.saveState(blocked);
     const provider = vi.fn(async (repository: { owner: string; name: string }, ref: string) => {
       if (outcome === "provider-error") throw new Error("Original provider ref query failed");
+      if (outcome === "frozen-authorization-error") throw new GitHubAuthorizationError(401, "GitHub credential could not be resolved");
       return { owner: repository.owner, repository: repository.name, ref,
         status: outcome === "missing" ? "missing" as const : "present" as const, observedAt: new Date().toISOString() };
     });
     const native = vi.fn(async () => { throw new Error("Unconfirmed base must not start native or business work"); });
     const coordinator = new CollaborationRuntimeCoordinator({ storage, gitFactory: options => ({ ...happyGitFake(options, []),
-      observeRemoteRef: provider }), residentLauncher: { open: native, decideRoute: native } });
+      observeRemoteRef: provider }), residentLauncher: { open: native, decideRoute: native,
+        async observeMainRouteRecovery() { return { stopped: true, evidence: { processGroupAbsent: true } }; } } });
     const runner: AgentRunner = { run: native, harnessCatalog: async () => harnessCatalogRegistry.list().map(d => toPublicHarnessDescriptor(d, { available: true })) };
     const orchestrator = new Orchestrator(storage, new SkillCatalog([]), runner, { retryBaseMs: 1, retryMaxMs: 1 }, undefined, coordinator);
     try {
@@ -534,11 +536,20 @@ describe("CollaborationRuntimeCoordinator", () => {
       }
       const original = structuredClone({ session: blocked.agentSessions, ids: blocked.agentSessionIds, counts: blocked.runCounts,
         mainInvocationSeq: blocked.mainInvocationSeq, requirement: blocked.requirement });
+      if (outcome === "frozen-authorization-error") {
+        const db = coordinator.database();
+        db.activateNode({ projectId: blocked.id, nodeRunId: "frozen-startup-main",
+          node: { kind: "agent", nodeId: "main", agentId: "main" }, activationRequestId: "frozen-startup-input",
+          inputSnapshotRef: `project:${blocked.id}:requirement:cycle:1`, activatedByAgentId: "main", workflowRevision: 1 });
+        db.freezeMainRouteFailure({ projectId: blocked.id, nodeRunId: "frozen-startup-main", routeEpoch: 1,
+          error: "Original Main process disappeared", requestId: "freeze-startup-main" });
+      }
       await expect(orchestrator.initialize()).resolves.toBeUndefined();
       const projects = await orchestrator.listProjects(); expect(projects).toHaveLength(2);
       const failed = projects.find(p => p.id === blocked.id)!;
       expect(failed).toMatchObject({ status: "retrying", phase: "collaboration:recovering" });
-      expect(failed.lastError).toContain(outcome === "provider-error" ? "Original provider ref query failed" : "Remote main ref is unavailable");
+      expect(failed.lastError).toContain(outcome === "provider-error" ? "Original provider ref query failed"
+        : outcome === "frozen-authorization-error" ? "GitHub credential could not be resolved" : "Remote main ref is unavailable");
       expect({ session: failed.agentSessions, ids: failed.agentSessionIds, counts: failed.runCounts,
         mainInvocationSeq: failed.mainInvocationSeq, requirement: failed.requirement }).toEqual(original);
       expect(projects.find(p => p.id === untouched.id)).toMatchObject({ status: "retrying", phase: "collaboration:ready" });
@@ -633,6 +644,39 @@ describe("CollaborationRuntimeCoordinator", () => {
       expect((await independent.loadState(project.id)).status).toBe("completed");
       expect((await storage.loadState(project.id)).formalStateProtocol).toBe("project-state-v1");
     } finally { await orchestrator.shutdown(); }
+  });
+
+  it("logs the original SQLite heartbeat failure once and fences a still-unexpired writer", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-heartbeat-diagnostic-")); temporaryRoots.push(root);
+    const storage = new ProjectStorage(root, new EventHub()); await storage.initialize();
+    let clock = Date.now();
+    const state = projectState("prj_17171717171717171717171717171717");
+    state.git = { enabled: true, status: "ready" }; state.phase = "idle";
+    await storage.createProject(state);
+    const coordinator = new CollaborationRuntimeCoordinator({ storage, databasePath: path.join(root, "collaboration.sqlite"),
+      serviceId: "heartbeat-diagnostic", hostId: "test-host", leaseDurationMs: 30_000, now: () => clock });
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      liveCoordinators.push(coordinator); await coordinator.initialize();
+      const database = coordinator.database();
+      database.createProject({ projectId: state.id, workflowRevision: 1, workflowSnapshot: state.orchestration,
+        git: state.git, workerCapacity: 1, managementCapacity: 1 });
+      const lease = database.writerLease();
+      const error = Object.assign(new Error("disk I/O error"), { code: "ERR_SQLITE_ERROR", errcode: 778 });
+      const renew = vi.spyOn(database, "renewWriterLease").mockImplementation(() => { throw error; });
+      clock += 10_000; vi.advanceTimersByTime(10_000);
+      expect(log).toHaveBeenCalledExactlyOnceWith("Collaboration writer lease renewal failed; writer fenced", {
+        timestamp: new Date(clock).toISOString(), error: "disk I/O error", code: "ERR_SQLITE_ERROR", sqliteCode: 778,
+        leaseEpoch: lease.epoch, leaseExpiresAt: new Date(lease.expiresAtMs).toISOString()
+      });
+      expect(() => database.assertWriterLeaseHeld()).not.toThrow();
+      expect(database.writerLease()).toEqual(lease);
+      expect(coordinator.projectReadModel(state).phase).toBe("collaboration:writer-lease-lost");
+      await expect(coordinator.pauseProject(state)).rejects.toThrow("writer lease was lost");
+      clock += 10_000; vi.advanceTimersByTime(10_000);
+      expect(renew).toHaveBeenCalledOnce(); expect(log).toHaveBeenCalledOnce();
+    } finally { await coordinator.shutdown().catch(() => undefined); vi.useRealTimers(); log.mockRestore(); }
   });
 
   it.each(["retry", "expired", "replaced", "unexpected"] as const)(
@@ -3979,7 +4023,7 @@ describe("CollaborationRuntimeCoordinator", () => {
           expect(input.turn.prompt).toContain(message);
           expect(await fs.readFile(input.open.inputs!.inboxPath, "utf8")).toContain(message);
           if (mode === "long") {
-            const boundInput = `Project user input input-root-main (mode=wait; createdAt=${state.createdAt}):\n${message}`;
+            const boundInput = `来源：user\n内容：${message}`;
             expect(input.turn.prompt).toContain(boundInput);
             expect(await fs.readFile(input.open.inputs!.inboxPath, "utf8")).toContain(boundInput);
           }
@@ -4120,6 +4164,8 @@ describe("CollaborationRuntimeCoordinator", () => {
     await waitFor(() => state.status === "completed" && state.cycle === 2);
     expect(decisions).toBe(3);
     expect(prompts[2]).toContain("Also provide a concise reproducibility note");
+    expect(prompts[2]).not.toContain(state.requirement);
+    expect(prompts[2].split("Also provide a concise reproducibility note")).toHaveLength(2);
     expect(state.userInputs).toEqual([
       expect.objectContaining({ requestId: "reopen-one", status: "delivered" })
     ]);
@@ -6521,8 +6567,8 @@ describe("CollaborationRuntimeCoordinator", () => {
     expect(state.nodeRuns?.find((node) => node.node.nodeId === "main")?.output)
       .toBe("Main transformed the idea evidence for review");
     expect(reviewInbox).toContain("Main transformed the idea evidence for review");
-    expect(reviewInbox).toContain("REVIEW-OWN-MANAGEMENT-CONTEXT");
-    expect(reviewInbox).toContain(`management/memory@${"8".repeat(40)}`);
+    expect(reviewInbox).not.toContain("REVIEW-OWN-MANAGEMENT-CONTEXT");
+    expect(reviewInbox).not.toContain(`management/memory@${"8".repeat(40)}`);
     expect(reviewInbox).not.toContain("OTHER-AGENT-MANAGEMENT-MUST-NOT-ENTER-DELIVERY");
     expect(reviewInbox).not.toContain("idea delivered evidence");
     expect(state.executions?.filter((execution) => execution.status === "succeeded")).toHaveLength(2);
@@ -8775,23 +8821,9 @@ describe("CollaborationRuntimeCoordinator", () => {
       expect(leaderMemories[1]!.length).toBeLessThan(20_000);
       expect(committedManagementContents.length).toBeGreaterThanOrEqual(6);
       expect(committedManagementContents.join("\n")).not.toContain("fixture-private-material");
-      expect(memberInboxes.some((inbox) =>
-        inbox.includes("# Server-owned collaboration assignment") &&
-        inbox.includes("## Shared activation context") &&
-        inbox.includes("idea completed delivery") &&
-        inbox.includes("## Shared group task state") &&
-        inbox.includes("explicitly stage only intended business files") &&
-        inbox.includes("git_push returns not_committed") &&
-        inbox.includes("task-deliver") &&
-        inbox.includes("task-write") &&
-        inbox.includes("Deliver the result with bounded coordination context") &&
-        inbox.includes("Write supporting evidence") &&
-        inbox.includes("Leader: idea")
-      )).toBe(true);
-      expect(memberInboxes.some((inbox) =>
-        inbox.includes("Final integration owner") &&
-        inbox.includes("Group base:")
-      )).toBe(true);
+      expect(memberInboxes.some(inbox => inbox.includes("Deliver the result with bounded coordination context"))).toBe(true);
+      expect(memberInboxes.some(inbox => inbox.includes("Write supporting evidence"))).toBe(true);
+      expect(memberInboxes.every(inbox => !inbox.includes("## Shared group task state"))).toBe(true);
       expect(state.executions?.some((execution) =>
         execution.groupRunId === deliveryGroup?.id && execution.agentId === "idea"
       )).toBe(false);
@@ -8947,12 +8979,9 @@ describe("CollaborationRuntimeCoordinator", () => {
       expect(state.taskCompletions?.[predecessor!.id]).toBeUndefined();
       expect(state.taskCompletions?.[successor!.id]).toMatchObject({ agent: "execution" });
       expect(ideaTurns).toBe(2);
-      expect(successorInboxes.some((inbox) =>
-        inbox.includes("## Retained predecessor provenance") &&
-        inbox.includes(predecessor?.id ?? "missing") &&
-        inbox.includes("fixture member crash before PR creation") &&
-        inbox.includes("Pull request: none opened")
-      )).toBe(true);
+      expect(successorInboxes.every(inbox => !inbox.includes("## Retained predecessor provenance"))).toBe(true);
+      expect(successorInboxes.some(inbox => inbox.includes("来源："))).toBe(true);
+      expect(predecessor?.failureReason).toContain("fixture member crash before PR creation");
       expect(state.groupRuns?.[0]).toMatchObject({ status: "completed" });
     } finally { await coordinator.shutdown(); }
   });
@@ -11713,7 +11742,7 @@ describe("CollaborationRuntimeCoordinator", () => {
                     assigneeAgentId: survivor
                   }]
                 };
-              } else if (turn.prompt.includes("All currently assigned delivery tasks are terminal")) {
+              } else if (turn.inputId.includes("-post-delivery-")) {
                 const survivor = ["idea", "execution"].find((agentId) =>
                   agentId !== failedAgentId
                 );

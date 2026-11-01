@@ -286,6 +286,8 @@ export interface AgentConfig {
   harness?: AgentHarness;
   /** Global gateway selected for this Agent. */
   gatewayId?: string;
+  /** Trusted standalone-host native Codex profile alias; never a credential or path. */
+  nativeCodexProfileId?: string;
   /** Model-level Gateway reasoning option. Absence means provider default. */
   gatewayReasoningOption?: string;
   /** Server-only snapshot captured when a project starts. */
@@ -1701,6 +1703,8 @@ export interface ArtifactDirectoryPage {
 
 /** Canonical natural-language handoff read model; legacy result snapshots are UI compatibility only. */
 export interface HandoffRecord {
+  /** Verbatim Agent communication, separate from the archived Markdown envelope. */
+  body?: string;
   agent: AgentName;
   invocationId: string;
   markdown: string;

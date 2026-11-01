@@ -39,6 +39,8 @@ import {
 } from "../process-host.js";
 
 export interface AdapterRuntimeOptions extends HarnessHostOptions {
+  /** Trusted SDK host binding, never supplied by a workflow or Agent. */
+  resolveProjectWorkspace?: (projectId: string) => Promise<string | undefined>;
   explainerSandboxMode?: "read-only" | "danger-full-access";
   harnessId?: string;
   harnessExecutables?: Record<string, string | undefined>;
@@ -118,16 +120,7 @@ export abstract class AdapterBase {
   }
 }
 
-/** Launch JavaScript npm entrypoints through Node on Windows; never invoke cmd.exe shims. */
-export function harnessExecutableLaunch(
-  executable: string,
-  args: readonly string[]
-): { command: string; args: string[] } {
-  const extension = path.extname(executable).toLowerCase();
-  return process.platform === "win32" && [".js", ".mjs", ".cjs"].includes(extension)
-    ? { command: process.execPath, args: [executable, ...args] }
-    : { command: executable, args: [...args] };
-}
+export { harnessExecutableLaunch } from "../process-host.js";
 
 export async function prepareAdapterRuntime(
   context: HarnessAdapterContext,
@@ -141,6 +134,7 @@ export async function prepareAdapterRuntime(
   mcpRows: AdapterMcpRow[];
 }> {
   const { request, spec, route } = context;
+  if ("nativeCodexProfileHome" in route) throw new Error("Native Codex profile routes cannot launch another Harness");
   const config = request.project.agents[request.agent];
   if (!config) {
     throw new HarnessRuntimeError(

@@ -9,7 +9,7 @@ import { EXPLAINER_TOOLS, openExplainerAssistantMcp } from "../src/explainer-ass
 import { SavedResearchTaskStore } from "../src/saved-research-tasks.js";
 import { SkillCatalog } from "../src/skill-catalog.js";
 import { fixedMcpDefinition } from "../src/mcp-directory.js";
-import { isExplainerMcp } from "../src/internal/shared/explainer-tools.js";
+import { isExplainerMcp, explainerToolNames } from "../src/internal/shared/explainer-tools.js";
 import { workflowAdjustmentSubmissionBodySchema } from "../src/workflow-adjustments.js";
 import { SavedTaskLauncher } from "../src/saved-task-launcher.js";
 import type { ProjectState } from "../src/types.js";
@@ -36,6 +36,222 @@ async function setup() {
 const mutation = (revision: number, operationId: string, patch?: unknown) => ({ expectedRevision: revision, operationId, ...(patch ? { patch } : {}) });
 
 describe("Project Explainer agent tools and durable project drafts", () => {
+  it("creates a new roster on the first call without inheriting unrelated Agent settings or routes", async () => {
+    const f = await setup(), before = structuredClone(f.context.draft);
+    const graph = { ...before.orchestration, agents: [{ name: "main", template: "main" }, { name: "coder", template: "execution" }, { name: "auditor", template: "review" }],
+      input: { source: "input", target: "coder" }, routes: { main: [{ target: "coder", kind: "weak" }, { target: "auditor", kind: "weak" }],
+        coder: [{ target: "auditor", kind: "strong" }], auditor: [{ target: "finish", kind: "strong" }] },
+      decisionPlans: { main: "协调当前设计", coder: "实现并交给审核", auditor: "确认后结束" },
+      termination: { ...before.orchestration.termination, agent: "auditor" } };
+    const patch = { title: "独立三角色设计", requirement: "实现公开题目并审核交付", orchestration: graph,
+      agents: { coder: before.agents!.execution, auditor: before.agents!.review } };
+    const input = mutation(0, "create-fresh-roster-first-try", patch);
+    const created = await f.store.call(f.context.id, "create_draft", input);
+    const saved = (await f.tasks.get(created.action!.savedTask!.id))!;
+    expect(Object.keys(saved.agents).sort()).toEqual(["auditor", "coder", "main"]);
+    expect(Object.keys(saved.orchestration.routes).sort()).toEqual(["auditor", "coder", "main"]);
+    expect((await f.store.get(f.context.id)).draft).toEqual(before);
+    expect(await f.store.call(f.context.id, "create_draft", input)).toEqual(created);
+    expect(await f.tasks.list()).toHaveLength(1);
+    await expect(f.store.call(f.context.id, "create_draft", mutation(1, "create-explicit-unknown-role", {
+      ...patch, agents: { ...patch.agents, writing: before.agents!.writing }
+    }))).rejects.toThrow("unknown Agent: writing");
+    // Existing-target editing keeps RFC 7396: omitted fields cannot be deleted.
+    await expect(f.store.call(f.context.id, "update_draft", mutation(1, "edit-does-not-prune-roles", patch))).rejects.toThrow("unknown Agent");
+    expect(await f.tasks.list()).toHaveLength(1);
+  });
+
+  it("exposes selected structural schemas from the real validators without loading the resource catalog", async () => {
+    const f = await setup();
+    f.store.host.catalog = vi.fn(async () => { throw new Error("Catalog must not be loaded for schemas"); });
+    const overview = (await f.store.call(f.context.id, "get_context", {})).result as any;
+    expect(overview.schemaAccess).toMatchObject({ section: "schema" });
+    expect(overview).not.toHaveProperty("schema");
+    const keys = (await f.store.call(f.context.id, "get_context", { section: "schema" })).result as any;
+    expect(keys.data.fields).toContain("orchestration");
+    const graph = (await f.store.call(f.context.id, "get_context", { section: "schema", key: "orchestration" })).result as any;
+    expect(graph.data.schema.properties).toHaveProperty("resultFormat");
+    const termination = (await f.store.call(f.context.id, "get_context", { section: "schema", key: "orchestration", entry: "termination" })).result as any;
+    expect(termination.data.schema.properties).toHaveProperty("agent");
+    expect(termination.data.schema.properties).not.toHaveProperty("resultFormat");
+    expect(termination.data.schema.additionalProperties).toBe(false);
+    const requirement = (await f.store.call(f.context.id, "get_context", { section: "schema", key: "draft", entry: "requirement" })).result as any;
+    expect(requirement.data.schema.minLength).toBe(1);
+    await expect(f.store.call(f.context.id, "get_context", { section: "schema", key: "__proto__" })).rejects.toThrow("未找到配置结构");
+    expect(f.store.host.catalog).not.toHaveBeenCalled();
+  });
+
+  it("accepts a once-encoded object patch over MCP without an error retry and preserves revision guards", async () => {
+    const f = await setup(), controller = new AbortController();
+    const endpoint = await openExplainerAssistantMcp(f.store, f.context.id, controller.signal, async () => undefined);
+    const client = new Client({ name: "encoded-patch-regression", version: "1" });
+    try {
+      await client.connect(new StreamableHTTPClientTransport(new URL(endpoint.url)));
+      const patch = { title: "编码兼容草稿", requirement: "验证 JSON 对象的重复编码不再触发一次工具失败" };
+      const args = { ...mutation(0, "encoded-patch-first-call"), patch: JSON.stringify(patch) };
+      const first = await client.callTool({ name: "create_draft", arguments: args });
+      expect(first.isError).not.toBe(true);
+      const replay = await client.callTool({ name: "create_draft", arguments: { ...args, patch } });
+      expect(replay).toEqual(first); expect(await f.tasks.list()).toHaveLength(1);
+      const stale = await client.callTool({ name: "create_draft", arguments: { ...args, operationId: "encoded-patch-stale-revision" } });
+      expect(stale.isError).toBe(true); expect(JSON.stringify(stale.content)).toContain("草稿在读取后已有修改");
+      for (const encoded of ['[]', 'null', '"quoted again"', '{broken']) {
+        const invalid = await client.callTool({ name: "create_draft", arguments: { ...args, expectedRevision: 1, operationId: "encoded-patch-invalid", patch: encoded } });
+        expect(invalid.isError).toBe(true);
+      }
+      expect(await f.tasks.list()).toHaveLength(1);
+      expect((await f.store.get(f.context.id)).revision).toBe(1);
+    } finally { controller.abort(); await client.close(); await endpoint.close(); }
+  });
+
+  it("prepares conversation evidence without loading the full catalog and retains on-demand access to every entry", async () => {
+    const f = await setup();
+    const catalog = vi.fn(async () => ({ skills: Array.from({ length: 899 }, (_, index) => ({ id: `skill-${index}`, name: `Skill ${index}` })) }));
+    f.store.host.catalog = catalog;
+    const evidence = await f.store.contextEvidence(f.context.id);
+    expect(catalog).not.toHaveBeenCalled();
+    expect(evidence).not.toHaveProperty("catalog");
+    expect(evidence.contextAccess).toEqual({ tool: "get_context", sections: ["catalog", "drafts", "project", "workflow", "evidence"] });
+    const result = (await f.store.call(f.context.id, "get_context", { section: "catalog", key: "skills" })).result as any;
+    expect(catalog).toHaveBeenCalledOnce();
+    expect(result.data.total).toBe(899);
+    expect(result.data.entries.at(-1)).toMatchObject({ id: "skill-898" });
+  });
+
+  it.each(["update_saved_draft", "delete_drafts"])("does not undo an unrelated older current-draft edit after %s", async name => {
+    const f = await setup();
+    await f.store.call(f.context.id, "update_draft", mutation(0, "undo-bound-draft-initial", { title: "Current A", requirement: "防止对其他草稿的操作导致撤销误改当前草稿" }));
+    const current = await f.store.call(f.context.id, "update_draft", mutation(1, "undo-bound-draft-second", { title: "Current A edited" }));
+    expect(current.action!.context.canUndo).toBe(true);
+    const created = await f.store.call(f.context.id, "create_draft", mutation(2, "undo-other-draft-created", { title: "Other B" }));
+    const task = created.action!.savedTask!;
+    const selected = { taskId: task.id, expectedUpdatedAt: task.updatedAt };
+    const result = await f.store.call(f.context.id, name, { expectedRevision: 3, operationId: "undo-other-draft-operation",
+      ...(name === "delete_drafts" ? { tasks: [selected] } : { ...selected, patch: { title: "Other B edited" } }) });
+    expect(result.action!.context.canUndo).toBe(false);
+    await expect(f.store.call(f.context.id, "undo_draft", mutation(4, "undo-unrelated-should-reject"))).rejects.toThrow("没有可撤销");
+    expect((await f.tasks.get(current.action!.context.taskId!))?.title).toBe("Current A edited");
+  });
+
+  it("deletes only selected latest draft versions atomically and replays durable receipts", async () => {
+    const f = await setup();
+    for (const [revision, title] of ["A", "B", "Keep"].entries()) await f.store.call(f.context.id, "create_draft",
+      mutation(revision, `create-delete-fixture-${title}`, { title, requirement: "检查批量删除、版本冲突与独立草稿保护" }));
+    const tasks = await f.tasks.list(), a = tasks.find(task => task.title === "A")!, b = tasks.find(task => task.title === "B")!;
+    const latestB = (await f.tasks.update(b.id, { ...f.context.draft, title: "B edited manually", requirement: b.requirement }, b.updatedAt))!;
+    const input = { expectedRevision: 3, operationId: "delete-selected-fixture-drafts", tasks: [a, b].map(task => ({ taskId: task.id, expectedUpdatedAt: task.updatedAt })) };
+    await expect(f.store.call(f.context.id, "delete_drafts", input)).rejects.toThrow("新的修改");
+    expect(await f.tasks.list()).toHaveLength(3);
+    input.tasks[1]!.expectedUpdatedAt = latestB.updatedAt;
+    const result = await f.store.call(f.context.id, "delete_drafts", input);
+    expect(result.action).toMatchObject({ kind: "drafts.deleted", deletedTasks: [{ id: a.id }, { id: b.id }], context: { revision: 4 } });
+    expect((await f.tasks.list()).map(task => task.title)).toEqual(["Keep"]);
+    const restarted = new ExplainerAssistantStore(f.root, f.store.host);
+    expect(await restarted.call(f.context.id, "delete_drafts", input)).toEqual(result);
+    await expect(restarted.call(f.context.id, "delete_drafts", { ...input, tasks: [input.tasks[0]] })).rejects.toThrow("同一操作编号");
+    await f.tasks.create({ ...f.context.draft, title: "New unrelated task", requirement: a.requirement });
+    expect(await restarted.call(f.context.id, "delete_drafts", input)).toEqual(result);
+    expect(await f.tasks.list()).toHaveLength(2);
+    await expect(f.tasks.create({ ...f.context.draft, title: a.title, requirement: a.requirement }, a.id)).rejects.toThrow("已被删除");
+  });
+
+  it("detaches a deleted current draft, preserves its unsaved content, and never resurrects its ID", async () => {
+    const f = await setup();
+    const edited = await f.store.call(f.context.id, "update_draft", mutation(0, "create-bound-delete-fixture", {
+      title: "Bound draft", requirement: "删除草稿后保留会话及未保存内容，后续保存使用新身份" }));
+    const task = (await f.tasks.get(edited.action!.context.taskId!))!;
+    const result = await f.store.call(f.context.id, "delete_drafts", { expectedRevision: 1, operationId: "delete-bound-draft-fixture",
+      tasks: [{ taskId: task.id, expectedUpdatedAt: task.updatedAt }] });
+    expect(result.action!.context).toMatchObject({ revision: 2, deletedTaskId: task.id, draft: edited.action!.context.draft, canUndo: false });
+    expect(result.action!.context.taskId).toBeUndefined();
+    expect(result.action!.context).not.toHaveProperty("saveIdentity");
+    await expect(f.store.create({ taskId: task.id })).rejects.toThrow("已被删除");
+    const restarted = new ExplainerAssistantStore(f.root, f.store.host);
+    const saved = await restarted.call(f.context.id, "update_draft", mutation(2, "save-independent-after-delete", { title: "New copy" }));
+    expect(saved.action!.context.taskId).not.toBe(task.id);
+    expect(saved.action!.context.deletedTaskId).toBeUndefined();
+    expect((await f.tasks.list()).map(task => task.title)).toEqual(["New copy"]);
+  });
+
+  it("recovers a committed deletion after a conversation-write failure without changing newer user edits", async () => {
+    const f = await setup();
+    await f.store.call(f.context.id, "create_draft", mutation(0, "create-crash-delete-fixture", { title: "Crash fixture", requirement: "删除回执与重试必须一致" }));
+    const [task] = await f.tasks.list();
+    const input = { expectedRevision: 1, operationId: "delete-with-lost-context-receipt", tasks: [{ taskId: task!.id, expectedUpdatedAt: task!.updatedAt }] };
+    vi.spyOn(f.store as any, "write").mockRejectedValueOnce(new Error("injected context write failure"));
+    await expect(f.store.call(f.context.id, "delete_drafts", input)).rejects.toThrow("injected context write");
+    expect(await f.tasks.list()).toHaveLength(0);
+    const restarted = new ExplainerAssistantStore(f.root, f.store.host);
+    await restarted.sync(f.context.id, { expectedRevision: 1, draft: { ...f.context.draft, title: "New manual edit", requirement: "保留已提交删除之后发生的新编辑与撤销记录" } });
+    const newer = await restarted.call(f.context.id, "update_draft", mutation(2, "newer-edit-after-deletion-commit", { title: "New edit after deletion" }));
+    expect(newer.action!.context.canUndo).toBe(true);
+    await expect(restarted.call(f.context.id, "delete_drafts", { ...input, expectedRevision: 2 })).rejects.toThrow("同一删除操作编号");
+    const replay = await restarted.call(f.context.id, "delete_drafts", input);
+    expect(replay.action!.context).toMatchObject({ revision: 3, canUndo: true, draft: { title: "New edit after deletion" } });
+    expect(replay.action!.deletedTasks?.map(task => task.id)).toEqual([task!.id]);
+  });
+
+  it("edits a selected library draft without replacing another editor target and rejects stale versions", async () => {
+    const f = await setup();
+    const created = await f.store.call(f.context.id, "create_draft", mutation(0, "create-foreign-edit-fixture", { title: "Library draft", requirement: "保持科研要求以及当前编辑器内容" }));
+    const task = (await f.tasks.get(created.action!.savedTask!.id))!;
+    const before = await f.store.get(f.context.id);
+    const input = { expectedRevision: 1, operationId: "edit-selected-library-draft", taskId: task.id, expectedUpdatedAt: task.updatedAt, patch: { title: "Renamed from homepage" } };
+    const edited = await f.store.call(f.context.id, "update_saved_draft", input);
+    expect(edited.action!.context.draft).toEqual(before.draft);
+    expect(edited.action!.targetTaskId).toBe(task.id);
+    expect((await f.tasks.get(task.id))!).toMatchObject({ title: "Renamed from homepage", requirement: task.requirement });
+    expect(edited.action!.changedFields).toEqual(["title"]);
+    expect(await f.store.call(f.context.id, "update_saved_draft", input)).toEqual(edited);
+    await expect(f.store.call(f.context.id, "update_saved_draft", { ...input, expectedRevision: 2, operationId: "edit-stale-library-draft" })).rejects.toThrow("新的修改");
+  });
+
+  it("keeps a running project intact when its saved source draft is deleted", async () => {
+    const f = await setup();
+    const edited = await f.store.call(f.context.id, "update_draft", mutation(0, "save-project-source-fixture", { title: "Source draft", requirement: "删除保存来源草稿不能修改或停止已运行项目" }));
+    const task = (await f.tasks.get(edited.action!.context.taskId!))!;
+    const projectId = `prj_${"f".repeat(32)}`;
+    f.project.mockResolvedValue({ ...edited.action!.context.draft, id: projectId, git: { enabled: false }, status: "running" } as unknown as ProjectState);
+    await f.store.bindProject(f.context.id, projectId);
+    const before = await f.store.get(projectId);
+    const result = await f.store.call(projectId, "delete_drafts", { expectedRevision: before.revision, operationId: "delete-running-project-source",
+      tasks: [{ taskId: task.id, expectedUpdatedAt: task.updatedAt }] });
+    expect(result.action!.context.projectId).toBe(projectId);
+    expect(result.action!.context.draft).toEqual(before.draft);
+    expect(f.submitWorkflow).not.toHaveBeenCalled();
+    expect(await f.tasks.get(task.id)).toBeUndefined();
+  });
+
+  it("exposes complete draft CRUD over native MCP and advertises only enabled capabilities", async () => {
+    const f = await setup(), controller = new AbortController();
+    const endpoint = await openExplainerAssistantMcp(f.store, f.context.id, controller.signal, async () => undefined);
+    const client = new Client({ name: "draft-crud-agent", version: "1" });
+    try {
+      await client.connect(new StreamableHTTPClientTransport(new URL(endpoint.url)));
+      const tools = (await client.listTools()).tools;
+      expect(new Set(explainerToolNames({ startProjects: true, submitWorkflow: true }))).toEqual(new Set(EXPLAINER_TOOLS.map(tool => tool.name)));
+      const overview = (await f.store.call(f.context.id, "get_context", {})).result as any;
+      expect(tools.map(tool => tool.name).sort()).toEqual(overview.tools.sort());
+      expect(tools.find(tool => tool.name === "delete_drafts")?.annotations).toMatchObject({ destructiveHint: true, idempotentHint: true });
+      expect(tools.map(tool => tool.name)).not.toContain("submit_workflow_adjustment");
+      const invoke = async (name: string, args: unknown) => {
+        const result = await client.callTool({ name, arguments: args as Record<string, unknown> });
+        expect(result.isError).not.toBe(true); return JSON.parse((result.content as { text: string }[])[0]!.text);
+      };
+      const created = await invoke("create_draft", mutation(0, "native-crud-create-operation", { title: "Native draft", requirement: "验证真实原生 MCP 的新建、读取、修改与删除" }));
+      const edited = await invoke("update_saved_draft", { expectedRevision: 1, operationId: "native-crud-update-operation", taskId: created.savedTask.id,
+        expectedUpdatedAt: created.savedTask.updatedAt, patch: { title: "Native renamed" } });
+      const deleted = await invoke("delete_drafts", { expectedRevision: 2, operationId: "native-crud-delete-operation",
+        tasks: [{ taskId: edited.savedTask.id, expectedUpdatedAt: edited.savedTask.updatedAt }] });
+      expect(deleted.kind).toBe("drafts.deleted"); expect(await f.tasks.list()).toHaveLength(0);
+      expect(deleted.deletedTasks).toEqual([{ id: edited.savedTask.id, title: "Native renamed", updatedAt: edited.savedTask.updatedAt }]);
+      expect(edited.targetTaskId).toBe(created.savedTask.id);
+      const invalid = await client.callTool({ name: "delete_drafts", arguments: { expectedRevision: 3, operationId: "native-invalid-project-delete",
+        tasks: [{ taskId: `prj_${"a".repeat(32)}`, expectedUpdatedAt: edited.savedTask.updatedAt }] } });
+      expect(invalid.isError).toBe(true);
+    } finally { await client.close(); await endpoint.close(); }
+  });
+
   it("returns a small context overview and opens only the selected Agent or draft field", async () => {
     const f = await setup();
     const requirement = "CANONICAL_RESEARCH_REQUIREMENT";
@@ -461,6 +677,11 @@ describe("Project Explainer agent tools and durable project drafts", () => {
       expect(error.isError).toBe(true); expect(actions).toHaveLength(0);
       const result = await client.callTool({ name: "update_draft", arguments: mutation(0, "native-edit-operation", { title: "原生工具", requirement: "由真正的原生 MCP 工具保存项目草稿" }) });
       expect(result.isError).not.toBe(true); expect(actions).toHaveLength(1);
+      const [task] = await f.tasks.list();
+      const deleted = await client.callTool({ name: "delete_drafts", arguments: { expectedRevision: 1, operationId: "native-delete-bound-operation",
+        tasks: [{ taskId: task!.id, expectedUpdatedAt: task!.updatedAt }] } });
+      expect(deleted.isError).not.toBe(true);
+      expect(JSON.parse((deleted.content as { text: string }[])[0]!.text).context).toMatchObject({ deletedTaskId: task!.id, canUndo: false });
       controller.abort();
       const blocked = await fetch(endpoint.url, { method: "POST", body: "{}" }); expect(blocked.status).toBe(404);
     } finally { await client.close(); await endpoint.close(); }

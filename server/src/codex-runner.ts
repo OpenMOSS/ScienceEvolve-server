@@ -37,6 +37,7 @@ type CodexDriverRequest = HarnessAdapterRequest & Pick<
 > & { prepareNativeInput?: (prompt: string) => Promise<string> };
 import {
   buildInvocationEnvironment,
+  harnessExecutableLaunch,
   type InvocationProcessHost,
   writeStreamWithBackpressure
 } from "./harness-runtime/process-host.js";
@@ -90,10 +91,15 @@ function truncateTrace(value: string): string {
 }
 
 export interface CodexRunnerOptions extends HarnessHostOptions {
+  /** External directories are accepted only from the trusted host registry. */
+  resolveProjectWorkspace?: (projectId: string) => Promise<string | undefined>;
   /** Adapter identity supplied by the Registry wrapper. */
   harnessId: string;
   /** The Facade has already copied selected Skills into the Agent-scoped cache. */
   skillsAlreadyStaged?: boolean;
+  workflowPromptPrepared?: boolean;
+  /** Resolved by trusted host authority, never read from an Agent prompt/config path. */
+  nativeCodexProfileHome?: string;
   /** Invocation-local protocol proxy inactivity deadline. */
   protocolProxyTimeoutMs?: number;
 }
@@ -160,14 +166,21 @@ export class CodexRunner {
     ) {
       throw new Error("Agent project path does not match the project id");
     }
-    if (!pathIsWithin(request.workspacePath, request.projectPath)) {
+    const selectedWorkspace = await this.options.resolveProjectWorkspace?.(request.project.id);
+    if (selectedWorkspace !== undefined && path.resolve(request.workspacePath) !== path.resolve(selectedWorkspace)) {
+      throw new Error("Agent workspace does not match the trusted host binding");
+    }
+    if (selectedWorkspace === undefined && !pathIsWithin(request.workspacePath, request.projectPath)) {
       throw new Error("Agent workspace must be inside the current project root");
     }
     const [realProjectPath, realWorkspacePath] = await Promise.all([
       fs.realpath(request.projectPath),
       fs.realpath(request.workspacePath)
     ]);
-    if (!pathIsWithin(realWorkspacePath, realProjectPath)) {
+    if (selectedWorkspace !== undefined && realWorkspacePath !== path.resolve(selectedWorkspace)) {
+      throw new Error("Agent workspace binding changed before Codex launch");
+    }
+    if (selectedWorkspace === undefined && !pathIsWithin(realWorkspacePath, realProjectPath)) {
       throw new Error(
         "Agent workspace resolves outside the current project root"
       );
@@ -201,7 +214,10 @@ export class CodexRunner {
           request.availableSkillPaths,
           request.agent
         );
-    const providerSettings = await loadCodexProviderSettings(hostCodexHome());
+    const nativeProfileHome = this.options.nativeCodexProfileHome;
+    const providerSettings = nativeProfileHome
+      ? { configOverrides: [], routeConfigOverrides: [], environmentKeys: [] }
+      : await loadCodexProviderSettings(hostCodexHome());
     const providerConfigOverrides = agentConfig.gatewaySnapshot
       ? providerSettings.routeConfigOverrides
       : providerSettings.configOverrides;
@@ -291,6 +307,7 @@ export class CodexRunner {
         ];
     const args = [
       "--strict-config",
+      ...(nativeProfileHome ? ["-c", 'model_provider="openai"'] : []),
       "--disable",
       "multi_agent",
       "--disable",
@@ -433,8 +450,8 @@ export class CodexRunner {
     // home, which may contain unrelated sessions, MCP configuration, or
     // credentials.
     const isolatedCodexHome = nativeSessionHome(request.projectPath, request.agent, "codex");
-    await fs.mkdir(isolatedCodexHome, { recursive: true, mode: 0o700 });
-    invocationEnvironment.CODEX_HOME = isolatedCodexHome;
+    if (!nativeProfileHome) await fs.mkdir(isolatedCodexHome, { recursive: true, mode: 0o700 });
+    invocationEnvironment.CODEX_HOME = nativeProfileHome ?? isolatedCodexHome;
 
     const rawTracePath = path.join(request.runtimePath, "codex-events.jsonl");
     const stderrPath = path.join(request.runtimePath, "stderr.log");
@@ -449,8 +466,7 @@ export class CodexRunner {
 
     try {
       const rawProcess = this.processHost.startRaw({
-        command: harnessExecutable,
-        args,
+        ...harnessExecutableLaunch(harnessExecutable, args),
         cwd: request.workspacePath,
         env: invocationEnvironment,
         eventFormat: "jsonl",
@@ -717,12 +733,9 @@ export class CodexRunner {
     try {
       if (!signal.aborted) {
         const configuredMandate = agentConfig.instructions.trim();
-        const nativePrompt =
-          explainer
-            ? `${configuredMandate}\n`
-            : request.prepareNativeInput
-              ? `${configuredMandate}\nThe complete current task is provided above. Consult selected Inbox or context-index details only when needed; do not reload unchanged history. Use the current injected tools and return your actual handoff.\n`
-            : `${configuredMandate ? `Use this Agent mandate as standing role guidance, and apply the inbox's requirement-precedence section to newer task/output updates: ${configuredMandate}\n` : ""}Read the complete agent inbox at ${request.inboxPath}, complete the assigned work, use the injected control tools for state-changing actions, and return a concise natural-language handoff.\n`;
+        const nativePrompt = explainer || this.options.workflowPromptPrepared
+          ? `${configuredMandate}\n`
+          : `${configuredMandate}\n\n项目入口：${request.projectPath}\n\n本轮直接消息：\n来源：OpenFARS\n内容：${await fs.readFile(request.inboxPath, "utf8")}\n`;
         const actualInput = request.prepareNativeInput ? await request.prepareNativeInput(nativePrompt) : nativePrompt;
         signal.throwIfAborted();
         child.stdin.end(actualInput);

@@ -2,6 +2,7 @@ import type { HarnessCatalogEntry, Project } from "../../types";
 import { protocolLabel } from "../../lib";
 import type { CanvasNode } from "./core/canvas-model";
 import { runtimeNodeLabel, type RuntimeNodeState } from "./core/workflow-runtime";
+import { AgentPromptPanels } from "./AgentPromptPanels";
 
 /** Shared read-only Agent facts for root and nested runtime canvases. */
 export function RuntimeAgentNodeDetail({ node, project, title, state, executionCount, reason, invocationId, harnesses }: {
@@ -49,6 +50,12 @@ export function RuntimeAgentNodeDetail({ node, project, title, state, executionC
           <small className="workflow-runtime-lock-note">{project.configurationLocked ? "项目创建后已锁定配置；此处为运行快照，只读。" : "项目配置尚未锁定。"}</small>
         </div>
       )}
+      {config && node.kind === "agent" && <>
+        <AgentPromptPanels key={node.name} agentId={node.name} agent={config} />
+        <label className="runtime-user-prompt"><span>用户 Prompt · 只读</span>
+          <textarea aria-label="用户 Prompt" readOnly value={config.instructions} rows={6} />
+        </label>
+      </>}
     </aside>
   );
 }
