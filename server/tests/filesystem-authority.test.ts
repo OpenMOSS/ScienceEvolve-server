@@ -83,7 +83,7 @@ describe.runIf(process.platform === "linux")("FilesystemAuthority", () => {
       projectWorktrees: [fixture.execution, fixture.peer], protectedRoots: [fixture.protectedRoot] });
     expect(authority.writeRoots).toEqual([]);
     expect(authority.gitCapability).toBe("none");
-    expect(authority.rawTools).toBe("forbidden");
+    expect(authority.rawTools).toBe("native");
     expect(authority.rootBindings.every((root) => !root.write)).toBe(true);
     const broker = await openBroker(authority);
     try {
@@ -103,7 +103,7 @@ describe.runIf(process.platform === "linux")("FilesystemAuthority", () => {
     const workspace = await compile(fixture, "workspace");
     expect(workspace.writeRoots).toEqual([fixture.execution]);
     expect(workspace.gitCapability).toBe("execution");
-    expect(workspace.rawTools).toBe("forbidden");
+    expect(workspace.rawTools).toBe("native");
 
     const compute = await compile(fixture, "compute");
     expect(compute.writeRoots).toEqual([fixture.execution, fixture.peer]);
@@ -169,7 +169,7 @@ describe.runIf(process.platform === "linux")("FilesystemAuthority", () => {
       projectWorktreeRoot: fixture.worktreeRoot, protectedRoots: [fixture.protectedRoot] });
     expect(authority.writeRoots).toEqual([proposal]);
     expect(authority.gitCapability).toBe("none");
-    expect(authority.rawTools).toBe("forbidden");
+    expect(authority.rawTools).toBe("native");
     const broker = await openBroker(authority);
     try {
       await broker.writeAtomic(binding(authority, proposal).id, "workflow.json", Buffer.from("{}"));
@@ -203,7 +203,7 @@ describe.runIf(process.platform === "linux")("FilesystemAuthority", () => {
       await expect(broker.writeAtomic(binding(authority, fixture.execution).id, "business.txt", Buffer.from("deny")))
         .rejects.toThrow(/read-only/);
       expect(authority.writeRoots).toEqual([proposal]);
-      expect(filesystemAuthorityPrompt(authority, { workspacePath: fixture.execution, inboxPath: inbox,
+      expect(filesystemAuthorityPrompt({ ...authority, rawTools: "forbidden" }, { workspacePath: fixture.execution, inboxPath: inbox,
         memoryPath: path.join(snapshot, "Memory.md"), workflowAuthoringPath: path.join(proposal, "workflow.json") }))
         .toContain(`Invocation Inbox: rootId="${readRoot}", path="inv-outside-Inbox.md"`);
     } finally { await broker.close(); }

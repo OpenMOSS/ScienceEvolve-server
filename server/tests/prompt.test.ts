@@ -74,7 +74,7 @@ describe("Agent prompt contracts", () => {
       if (template === "main") {
         expect(BUILTIN_AGENT_PROMPTS[template]).toContain("structured routing decision");
       } else {
-        expect(BUILTIN_AGENT_PROMPTS[template]).toContain("scienceevolve_append_file(path, content)");
+        expect(BUILTIN_AGENT_PROMPTS[template]).toContain("Use native file tools");
         expect(BUILTIN_AGENT_PROMPTS[template]).toContain("ordinary Worker");
       }
       expect(BUILTIN_AGENT_PROMPTS[template]).not.toContain("score >= 6");

@@ -11,7 +11,7 @@ import { explainerToolNames } from "../src/internal/shared/explainer-tools.js";
 const executable = path.resolve("../harness/pi/node_modules/.bin/pi");
 
 it.runIf(existsSync(executable))(
-  "lets installed Pi execute Explainer MCP draft tools while keeping native tools disabled", async () => {
+  "lets installed Pi execute Explainer MCP draft tools alongside its native tool collection", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-pi-explainer-tools-"));
     const projectId = `prj_${"a".repeat(32)}`;
     const projectPath = path.join(root, projectId);
@@ -101,7 +101,7 @@ it.runIf(existsSync(executable))(
       for (const names of advertisedTools) {
         expect(names.some(name => name.endsWith("__create_draft"))).toBe(true);
         expect(names.some(name => name.endsWith("__delete_drafts"))).toBe(true);
-        expect(names.every(name => name.startsWith("mcp__openfars-project-explainer__"))).toBe(true);
+        expect(names).toEqual(expect.arrayContaining(["read", "write", "edit", "bash"]));
       }
     } finally {
       controller.abort();

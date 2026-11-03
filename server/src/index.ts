@@ -176,6 +176,7 @@ async function main(): Promise<void> {
     shuttingDown = true;
     console.log(`Received ${signal}; closing HTTP server`);
     server.close();
+    await gatewayStore.close();
     await computeUsageMonitor.stop();
     await executionSummaries.shutdown();
     await runner.contextIndexes.close();

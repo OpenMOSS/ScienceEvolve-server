@@ -80,4 +80,16 @@ describe("shared Gateway reasoning", () => {
     })).toThrow(/不能重复/);
     expect(() => resolveGatewayReasoning(configs, "model-a", "missing")).toThrow(/不存在/);
   });
+
+  it("validates default option identities and preserves sibling output settings", () => {
+    const config = { parameter: "output_config.effort", defaultOptionId: "high",
+      options: [{ id: "high", label: "High", value: "high" }] };
+    const normalized = normalizeGatewayModelReasoningConfigs(["model-a"], { "model-a": config });
+    expect(applyGatewayReasoning({ output_config: { format: "json" } }, resolveGatewayReasoning(normalized, "model-a", "high")))
+      .toEqual({ output_config: { format: "json", effort: "high" } });
+    // Existing snapshots do not silently acquire newly discovered defaults.
+    expect(resolveGatewayReasoning(normalized, "model-a", undefined)).toBeUndefined();
+    expect(() => normalizeGatewayModelReasoningConfigs(["model-a"], { "model-a": { ...config, defaultOptionId: "missing" } })).toThrow(/默认/);
+    expect(() => normalizeGatewayModelReasoningConfigs(["model-a"], { "model-a": { ...config, defaultOptionId: 2 } })).toThrow(/默认/);
+  });
 });

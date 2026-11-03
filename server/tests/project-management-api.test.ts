@@ -59,7 +59,8 @@ describe("project archive and deletion HTTP APIs", () => {
     const archive = vi.fn(async (projectId: string) => {
       throw new Error(projectId === legacyProjectId
         ? "Only cancelled projects can be archived"
-        : "Only completed or cancelled projects can be archived");
+        : projectId === currentProjectId ? "Only completed or cancelled projects can be archived"
+          : "Only completed, cancelled or paused Git projects can be archived");
     });
     const app = createApp({
       orchestrator: { archive } as unknown as Orchestrator,
@@ -75,7 +76,9 @@ describe("project archive and deletion HTTP APIs", () => {
     await request(app)
       .post(`/api/projects/${currentProjectId}/archive`)
       .expect(409, { error: "Only completed or cancelled projects can be archived" });
-    expect(archive).toHaveBeenCalledTimes(2);
+    await request(app).post("/api/projects/prj_33333333333333333333333333333333/archive")
+      .expect(409, { error: "Only completed, cancelled or paused Git projects can be archived" });
+    expect(archive).toHaveBeenCalledTimes(3);
   });
 
   it("publishes a credential-free GitHub account catalog and fails closed before OAuth setup", async () => {
@@ -208,6 +211,30 @@ describe("project archive and deletion HTTP APIs", () => {
     expect(response.body.error).toContain("agents.idea：idea Agent");
     expect(response.body.error).not.toBe("Invalid request");
     expect(response.body.issues).toHaveLength(2);
+  });
+
+  it("archives later projects while an earlier project's native stop is still pending", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-archive-independent-")); roots.push(root);
+    const eventHub = new EventHub(), first = "prj_11111111111111111111111111111111", second = "prj_22222222222222222222222222222222";
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    const completed: string[] = [];
+    const archive = vi.fn(async (projectId: string) => {
+      if (projectId === first) await pending;
+      completed.push(projectId);
+      return { id: projectId, archivedAt: "2026-11-02T00:00:00.000Z" };
+    });
+    const app = createApp({ orchestrator: { archive } as unknown as Orchestrator,
+      storage: new ProjectStorage(root, eventHub), eventHub, skills: {} as SkillCatalog,
+      config: { modelSuggestions: [], maxEventHistory: 100 } });
+    const result = request(app).post("/api/projects/archive/batch").send({ projectIds: [first, second] }).then(response => response);
+    try {
+      await vi.waitFor(() => expect(completed).toEqual([second]));
+    } finally { release(); }
+    const response = await result;
+    expect(response.status).toBe(200);
+    expect(response.body.successCount).toBe(2);
+    expect(response.body.results.map((row: { projectId: string }) => row.projectId)).toEqual([first, second]);
   });
 
   it("processes batch items independently and enforces destructive confirmations", async () => {

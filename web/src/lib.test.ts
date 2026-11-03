@@ -792,6 +792,9 @@ describe("API data normalization", () => {
       error: "high failed",
       reasoningOptionId: "high"
     });
+    const automatic = { ...gateway, modelReasoning: { [model]: { ...gateway.modelReasoning![model]!, defaultOptionId: "high" } } };
+    expect(gatewayCombinationTestState(automatic, "codex", model).error).toBe("high failed");
+    expect(gatewayCombinationTestState({ ...automatic, autoReasoning: false }, "codex", model).error).toBe("default failed");
 
     const agents = {
       main: {

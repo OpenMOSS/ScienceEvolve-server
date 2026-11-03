@@ -1,4 +1,5 @@
 import { normalizeScopedRuntime } from "./scoped-runtime";
+import { githubAuthorizationWaiting } from "../../server/src/internal/shared/project-runtime-status.js";
 import { isProjectViewStatus } from "./project-status";
 import { acceptedGitHandoff } from "./project-results";
 import {
@@ -118,7 +119,9 @@ export function normalizeGatewayModelReasoningConfigs(
     });
     return [[model, {
       parameter: config.parameter as GatewayReasoningParameterPath,
-      options
+      options,
+      ...(typeof config.defaultOptionId === "string" && options.some(option => option.id === config.defaultOptionId)
+        ? { defaultOptionId: config.defaultOptionId } : {})
     }]];
   }));
 }
@@ -375,12 +378,13 @@ export function applyCatalogDefaultGatewayToNewAgents(
  * the gateway protocol; translated routes must have their own matrix result.
  */
 export function gatewayCombinationTestState(
-  gateway: Pick<GatewayRecord, "protocol" | "revision" | "test" | "tests">,
+  gateway: Pick<GatewayRecord, "protocol" | "revision" | "test" | "tests" | "modelReasoning" | "autoReasoning">,
   harness: NonNullable<AgentConfig["harness"]>,
   model: string,
   harnesses: HarnessCatalogEntry[] = [],
   reasoningOptionId?: string
 ): GatewayTestState {
+  reasoningOptionId ??= gateway.autoReasoning === false ? undefined : gateway.modelReasoning?.[model]?.defaultOptionId;
   const tests = gateway.tests?.length ? gateway.tests : [gateway.test];
   const catalogHarness = harnesses.find((entry) => entry.id === harness);
   const nativeProtocol = catalogHarness?.nativeProtocol
@@ -1326,11 +1330,25 @@ export const STATUS_META: Record<
 };
 
 export function projectWaitingLabel(status: ProjectStatus, runtime?: ProjectRuntimeProjection): string | undefined {
-  if (runtime?.status !== status || !["queued", "retrying", "paused"].includes(status)) return undefined;
-  if (status === "retrying") return "自动恢复中";
-  return runtime.waiting?.kind === "recovery" ? "等待恢复"
-    : runtime.waiting?.kind === "management" ? "等待协调"
-      : runtime.waiting?.kind === "workflow-adjustment" ? "等待 Workflow 调整" : undefined;
+  if (runtime?.status !== status || !["queued", "retrying", "paused", "interrupted"].includes(status)) return undefined;
+  if (runtime.waiting?.kind === "configuration") return "等待配置修复";
+  if (runtime.waiting?.kind === "authorization") return "等待授权修复";
+  if (runtime.waiting?.kind === "user-input" || runtime.phase === "user-intervention-required") return "等待用户输入";
+  if (!["queued", "retrying", "paused"].includes(status)) return undefined;
+  return runtime.waiting?.kind === "backoff" ? "退避重试中"
+    : runtime.waiting?.kind === "recovery" ? "等待恢复"
+      : runtime.waiting?.kind === "management" ? "等待协调"
+        : runtime.waiting?.kind === "workflow-adjustment" ? "等待 Workflow 调整"
+          : status === "retrying" ? "等待重试" : undefined;
+}
+
+/** Also handles servers that still return a generic recovery wait for an
+ * authorization failure. The original project and its history stay intact. */
+export function withProjectAuthorizationWaiting(project: Project): Project {
+  const waiting = githubAuthorizationWaiting(project);
+  if (!waiting) return project;
+  return { ...project, runtime: { stateRevision: 0, executionCount: 0, activities: [],
+    ...project.runtime, status: project.status, phase: project.phase, waiting } };
 }
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -3139,7 +3157,7 @@ export function normalizeProjectRuntimeProjection(
     : [];
   const primary = normalizeProjectRuntimeActivity(raw.primaryActivity);
   const waiting = asObject(raw.waiting);
-  const waitingKind = waiting.kind === "recovery" || waiting.kind === "management" || waiting.kind === "workflow-adjustment"
+  const waitingKind = waiting.kind === "recovery" || waiting.kind === "management" || waiting.kind === "workflow-adjustment" || waiting.kind === "configuration" || waiting.kind === "authorization" || waiting.kind === "user-input" || waiting.kind === "backoff"
     ? waiting.kind : undefined;
   const waitingReason = optionalString(waiting.reason);
   const currentAgent = optionalString(raw.currentAgent);

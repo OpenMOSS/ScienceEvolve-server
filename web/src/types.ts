@@ -306,7 +306,8 @@ export const GATEWAY_REASONING_PARAMETER_PATHS = [
   "reasoning_effort",
   "reasoning.effort",
   "chat_template_kwargs.reasoning_effort",
-  "thinking.effort"
+  "thinking.effort",
+  "output_config.effort"
 ] as const;
 
 export type GatewayReasoningParameterPath =
@@ -321,6 +322,7 @@ export interface GatewayReasoningOption {
 export interface GatewayModelReasoningConfig {
   parameter: GatewayReasoningParameterPath;
   options: GatewayReasoningOption[];
+  defaultOptionId?: string;
 }
 
 export type GatewayModelReasoningConfigs = Record<string, GatewayModelReasoningConfig>;
@@ -378,6 +380,9 @@ export interface GatewayRecord {
   models: string[];
   modelContextWindows?: Record<string, number>;
   modelReasoning?: GatewayModelReasoningConfigs;
+  autoReasoning?: boolean;
+  reasoningDetection?: Record<string, { status: "verified" | "unconfirmed" | "failed"; checkedAt: string; message: string }>;
+  reasoningDiscovery?: Record<string, "queued" | "checking">;
   defaultModel: string;
   protocol: AgentProtocol;
   revision: number;
@@ -444,6 +449,7 @@ export interface GatewayInput {
   models: string[];
   modelContextWindows?: Record<string, number>;
   modelReasoning?: GatewayModelReasoningConfigs;
+  autoReasoning?: boolean;
   defaultModel: string;
   protocol: AgentProtocol;
 }
@@ -877,7 +883,7 @@ export interface ProjectRuntimeProjection {
   status: ProjectStatus;
   phase: string;
   waiting?: {
-    kind: "recovery" | "management" | "workflow-adjustment";
+    kind: "recovery" | "management" | "workflow-adjustment" | "configuration" | "authorization" | "user-input" | "backoff";
     reason: string;
     agentId?: AgentName;
     groupRunId?: string;

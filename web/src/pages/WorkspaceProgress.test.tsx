@@ -1,4 +1,5 @@
 import { workflowAdjustmentPageFixture } from "../test/workflow-adjustment-history";
+import { githubAuthorizationProject } from "../test/github-authorization-project";
 import { runtimeProjectFixture } from "../test/runtime-project";
 import { cacheResource } from "../resource-cache";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -601,13 +602,23 @@ describe("Workspace task progress", () => {
     vi.mocked(cancelProjectExplainer).mockReset().mockResolvedValue();
     vi.mocked(resetProjectExplainer).mockReset().mockResolvedValue();
     vi.mocked(getQueue).mockReset().mockResolvedValue(queue);
-    vi.mocked(projectAction).mockReset().mockResolvedValue(undefined);
+    vi.mocked(projectAction).mockReset().mockResolvedValue(project);
     vi.mocked(refreshGatewayModels).mockReset();
     vi.mocked(createUserSkill).mockReset();
     vi.mocked(addProjectUserInput).mockReset();
     vi.mocked(respondToUserIntervention).mockReset();
     vi.mocked(updateProjectAgentConfigs).mockReset();
     vi.mocked(updateProjectCollaborationGroup).mockReset();
+  });
+
+  it("allows the user to stop a project that is waiting for Main recovery", async () => {
+    vi.mocked(getProject).mockResolvedValue({ ...project, status: "paused", phase: "main-recovery-required" });
+    const user = userEvent.setup();
+    render(<WorkspacePage projectId={project.id} onBack={vi.fn()} />);
+    await user.click(await screen.findByRole("button", { name: "停止" }));
+    expect(screen.getByRole("dialog", { name: "停止这个科研项目？" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "确认停止" }));
+    await waitFor(() => expect(projectAction).toHaveBeenCalledWith(project.id, "cancel"));
   });
 
   it("coalesces slow artifact refreshes and skips overlapping queue polls", async () => {
@@ -761,6 +772,14 @@ describe("Workspace task progress", () => {
     expect(await screen.findAllByText("等待恢复")).not.toHaveLength(0);
     expect(screen.getAllByText(reason).length).toBeGreaterThan(0);
     expect(document.querySelector(".workflow-rail-status")).toHaveTextContent("等待恢复");
+  });
+
+  it("shows an actionable GitHub authorization warning and matching wait labels in the workspace", async () => {
+    vi.mocked(getProject).mockResolvedValue(githubAuthorizationProject(project));
+    render(<WorkspacePage projectId={project.id} onBack={vi.fn()} />);
+    expect(await screen.findByRole("alert", { name: "GitHub 授权异常" })).toHaveTextContent("test-owner");
+    expect(screen.getByRole("link", { name: "前往 GitHub 账号" })).toHaveAttribute("href", "#/github-accounts");
+    expect(document.querySelector(".workflow-rail-status")).toHaveTextContent("等待授权修复");
   });
 
   it("shows task id, overall progress and authoritative per-agent progress", async () => {

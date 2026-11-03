@@ -1361,7 +1361,9 @@ describe("CommonProcessHost", () => {
           () => reject(new Error("resident supervisor masked a dead native root")),
           2_000
         ))
-      ])).resolves.toMatchObject({ signal: "SIGKILL" });
+      ])).resolves.toMatchObject({ code: 0 });
+      orphan.terminate();
+      await orphan.waitForQuiescence();
       await waitForNamespaceProcessExit(Number(await fs.readFile(descendantReadyPath, "utf8")));
 
       const cleanupReadyPath = path.join(root, "cleanup-descendant.ready");

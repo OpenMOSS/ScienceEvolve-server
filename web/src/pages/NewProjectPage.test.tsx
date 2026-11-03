@@ -1986,6 +1986,7 @@ describe("NewProjectPage agent configuration", () => {
       modelReasoning: {
         "route-model": {
           parameter: "chat_template_kwargs.reasoning_effort",
+          defaultOptionId: "high",
           options: [
             { id: "low", label: "低", value: "low" },
             { id: "high", label: "高", value: "high" }
@@ -2010,6 +2011,7 @@ describe("NewProjectPage agent configuration", () => {
     await user.selectOptions(within(mainCard).getByLabelText("Main Agent模型"), "route-model");
     const gatewayEffort = within(mainCard).getByLabelText("Main Agent网关思考强度");
     expect(gatewayEffort).toHaveValue("");
+    expect(within(mainCard).getByRole("option", { name: "自动（high）" })).toBeInTheDocument();
     expect(within(mainCard).queryByLabelText("Main Agent思考深度")).not.toBeInTheDocument();
     await user.selectOptions(gatewayEffort, "high");
     await user.click(within(mainCard).getByRole("button", { name: "测试Main Agent连通性" }));

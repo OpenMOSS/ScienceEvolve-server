@@ -39,6 +39,7 @@ async function runControlMcp(
         ...process.env,
         SCIENCEEVOLVE_APPEND_ROOT: root,
         SCIENCEEVOLVE_AGENT_NAME: "execution",
+        SCIENCEEVOLVE_LEGACY_FILE_TOOLS: "1",
         ...environment
       },
       stdio: ["pipe", "pipe", "pipe"]
@@ -579,5 +580,21 @@ describe("scienceevolve append workspace MCP", () => {
       code: -32000,
       message: expect.stringContaining("invalid for this invocation")
     });
+  });
+});
+
+
+describe("native file tool default surface", () => {
+  it("omits and rejects generic append/input APIs while preserving business artifact reads", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-native-file-surface-")); temporaryRoots.push(root);
+    const responses = await runControlMcp(root, [
+      { jsonrpc: "2.0", id: 1, method: "tools/list" },
+      { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "scienceevolve_append_file", arguments: { path: "probe", content: "do not write" } } },
+      { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "scienceevolve_read_invocation_input", arguments: { input: "memory" } } }
+    ], { SCIENCEEVOLVE_LEGACY_FILE_TOOLS: "0" });
+    expect((responses.get(1)!.result as { tools: unknown[] }).tools).toEqual([]);
+    expect(responses.get(2)?.error).toMatchObject({ code: -32601 });
+    expect(responses.get(3)?.error).toMatchObject({ code: -32601 });
+    await expect(fs.stat(path.join(root, "probe"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

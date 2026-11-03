@@ -26,3 +26,6 @@ protocol-route/.home/
 /temp/
 /tmp-diag-*/
 /shared-core/.sync.lock
+
+# Local project instructions.
+/AGENTS.md

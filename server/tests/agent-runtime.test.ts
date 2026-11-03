@@ -32,6 +32,7 @@ async function store(
     fetch: fetchImpl,
     resolveHostname,
     testTimeoutMs: 1_000,
+    autoReasoning: false,
     ...(adapterSmokeProbe ? { adapterSmokeProbe } : {})
   });
 }

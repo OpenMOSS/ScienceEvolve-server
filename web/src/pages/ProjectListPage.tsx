@@ -15,6 +15,7 @@ import {
   ArrowRight,
   BrainCircuit,
   CheckCircle2,
+  CircleStop,
   Clock3,
   Coins,
   Database,
@@ -72,6 +73,10 @@ import {
   StatusBadge
 } from "../components/Common";
 import { SaveAgentConfigDialog } from "../components/SaveAgentConfigDialog";
+import { ProjectStopDialog } from "../components/ProjectStopDialog";
+import { ProjectAuthorizationNotice } from "../components/ProjectAuthorizationNotice";
+import { withProjectAuthorizationWaiting } from "../lib";
+import { canArchiveProject, canStopProject, isStoppedProject } from "../project-status";
 import { OrchestrationTemplateEditor } from "../components/OrchestrationTemplateEditor";
 import { GitHubAccountSelector } from "../components/GitHubAccountSelector";
 import { WorkflowCanvasEditor } from "../components/WorkflowCanvasEditor";
@@ -220,7 +225,7 @@ function quickTitle(requirement: string): string {
 }
 
 function ProjectCard({
-  project,
+  project: sourceProject,
   batchMode,
   selected,
   selectable,
@@ -229,6 +234,7 @@ function ProjectCard({
   onOpen,
   onPause,
   onResume,
+  onStop,
   onArchive,
   onDelete,
   onSaveConfig
@@ -242,13 +248,16 @@ function ProjectCard({
   onOpen: () => void;
   onPause: () => Promise<void>;
   onResume: () => Promise<void>;
+  onStop: () => Promise<void>;
   onArchive: () => Promise<void>;
   onDelete: () => void;
   onSaveConfig: (title: string) => Promise<string>;
 }) {
+  const project = withProjectAuthorizationWaiting(sourceProject);
   const [lifecycleAction, setLifecycleAction] = useState<
-    "pause" | "resume" | undefined
+    "pause" | "resume" | "cancel" | undefined
   >();
+  const [stopOpen, setStopOpen] = useState(false);
   const [lifecycleError, setLifecycleError] = useState("");
   const [archiving, setArchiving] = useState(false);
   const [archiveError, setArchiveError] = useState("");
@@ -266,8 +275,11 @@ function ProjectCard({
     project.status === "paused" &&
     project.phase === "gateway-recovery-required";
   const canPause =
+    !project.archivedAt &&
     !mainRecoveryRequired &&
     statusCategory === "active";
+  const canStop = canStopProject(project);
+  const stopped = isStoppedProject(project);
   const canStart =
     !project.archivedAt &&
     !waitingForUser &&
@@ -282,19 +294,24 @@ function ProjectCard({
     ? agentTemplateFor(project.orchestration, project.queuedAgent)
     : undefined;
 
-  const changeLifecycle = async (action: "pause" | "resume") => {
+  const changeLifecycle = async (action: "pause" | "resume" | "cancel") => {
     setLifecycleAction(action);
     setLifecycleError("");
     try {
       if (action === "pause") await onPause();
-      else await onResume();
+      else if (action === "cancel") {
+        await onStop();
+        setStopOpen(false);
+      } else await onResume();
     } catch (reason) {
       setLifecycleError(
         reason instanceof Error
           ? reason.message
           : action === "pause"
             ? "项目暂停失败"
-            : "项目启动失败"
+            : action === "cancel"
+              ? "项目停止失败"
+              : "项目启动失败"
       );
     } finally {
       setLifecycleAction(undefined);
@@ -337,7 +354,7 @@ function ProjectCard({
       )}
       <button type="button" className="project-card" onClick={onOpen}>
         <div className="project-card-top">
-          <StatusBadge status={project.status} runtime={project.runtime} />
+          <StatusBadge status={project.status} phase={project.phase} runtime={project.runtime} />
           {project.archivedAt && (
             <span className="project-archived-badge">
               <Archive size={12} />已归档
@@ -481,6 +498,7 @@ function ProjectCard({
           </Button>
         </div>
       )}
+      <ProjectAuthorizationNotice project={project} compact />
       {mainRecoveryRequired && (
         <div className="project-main-recovery-strip" role="alert">
           <span>
@@ -494,6 +512,7 @@ function ProjectCard({
             variant="primary"
             icon={<RefreshCw size={15} />}
             loading={lifecycleAction === "resume"}
+            disabled={Boolean(lifecycleAction) || archiving || Boolean(project.archivedAt)}
             onClick={() => void changeLifecycle("resume")}
           >
             恢复 Main
@@ -513,6 +532,7 @@ function ProjectCard({
             variant="primary"
             icon={<RefreshCw size={15} />}
             loading={lifecycleAction === "resume"}
+            disabled={Boolean(lifecycleAction) || archiving || Boolean(project.archivedAt)}
             onClick={() => void changeLifecycle("resume")}
           >
             重新尝试
@@ -543,7 +563,7 @@ function ProjectCard({
           保存配置
         </Button>
       </div>}
-      {(canPause || canStart) && (
+      {(canPause || canStart || canStop) && (
         <div
           className={`project-lifecycle-strip ${
             project.status === "interrupted"
@@ -565,7 +585,9 @@ function ProjectCard({
             )}
             <span>
               <strong>
-                {project.status === "interrupted"
+                {stopped
+                  ? "项目已停止"
+                  : project.status === "interrupted"
                   ? `已保存到 ${displayAgentName(project.queuedAgent)} 断点`
                   : canPause
                     ? project.currentAgent
@@ -573,10 +595,14 @@ function ProjectCard({
                       : "项目正在等待调度"
                     : project.status === "pausing"
                       ? "项目正在安全暂停"
+                      : project.status === "interrupting"
+                        ? "项目正在中断"
                       : "项目已暂停"}
               </strong>
               <small>
-                {project.status === "interrupted"
+                {stopped
+                  ? "可恢复原项目，或归档保留执行记录"
+                  : project.status === "interrupted"
                   ? "启动后重新运行该 Agent 并继续全流程"
                   : canPause
                     ? project.currentAgent
@@ -584,11 +610,14 @@ function ProjectCard({
                       : "暂停后将从当前 Agent 队列中撤出"
                     : project.status === "pausing"
                       ? "启动可撤销暂停并继续当前科研流程"
+                      : !canStart
+                        ? "可停止当前项目并保留已有轨迹与产物"
                       : "启动后从保存状态继续科研流程"}
               </small>
             </span>
           </span>
-          <Button
+          <div className="project-lifecycle-actions">
+          {(canPause || canStart) && <Button
             variant={canPause ? "secondary" : "primary"}
             icon={
               project.status === "interrupted" ? (
@@ -599,7 +628,8 @@ function ProjectCard({
                 <Play size={15} />
               )
             }
-            loading={Boolean(lifecycleAction)}
+            loading={lifecycleAction === "pause" || lifecycleAction === "resume"}
+            disabled={Boolean(lifecycleAction) || archiving}
             onClick={() =>
               void changeLifecycle(canPause ? "pause" : "resume")
             }
@@ -610,15 +640,30 @@ function ProjectCard({
               : project.status === "interrupted"
                 ? "启动并恢复"
                 : "启动项目"}
-          </Button>
+          </Button>}
+          {canStop && <Button
+            variant="danger"
+            icon={<CircleStop size={15} />}
+            loading={lifecycleAction === "cancel"}
+            disabled={Boolean(lifecycleAction) || archiving}
+            onClick={() => setStopOpen(true)}
+            aria-label={`停止项目 ${project.id}`}
+          >停止项目</Button>}
+          </div>
         </div>
       )}
-      {(project.archivedAt || project.status === "cancelled" || project.status === "completed" || (project.status === "paused" && project.git?.enabled)) && (
+      {!project.archivedAt && project.status === "paused" && !project.git?.enabled && (
+        <small className="project-archive-hint">当前为暂停状态；如需归档，请先停止项目并等待停止完成。</small>
+      )}
+      {!project.archivedAt && ["cancelling", "stopping"].includes(project.status) && (
+        <small className="project-archive-hint">正在终止智能体并保存现场；停止完成后才可归档。</small>
+      )}
+      {(project.archivedAt || canArchiveProject(project)) && (
         <div className="project-archive-strip">
           <span>
             {project.archivedAt ? <ArchiveRestore size={17} /> : <Archive size={17} />}
             <span>
-              <strong>{project.archivedAt ? "项目已归档" : project.status === "completed" ? "项目已完成，可安全归档" : project.status === "paused" ? "项目已暂停，可归档保留现场" : "已取消，可安全归档"}</strong>
+              <strong>{project.archivedAt ? "项目已归档" : project.status === "completed" ? "项目已完成，可安全归档" : stopped ? "项目已停止，可安全归档" : "项目已暂停，可归档保留现场"}</strong>
               <small>
                 {project.archivedAt
                   ? `归档于 ${formatRelativeTime(project.archivedAt)}`
@@ -632,6 +677,7 @@ function ProjectCard({
                 variant="secondary"
                 icon={project.archivedAt ? <ArchiveRestore size={15} /> : <Archive size={15} />}
                 loading={archiving}
+                disabled={Boolean(lifecycleAction)}
                 onClick={() => void archive()}
               >
                 {project.archivedAt ? "取消归档" : "归档项目"}
@@ -659,6 +705,12 @@ function ProjectCard({
           {archiveError}
         </span>
       )}
+      {stopOpen && <ProjectStopDialog
+        title={project.title}
+        loading={lifecycleAction === "cancel"}
+        onCancel={() => setStopOpen(false)}
+        onConfirm={() => void changeLifecycle("cancel")}
+      />}
       {saveConfigOpen && (
         <SaveAgentConfigDialog
           projectId={project.id}
@@ -2042,7 +2094,7 @@ export function ProjectListPage({
   const selectableVisibleProjects = displayedProjects.filter((project) =>
     showArchived
       ? Boolean(project.archivedAt)
-      : project.status === "cancelled" || project.status === "completed" || (project.status === "paused" && Boolean(project.git?.enabled))
+      : canArchiveProject(project)
   );
   const allVisibleSelected = selectableVisibleProjects.length > 0 &&
     selectableVisibleProjects.every((project) => selectedProjectIds.has(project.id));
@@ -2767,23 +2819,28 @@ export function ProjectListPage({
                 project={project}
                 batchMode={batchMode}
                 selected={selectedProjectIds.has(project.id)}
-                selectable={showArchived || project.status === "cancelled" || project.status === "completed" || (project.status === "paused" && Boolean(project.git?.enabled))}
+                selectable={showArchived || canArchiveProject(project)}
                 selectionReason={showArchived
                   ? undefined
-                  : project.status === "cancelled" || project.status === "completed" || (project.status === "paused" && project.git?.enabled)
+                  : canArchiveProject(project)
                     ? undefined
                     : "已完成、已取消或已暂停的 Git 项目可归档"}
                 onToggleSelected={() => toggleProjectSelection(project.id)}
                 onOpen={() => onOpen(project.id)}
                 onPause={async () => {
-                  await projectAction(project.id, "pause");
-                  publishProjectMutation();
+                  const updated = await projectAction(project.id, "pause");
+                  publishProjectMutation(current => current.map(item => item.id === project.id ? updated : item));
                   await load(false);
                 }}
                 onResume={async () => {
-                  await projectAction(project.id, "resume");
-                  publishProjectMutation();
+                  const updated = await projectAction(project.id, "resume");
+                  publishProjectMutation(current => current.map(item => item.id === project.id ? updated : item));
                   await load(false);
+                }}
+                onStop={async () => {
+                  const updated = await projectAction(project.id, "cancel");
+                  publishProjectMutation(current => current.map(item => item.id === project.id ? updated : item));
+                  void load(false);
                 }}
                 onArchive={async () => {
                   const restoring = Boolean(project.archivedAt);

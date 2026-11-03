@@ -4,146 +4,398 @@
     "source": "example/dynamic-research-workflow/workflow.json",
     "sourceSha256": "a94bc9125c002523cf237475b261c8997a276c2409c1cbbc164282b4a61ce4ce",
     "screenshot": "dynamic-research-workflow.jpg",
-    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+    "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
+    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
+    "captureDate": "2026-11-03",
+    "viewport": {
+      "width": 1800,
+      "height": 1100,
+      "deviceScaleFactor": 1.5
+    },
+    "imageSize": {
+      "width": 2700,
+      "height": 1650
+    },
+    "screenshotSha256": "e47cb45d70db08b9f5295c0460a215e8460633d3b23048677bc28a622cbe43a3"
   },
   {
     "id": "01-ahe-evolve",
     "source": "example/01-ahe-evolve/workflow.json",
     "sourceSha256": "7177f848d021d80244199da45140e340574c005eaa6a30ed9ddba9bfd9b10389",
     "screenshot": "01-ahe-evolve.jpg",
-    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+    "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
+    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
+    "captureDate": "2026-11-03",
+    "viewport": {
+      "width": 1800,
+      "height": 1100,
+      "deviceScaleFactor": 1.5
+    },
+    "imageSize": {
+      "width": 2700,
+      "height": 1650
+    },
+    "screenshotSha256": "e592881d5eac384a6c156a5b30ba7f5f4d77363b3f3eab6dfc227f94afbc4e90"
   },
   {
     "id": "02-software-development",
     "source": "example/02-software-development/workflow.json",
     "sourceSha256": "def6a577ac1c4babf41f2864432a757678ed2dcfca5caf8a6774219ad4ceed42",
     "screenshot": "02-software-development.jpg",
-    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+    "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
+    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
+    "captureDate": "2026-11-03",
+    "viewport": {
+      "width": 1800,
+      "height": 1100,
+      "deviceScaleFactor": 1.5
+    },
+    "imageSize": {
+      "width": 2700,
+      "height": 1650
+    },
+    "screenshotSha256": "7dbf55be1101e117cff71a8c29d48580122687dd7a15df0de480ca7aa4f86c04"
   },
   {
     "id": "aris",
     "source": "example/aris/workflow.json",
     "sourceSha256": "f730dde2dd7d2379ce82698056b1146bd532ebf2ea7263740e814b51ef058e64",
     "screenshot": "aris.jpg",
-    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+    "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
+    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
+    "captureDate": "2026-11-03",
+    "viewport": {
+      "width": 1800,
+      "height": 1100,
+      "deviceScaleFactor": 1.5
+    },
+    "imageSize": {
+      "width": 2700,
+      "height": 1650
+    },
+    "screenshotSha256": "87bcc3579b1e7fd68a062a39ebe161a48f5f21bf34baffca20d88c8b79dec907"
   },
   {
     "id": "metaharness",
     "source": "example/metaharness/workflow.json",
     "sourceSha256": "693861f97e6088ac029a9d132b18e1e50ed6cdb6df8b39093eddce939e8105b6",
     "screenshot": "metaharness.jpg",
-    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+    "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
+    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
+    "captureDate": "2026-11-03",
+    "viewport": {
+      "width": 1800,
+      "height": 1100,
+      "deviceScaleFactor": 1.5
+    },
+    "imageSize": {
+      "width": 2700,
+      "height": 1650
+    },
+    "screenshotSha256": "8866f792fe4bf41306bca71cad21ac201c82513d89fa1535f3f188e7854233e9"
   },
   {
     "id": "autoresearch",
     "source": "example/autoresearch/workflow.json",
     "sourceSha256": "8fabadffe37a216f6d2cad1eb5cd183d643507f491c3e2a9b522ccd397bfdbb2",
     "screenshot": "autoresearch.jpg",
-    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+    "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
+    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
+    "captureDate": "2026-11-03",
+    "viewport": {
+      "width": 1800,
+      "height": 1100,
+      "deviceScaleFactor": 1.5
+    },
+    "imageSize": {
+      "width": 2700,
+      "height": 1650
+    },
+    "screenshotSha256": "64927050a2d7948686b3173dafa5ebdc080afc58175c2d2931247ec2b80aac37"
   },
   {
     "id": "funsearch",
     "source": "example/funsearch/workflow.json",
     "sourceSha256": "50e875ec98a30abc2d8e2755f900cf1ce6a808213277e3c5b3c4ca248ae0ca2d",
     "screenshot": "funsearch.jpg",
-    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+    "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
+    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
+    "captureDate": "2026-11-03",
+    "viewport": {
+      "width": 1800,
+      "height": 1100,
+      "deviceScaleFactor": 1.5
+    },
+    "imageSize": {
+      "width": 2700,
+      "height": 1650
+    },
+    "screenshotSha256": "32ca3c0d7b8f8739349bcc972e9af9e8fd17c82ae8a04aedc59ad0ca1d4ab9a9"
   },
   {
     "id": "agent-laboratory",
     "source": "example/agent-laboratory/workflow.json",
     "sourceSha256": "b1458e74feb40ad13b0fda10051781ad9b75875d0ca401f3d801aab8e2bc1efe",
     "screenshot": "agent-laboratory.jpg",
-    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+    "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
+    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
+    "captureDate": "2026-11-03",
+    "viewport": {
+      "width": 1800,
+      "height": 1100,
+      "deviceScaleFactor": 1.5
+    },
+    "imageSize": {
+      "width": 2700,
+      "height": 1650
+    },
+    "screenshotSha256": "afbeddee5c04d42020bf007d711823ba68e7b1b6c5ebfbe453c2257549f09012"
   },
   {
     "id": "sciagents",
     "source": "example/sciagents/workflow.json",
     "sourceSha256": "bada3038a51b8b270f342f74d781b4cea9f6f125e66641b9e22b8db9f41c4a71",
     "screenshot": "sciagents.jpg",
-    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+    "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
+    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
+    "captureDate": "2026-11-03",
+    "viewport": {
+      "width": 1800,
+      "height": 1100,
+      "deviceScaleFactor": 1.5
+    },
+    "imageSize": {
+      "width": 2700,
+      "height": 1650
+    },
+    "screenshotSha256": "2c5f3af54ecd2b4b218a5b515390df800920ed0a9bf331464358fdb078b118f7"
   },
   {
     "id": "robin",
     "source": "example/robin/workflow.json",
     "sourceSha256": "06bb293a413b62a10a7a46703f6a0f7f2968e61c0b91e45e0680f35d7b217346",
     "screenshot": "robin.jpg",
-    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+    "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
+    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
+    "captureDate": "2026-11-03",
+    "viewport": {
+      "width": 1800,
+      "height": 1100,
+      "deviceScaleFactor": 1.5
+    },
+    "imageSize": {
+      "width": 2700,
+      "height": 1650
+    },
+    "screenshotSha256": "eec1a09e5980747b3a3f95d1bb1bb0c6906b1a25f1fe0c0676f0c3bf14cc915d"
   },
   {
     "id": "co-scientist",
     "source": "example/co-scientist/workflow.json",
     "sourceSha256": "b3512010dabc8605d8d6312f22406839f1abbb6fca19f76724b7742db5225b9c",
     "screenshot": "co-scientist.jpg",
-    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+    "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
+    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
+    "captureDate": "2026-11-03",
+    "viewport": {
+      "width": 1800,
+      "height": 1100,
+      "deviceScaleFactor": 1.5
+    },
+    "imageSize": {
+      "width": 2700,
+      "height": 1650
+    },
+    "screenshotSha256": "8f9c877858645ef1043161a81279affb7d93194c192796a80cbab2a36fa9bebe"
   },
   {
     "id": "biomni",
     "source": "example/biomni/workflow.json",
     "sourceSha256": "38683f23c64b0126623de6c11528c614fe371c718af50fecc408a4d7f6365a1a",
     "screenshot": "biomni.jpg",
-    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+    "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
+    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
+    "captureDate": "2026-11-03",
+    "viewport": {
+      "width": 1800,
+      "height": 1100,
+      "deviceScaleFactor": 1.5
+    },
+    "imageSize": {
+      "width": 2700,
+      "height": 1650
+    },
+    "screenshotSha256": "a59ed7a3032d86a9de9bf16781ab54be9370c49d923087d291ffb4f47afe1733"
   },
   {
     "id": "agentrxiv",
     "source": "example/agentrxiv/workflow.json",
     "sourceSha256": "bb670fb64795bff390ef641a5513900a0c74a139c76fe8a3867b656b50852c25",
     "screenshot": "agentrxiv.jpg",
-    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+    "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
+    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
+    "captureDate": "2026-11-03",
+    "viewport": {
+      "width": 1800,
+      "height": 1100,
+      "deviceScaleFactor": 1.5
+    },
+    "imageSize": {
+      "width": 2700,
+      "height": 1650
+    },
+    "screenshotSha256": "9b11bf7661783d67dcf258338cc572f3ea3a895d0d9cf71f52122e38c7ca60e1"
   },
   {
     "id": "rrsi",
     "source": "example/rrsi/workflow.json",
     "sourceSha256": "8e056cb5049e75ef249bb6d30f57baca0e806ed29af2262529130a9b517cd7cf",
     "screenshot": "rrsi.jpg",
-    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+    "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
+    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
+    "captureDate": "2026-11-03",
+    "viewport": {
+      "width": 1800,
+      "height": 1100,
+      "deviceScaleFactor": 1.5
+    },
+    "imageSize": {
+      "width": 2700,
+      "height": 1650
+    },
+    "screenshotSha256": "148c7664212f92a21d66554b9f56bb22c8c7f5b4cb819995c66a0781e3007a3d"
   },
   {
     "id": "drugevolve",
     "source": "example/drugevolve/workflow.json",
     "sourceSha256": "4ab31994ac99f0b8d645c75f6af37f6be4cccf871bf12da3f8fd67308bf992f8",
     "screenshot": "drugevolve.jpg",
-    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+    "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
+    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
+    "captureDate": "2026-11-03",
+    "viewport": {
+      "width": 1800,
+      "height": 1100,
+      "deviceScaleFactor": 1.5
+    },
+    "imageSize": {
+      "width": 2700,
+      "height": 1650
+    },
+    "screenshotSha256": "3ca2b764fad3fb615d43bb3cb6c185eb78abc485cf3f270dfd40df6704e02c71"
   },
   {
     "id": "scientist-two",
     "source": "example/scientist-two/workflow.json",
     "sourceSha256": "9d9bb7b7b9423781c15487df39907c4298e5bec37176b0d8eefb376288568896",
     "screenshot": "scientist-two.jpg",
-    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+    "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
+    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
+    "captureDate": "2026-11-03",
+    "viewport": {
+      "width": 1800,
+      "height": 1100,
+      "deviceScaleFactor": 1.5
+    },
+    "imageSize": {
+      "width": 2700,
+      "height": 1650
+    },
+    "screenshotSha256": "59e180985e5f7c27c8fc6ba381ae20b76e77108b7c0a0aafc127a9ac8076c29c"
   },
   {
     "id": "ai-scientist-v2",
     "source": "example/ai-scientist-v2/workflow.json",
     "sourceSha256": "5ac8bba046da57266a4ae6fd7db45e135040ff032477434b7afbeb3008a81cb6",
     "screenshot": "ai-scientist-v2.jpg",
-    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+    "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
+    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
+    "captureDate": "2026-11-03",
+    "viewport": {
+      "width": 1800,
+      "height": 1100,
+      "deviceScaleFactor": 1.5
+    },
+    "imageSize": {
+      "width": 2700,
+      "height": 1650
+    },
+    "screenshotSha256": "9dee7067000df934eafa27d206dbe6502226c24f1bdcf743647017fa65319e81"
   },
   {
     "id": "internagent-1-5",
     "source": "example/internagent-1-5/workflow.json",
     "sourceSha256": "e0b83da59ad2671b222023cce4b16348ec112b1094b5be1d44e591e9c70c7ebe",
     "screenshot": "internagent-1-5.jpg",
-    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+    "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
+    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
+    "captureDate": "2026-11-03",
+    "viewport": {
+      "width": 1800,
+      "height": 1100,
+      "deviceScaleFactor": 1.5
+    },
+    "imageSize": {
+      "width": 2700,
+      "height": 1650
+    },
+    "screenshotSha256": "b9f45ccb252217df15550884ed0278ca96207a59441ab3257cc7789850bba5dd"
   },
   {
     "id": "biomni-r0",
     "source": "example/biomni-r0/workflow.json",
     "sourceSha256": "15faabcdcad7036182a0f1ac71f3854f966d9b31b5940822dfabcd71126cfdc2",
     "screenshot": "biomni-r0.jpg",
-    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+    "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
+    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
+    "captureDate": "2026-11-03",
+    "viewport": {
+      "width": 1800,
+      "height": 1100,
+      "deviceScaleFactor": 1.5
+    },
+    "imageSize": {
+      "width": 2700,
+      "height": 1650
+    },
+    "screenshotSha256": "e3264d73d36e5a3c93b881d30087c08eda2c3b24426fd3b3b5e0ce6f88fc0eee"
   },
   {
     "id": "chemical-coscientist",
     "source": "example/chemical-coscientist/workflow.json",
     "sourceSha256": "5ff156d0d49bb850c83eb74a7df721d8e284b6adea9651f8fea7cd500a486dc6",
     "screenshot": "chemical-coscientist.jpg",
-    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+    "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
+    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
+    "captureDate": "2026-11-03",
+    "viewport": {
+      "width": 1800,
+      "height": 1100,
+      "deviceScaleFactor": 1.5
+    },
+    "imageSize": {
+      "width": 2700,
+      "height": 1650
+    },
+    "screenshotSha256": "d8cf953d6bde47ec383b164e7101d44e218d1d6a2ac7fba0e1515d66672f75ad"
   },
   {
     "id": "raven",
     "source": "example/raven/workflow.json",
     "sourceSha256": "6aa56f93f832c18f8d06e659b68211e2543f4bf71280096ddfd541c23f31c440",
     "screenshot": "raven.jpg",
-    "capture": "Generic Web JSON import, read-only configuration preview; no model execution"
+    "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
+    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
+    "captureDate": "2026-11-03",
+    "viewport": {
+      "width": 1800,
+      "height": 1100,
+      "deviceScaleFactor": 1.5
+    },
+    "imageSize": {
+      "width": 2700,
+      "height": 1650
+    },
+    "screenshotSha256": "00b579ccc189e3581f03be2fa894b6b576f9e8b006f61c611e9bfff16e5a46a9"
   }
 ]

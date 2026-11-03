@@ -4,12 +4,44 @@ import { StatusBadge } from "./Common";
 import { normalizeProjectRuntimeProjection } from "../lib";
 
 describe("project wait display", () => {
-  it("shows deferred Harness recovery as automatic progress", () => {
+  it("distinguishes a confirmed resumable Stop from an ordinary Pause", () => {
+    const { rerender } = render(<StatusBadge status="paused" phase="collaboration:user-cancelled" />);
+    expect(screen.getByText("已停止")).toBeInTheDocument();
+    expect(screen.queryByText("已暂停")).not.toBeInTheDocument();
+    rerender(<StatusBadge status="paused" phase="collaboration:user-paused" />);
+    expect(screen.getByText("已暂停")).toBeInTheDocument();
+    expect(screen.queryByText("已停止")).not.toBeInTheDocument();
+  });
+
+  it("uses the current runtime Stop phase but ignores a stale Stop on a running project", () => {
+    const runtime = normalizeProjectRuntimeProjection({ status: "paused", phase: "collaboration:user-cancelled", activities: [] });
+    const { rerender } = render(<StatusBadge status="paused" runtime={runtime} />);
+    expect(screen.getByText("已停止")).toBeInTheDocument();
+    rerender(<StatusBadge status="running" runtime={runtime} />);
+    expect(screen.getByText("研究中")).toBeInTheDocument();
+    expect(screen.queryByText("已停止")).not.toBeInTheDocument();
+    rerender(<StatusBadge status="paused" phase="collaboration:user-paused" runtime={runtime} />);
+    expect(screen.getByText("已暂停")).toBeInTheDocument();
+  });
+
+  it("distinguishes a retry without a scheduled backoff receipt", () => {
     const runtime = normalizeProjectRuntimeProjection({ status: "retrying", phase: "collaboration:harness-recovery", activities: [] });
     render(<StatusBadge status="retrying" runtime={runtime} />);
-    expect(screen.getByText("自动恢复中")).toBeInTheDocument();
+    expect(screen.getByText("等待重试")).toBeInTheDocument();
     expect(screen.queryByText("已暂停")).not.toBeInTheDocument();
   });
+  it.each([
+    ["configuration", "interrupted", "等待配置修复"],
+    ["authorization", "interrupted", "等待授权修复"],
+    ["user-input", "retrying", "等待用户输入"],
+    ["backoff", "retrying", "退避重试中"]
+  ])("shows real %s waiting conditions without claiming automatic recovery", (kind, status, label) => {
+    const runtime = normalizeProjectRuntimeProjection({ status, phase: "collaboration:repair-required", waiting: { kind, reason: "Exact safe condition" } });
+    render(<StatusBadge status={status as "interrupted" | "retrying"} runtime={runtime} />);
+    expect(screen.getByText(label)).toHaveAttribute("title", "Exact safe condition");
+    expect(screen.queryByText("自动恢复中")).not.toBeInTheDocument();
+  });
+
   it("retains the server wait identity through normalization and shows its reason", () => {
     const runtime = normalizeProjectRuntimeProjection({ status: "queued", waiting: { kind: "recovery", reason: "Original Git result is unconfirmed",
       agentId: "worker", executionId: "exec-a", operationId: "push-a" }, activities: [] });

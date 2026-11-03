@@ -11,6 +11,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { agentMeta, projectWaitingLabel, STATUS_META } from "../lib";
+import { isStoppedProject } from "../project-status";
 import type { AgentTemplate, OverallProgress, ProjectRuntimeProjection, ProjectStatus } from "../types";
 
 export function Brand({ compact = false }: { compact?: boolean }) {
@@ -64,14 +65,18 @@ export function AgentBadge({
 export function StatusBadge({
   status,
   runtime,
+  phase,
   withDot = true
 }: {
   status: ProjectStatus;
   runtime?: ProjectRuntimeProjection;
+  phase?: string;
   withDot?: boolean;
 }) {
-  const meta = STATUS_META[status];
-  const waitingLabel = projectWaitingLabel(status, runtime);
+  const stopped = isStoppedProject({ status,
+    phase: phase ?? (runtime?.status === status ? runtime.phase : undefined) });
+  const meta = STATUS_META[stopped ? "stopped" : status];
+  const waitingLabel = stopped ? undefined : projectWaitingLabel(status, runtime);
   const label = waitingLabel ?? meta.label;
   return (
     <span className={`status-badge status-${meta.tone}`} title={waitingLabel ? runtime?.waiting?.reason : undefined}>

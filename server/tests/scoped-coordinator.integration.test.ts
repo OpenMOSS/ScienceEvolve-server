@@ -342,9 +342,21 @@ describe("v3 project coordinator production entry", () => {
     await expect.poll(() => f.state.agentSessionIds?.idea, { timeout: 10_000 }).toBe("session-idea");
     await f.coordinator.cancelProject(f.state, { actor: "user" });
     expect(f.state.status).toBe("paused");
+    const publication = vi.spyOn(f.coordinator as unknown as {
+      publishProjection(...args: unknown[]): Promise<void>;
+    }, "publishProjection");
+    f.state.status = "cancelling";
+    await f.coordinator.cancelProject(f.state, { actor: "user" });
+    expect(f.state).toMatchObject({ status: "paused", phase: "collaboration:user-cancelled" });
+    expect(publication).not.toHaveBeenCalled();
+    publication.mockRestore();
     const nativeSessions = structuredClone(f.state.agentSessionIds);
     const opensBeforeArchive = f.opened.length;
+    const stop = vi.spyOn(f.coordinator as unknown as { cancelProjectLocked(...args: unknown[]): Promise<void> }, "cancelProjectLocked");
+    // A stale checkpoint can still say cancelling although its exact Stop is durable.
+    f.state.status = "cancelling";
     await f.coordinator.archiveProject(f.state);
+    expect(stop).not.toHaveBeenCalled();
     expect(f.state.archivedAt).toBeTruthy();
     expect(f.state.status).toBe("paused");
     expect(f.state.agentSessionIds).toEqual(nativeSessions);

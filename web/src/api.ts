@@ -385,6 +385,11 @@ async function request(path: string, init?: RequestInit): Promise<unknown> {
     if (path.startsWith("/api/github/")) invalidateResource("github-accounts");
     const project = path.match(/^\/api\/projects\/([^/?]+)/)?.[1];
     if (project) invalidateResource(`project:${decodeURIComponent(project)}`);
+    if (/^\/api\/projects(?:\/|$)/.test(path)) {
+      invalidateResource("projects:false");
+      invalidateResource("projects:true");
+      invalidateResource("queue");
+    }
   }
   return result;
 }
@@ -1212,6 +1217,20 @@ function normalizeGateways(value: unknown): GatewayRecord[] {
       models,
       modelContextWindows,
       modelReasoning: normalizeGatewayModelReasoningConfigs(gateway.modelReasoning, models),
+      ...(typeof gateway.autoReasoning === "boolean" ? { autoReasoning: gateway.autoReasoning } : {}),
+      ...(gateway.reasoningDiscovery && typeof gateway.reasoningDiscovery === "object" ? {
+        reasoningDiscovery: Object.fromEntries(Object.entries(gateway.reasoningDiscovery).filter(([model, status]) =>
+          models.includes(model) && (status === "queued" || status === "checking"))) as GatewayRecord["reasoningDiscovery"]
+      } : {}),
+      ...(gateway.reasoningDetection && typeof gateway.reasoningDetection === "object" ? {
+        reasoningDetection: Object.fromEntries(Object.entries(gateway.reasoningDetection).flatMap(([model, raw]) => {
+          if (!models.includes(model) || !raw || typeof raw !== "object") return [];
+          const value = raw as Record<string, unknown>;
+          if (!["verified", "unconfirmed", "failed"].includes(String(value.status)) || typeof value.message !== "string") return [];
+          return [[model, { status: value.status as "verified" | "unconfirmed" | "failed",
+            checkedAt: typeof value.checkedAt === "string" ? value.checkedAt : "", message: value.message.slice(0, 1000) }]];
+        }))
+      } : {}),
       defaultModel: gateway.defaultModel,
       protocol: gateway.protocol,
       revision: typeof gateway.revision === "number" && gateway.revision > 0
@@ -1427,6 +1446,10 @@ async function loadGateways(): Promise<{ gateways: GatewayRecord[]; defaultGatew
 
 export async function createGateway(input: GatewayInput): Promise<GatewayRecord> {
   return unwrapGateway(await request("/api/gateways", { method: "POST", body: JSON.stringify(input) }));
+}
+
+export async function refreshGatewayReasoning(id: string): Promise<GatewayRecord> {
+  return unwrapGateway(await request(`/api/gateways/${encodeURIComponent(id)}/reasoning/refresh`, { method: "POST" }));
 }
 
 export async function revealGatewayCredential(id: string): Promise<string> {
@@ -1895,10 +1918,10 @@ export async function createUserSkill(
 export async function projectAction(
   projectId: string,
   action: "pause" | "resume" | "cancel" | "archive" | "unarchive"
-): Promise<void> {
-  await request(`/api/projects/${encodeURIComponent(projectId)}/${action}`, {
+): Promise<Project> {
+  return normalizeProject(unwrapProject(await request(`/api/projects/${encodeURIComponent(projectId)}/${action}`, {
     method: "POST"
-  });
+  })));
 }
 
 export interface ProjectBatchItemResult {

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { githubAuthorizationProject } from "../test/github-authorization-project";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -267,7 +268,7 @@ describe("ProjectListPage task overview", () => {
     vi.mocked(createProject).mockReset();
     vi.mocked(createSavedResearchTask).mockReset();
     vi.mocked(createAgentConfigPreset).mockReset();
-    vi.mocked(projectAction).mockReset().mockResolvedValue(undefined);
+    vi.mocked(projectAction).mockReset().mockResolvedValue(project);
     vi.mocked(archiveProjects).mockReset();
     vi.mocked(deleteArchivedProject).mockReset().mockResolvedValue(undefined);
     vi.mocked(deleteArchivedProjects).mockReset();
@@ -350,6 +351,17 @@ describe("ProjectListPage task overview", () => {
     expect(card.queryByText("等待资源")).not.toBeInTheDocument();
   });
 
+  it("makes expired GitHub authorization actionable on the project card", async () => {
+    vi.mocked(getProjects).mockResolvedValue([githubAuthorizationProject(project)]);
+    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    const heading = await screen.findByRole("heading", { name: project.title });
+    const card = within(heading.closest(".project-card-shell")! as HTMLElement);
+    expect(card.getByText("等待授权修复")).toBeVisible();
+    expect(card.getByRole("alert", { name: "GitHub 授权异常" })).toHaveTextContent("test-owner");
+    expect(card.getByRole("link", { name: "前往 GitHub 账号" })).toHaveAttribute("href", "#/github-accounts");
+    expect(card.queryByText("等待恢复")).not.toBeInTheDocument();
+  });
+
   it("shows the first project response without waiting for the queue", async () => {
     let resolveQueue!: (snapshot: QueueSnapshot) => void;
     vi.mocked(getQueue).mockImplementationOnce(() => new Promise((resolve) => { resolveQueue = resolve; }));
@@ -416,7 +428,7 @@ describe("ProjectListPage task overview", () => {
   it("does not let a pending action on an unmounted page overwrite a newer cached snapshot", async () => {
     const cancelled = { ...project, status: "cancelled" as const, phase: "cancelled" };
     vi.mocked(getProjects).mockResolvedValueOnce([cancelled]);
-    let resolveAction!: () => void;
+    let resolveAction!: (project: Project) => void;
     vi.mocked(projectAction).mockImplementationOnce(() => new Promise((resolve) => { resolveAction = resolve; }));
     const user = userEvent.setup();
     const first = render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
@@ -428,7 +440,7 @@ describe("ProjectListPage task overview", () => {
     vi.mocked(getProjects).mockResolvedValueOnce([updated]);
     render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
     await screen.findByRole("heading", { name: updated.title });
-    await act(async () => resolveAction());
+    await act(async () => resolveAction(cancelled));
 
     expect(readCachedProjectList()?.projects[0].title).toBe(updated.title);
     expect(getProjects).toHaveBeenCalledTimes(2);
@@ -1563,6 +1575,69 @@ describe("ProjectListPage task overview", () => {
     );
   });
 
+  it("stops a paused serial project and enables archive before a slow list refresh finishes", async () => {
+    const paused: Project = { ...project, status: "paused", phase: "paused", git: { enabled: false, status: "disabled" } };
+    const stopped: Project = { ...paused, status: "cancelled", phase: "cancelled" };
+    let finishRefresh!: (projects: Project[]) => void;
+    vi.mocked(getProjects).mockResolvedValueOnce([paused]).mockImplementationOnce(() =>
+      new Promise(resolve => { finishRefresh = resolve; }));
+    vi.mocked(projectAction).mockResolvedValueOnce(stopped);
+    const user = userEvent.setup();
+    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+
+    await user.click(await screen.findByRole("button", { name: `停止项目 ${paused.id}` }));
+    expect(projectAction).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", { name: "停止这个科研项目？" });
+    expect(dialog).toHaveTextContent("停止完成后可归档");
+    // A hovered card is transformed; the fixed modal must be outside it.
+    expect(dialog.closest(".project-card-shell")).toBeNull();
+    expect(dialog.parentElement?.parentElement).toBe(document.body);
+    expect(screen.queryByRole("button", { name: "归档项目" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "确认停止" }));
+
+    await waitFor(() => expect(projectAction).toHaveBeenCalledWith(paused.id, "cancel"));
+    expect(await screen.findByRole("button", { name: "归档项目" })).toBeEnabled();
+    expect(screen.queryByRole("dialog", { name: "停止这个科研项目？" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: `停止项目 ${paused.id}` })).not.toBeInTheDocument();
+    expect(readCachedProjectList()?.projects[0].status).toBe("cancelled");
+    await act(async () => finishRefresh([stopped]));
+  });
+
+  it("keeps archive unavailable while the native stop is still pending", async () => {
+    const running: Project = { ...project, status: "running", phase: "worker:running" };
+    const stopping: Project = { ...running, status: "cancelling", phase: "cancelling" };
+    vi.mocked(getProjects).mockResolvedValueOnce([running]).mockResolvedValue([stopping]);
+    vi.mocked(projectAction).mockResolvedValueOnce(stopping);
+    const user = userEvent.setup();
+    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    await user.click(await screen.findByRole("button", { name: `停止项目 ${running.id}` }));
+    await user.click(screen.getByRole("button", { name: "确认停止" }));
+    await waitFor(() => expect(readCachedProjectList()?.projects[0].status).toBe("cancelling"));
+    expect(screen.queryByRole("button", { name: "归档项目" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: `停止项目 ${running.id}` })).not.toBeInTheDocument();
+  });
+
+  it("shows the actual stop failure without marking the project as stopped or archivable", async () => {
+    const paused: Project = { ...project, status: "paused", phase: "paused" };
+    vi.mocked(getProjects).mockResolvedValue([paused]);
+    vi.mocked(projectAction).mockRejectedValueOnce(new Error("Native process stop could not be confirmed: pid 42"));
+    const user = userEvent.setup();
+    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    await user.click(await screen.findByRole("button", { name: `停止项目 ${paused.id}` }));
+    await user.click(screen.getByRole("button", { name: "确认停止" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Native process stop could not be confirmed: pid 42");
+    expect(screen.queryByRole("button", { name: "归档项目" })).not.toBeInTheDocument();
+    expect(readCachedProjectList()?.projects[0].status).toBe("paused");
+  });
+
+  it.each(["main-recovery-required", "gateway-recovery-required", "user-intervention-required"])(
+    "allows Stop while a paused project waits in %s", async phase => {
+      vi.mocked(getProjects).mockResolvedValue([{ ...project, status: "paused", phase }]);
+      render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+      expect(await screen.findByRole("button", { name: `停止项目 ${project.id}` })).toBeEnabled();
+    }
+  );
+
   it("resumes an interrupted project from its project card", async () => {
     const interrupted: Project = {
       ...project,
@@ -1698,7 +1773,7 @@ describe("ProjectListPage task overview", () => {
 
     render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
 
-    expect(await screen.findByText("已取消，可安全归档")).toBeInTheDocument();
+    expect(await screen.findByText("项目已停止，可安全归档")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "归档项目" }));
 
     await waitFor(() =>
@@ -1729,7 +1804,10 @@ describe("ProjectListPage task overview", () => {
     vi.mocked(getProjects).mockResolvedValueOnce([paused]).mockResolvedValue([archived]);
     const user = userEvent.setup();
     render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
-    expect(await screen.findByText("项目已暂停，可归档保留现场")).toBeVisible();
+    expect(await screen.findByText("项目已停止，可安全归档")).toBeVisible();
+    expect(screen.getByText("已停止")).toBeVisible();
+    expect(screen.queryByRole("button", { name: `停止项目 ${paused.id}` })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `启动项目 ${paused.id}` })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "归档项目" }));
     await waitFor(() => expect(projectAction).toHaveBeenCalledWith(paused.id, "archive"));
     await user.click(screen.getByRole("button", { name: "已归档（1）" }));

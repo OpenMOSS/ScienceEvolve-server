@@ -6,6 +6,8 @@ import {
   deleteGateway,
   discoverGatewayModels,
   getCatalog,
+  getGateways,
+  refreshGatewayReasoning,
   refreshGatewayModels,
   revealGatewayCredential,
   setDefaultGateway,
@@ -26,6 +28,8 @@ vi.mock("../api", () => ({
   deleteGateway: vi.fn(),
   discoverGatewayModels: vi.fn(),
   getCatalog: vi.fn(),
+  getGateways: vi.fn(),
+  refreshGatewayReasoning: vi.fn(),
   refreshGatewayModels: vi.fn(),
   revealGatewayCredential: vi.fn(),
   setDefaultGateway: vi.fn(),
@@ -176,6 +180,11 @@ function passedHarnessTests(model: string, harness: AgentHarness): GatewayTestSt
 describe("GatewayManagementPage", () => {
   beforeEach(() => {
     vi.mocked(getCatalog).mockReset().mockResolvedValue(catalog());
+    vi.mocked(getGateways).mockReset().mockResolvedValue({ gateways: [gateway], defaultGatewayId: gateway.id });
+    vi.mocked(refreshGatewayReasoning).mockReset().mockImplementation(async id => {
+      const loaded = await vi.mocked(getCatalog).mock.results.at(-1)?.value as Awaited<ReturnType<typeof getCatalog>> | undefined;
+      return loaded?.gateways?.find(item => item.id === id) ?? gateway;
+    });
     vi.mocked(createGateway).mockReset();
     vi.mocked(deleteGateway).mockReset().mockResolvedValue(undefined);
     vi.mocked(discoverGatewayModels).mockReset();
@@ -201,6 +210,88 @@ describe("GatewayManagementPage", () => {
     expect(await screen.findByText("验收网关")).toBeInTheDocument();
     expect(screen.getByText("服务端已配置")).toBeInTheDocument();
     expect(screen.queryByText("secret-value")).not.toBeInTheDocument();
+  });
+
+  it("automatically checks existing gateways on entry without saving or requiring manual parameters", async () => {
+    const pending = { ...gateway, reasoningDiscovery: { "model-a": "checking", "model-b": "queued" } as const };
+    vi.mocked(refreshGatewayReasoning).mockResolvedValue(pending);
+    render(<GatewayManagementPage onBack={vi.fn()} />);
+    const card = (await screen.findByText("验收网关")).closest("article")!;
+    await waitFor(() => expect(refreshGatewayReasoning).toHaveBeenCalledWith(gateway.id));
+    expect(within(card).getByLabelText("model-a 思考能力")).toHaveTextContent("正在检测");
+    expect(createGateway).not.toHaveBeenCalled();
+    expect(updateGateway).not.toHaveBeenCalled();
+    expect(testGateway).not.toHaveBeenCalled();
+  });
+
+  it("keeps detected settings read-only until advanced overrides are opened and preserves them on save", async () => {
+    const configured: GatewayRecord = { ...gateway, models: ["model-a"], modelReasoning: { "model-a": {
+      parameter: "reasoning.effort", defaultOptionId: "high", options: [{ id: "high", label: "high", value: "high" }]
+    } }, reasoningDetection: { "model-a": { status: "verified", checkedAt: "2026-11-03T00:00:00Z", message: "参数已确认" } } };
+    vi.mocked(getCatalog).mockResolvedValue(catalog([configured]));
+    vi.mocked(updateGateway).mockResolvedValue(configured);
+    const user = userEvent.setup();
+    render(<GatewayManagementPage onBack={vi.fn()} />);
+    const card = (await screen.findByText("验收网关")).closest("article")!;
+    await user.click(within(card).getByRole("button", { name: "编辑" }));
+    const dialog = screen.getByRole("dialog", { name: "编辑全局网关" });
+    expect(within(dialog).getByRole("checkbox", { name: "自动探测思考参数" })).toBeChecked();
+    expect(within(dialog).getByText("已开启")).toBeInTheDocument();
+    expect(within(dialog).getByText("支持思考强度")).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("model-a 思考参数字段")).not.toBeInTheDocument();
+    await user.click(within(dialog).getByLabelText("model-a 自定义网关思考强度"));
+    expect(within(dialog).getByLabelText("model-a 思考参数字段")).toBeInTheDocument();
+    await user.click(within(dialog).getByLabelText("model-a 自定义网关思考强度"));
+    expect(within(dialog).queryByLabelText("model-a 思考参数字段")).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "保存网关" }));
+    await waitFor(() => expect(updateGateway).toHaveBeenCalledWith(gateway.id, expect.objectContaining({ modelReasoning: configured.modelReasoning })));
+    expect(refreshGatewayReasoning).not.toHaveBeenCalled();
+  });
+
+  it("automatically shows capability progress and supported parameters after saving, without a connection test", async () => {
+    const user = userEvent.setup();
+    const saved: GatewayRecord = { ...gateway, updatedAt: "2026-11-03T00:00:00Z", reasoningDiscovery: { "model-a": "checking", "model-b": "queued" } };
+    const detected: GatewayRecord = { ...saved, reasoningDiscovery: undefined, revision: 2, updatedAt: "2026-11-03T00:00:01Z",
+      modelReasoning: { "model-a": { parameter: "reasoning.effort", defaultOptionId: "high",
+        options: ["low", "medium", "high"].map(value => ({ id: value, label: value, value })) } },
+      reasoningDetection: { "model-a": { status: "verified", checkedAt: "2026-11-03T00:00:01Z", message: "已校验思考参数" },
+        "model-b": { status: "unconfirmed", checkedAt: "2026-11-03T00:00:01Z", message: "网关未校验思考字段，无法确认支持" } } };
+    vi.mocked(updateGateway).mockResolvedValue(saved);
+    vi.mocked(getGateways).mockResolvedValue({ gateways: [detected] });
+    render(<GatewayManagementPage onBack={vi.fn()} />);
+    const card = (await screen.findByText("验收网关")).closest("article")!;
+    await user.click(within(card).getByRole("button", { name: "编辑" }));
+    await user.click(screen.getByRole("button", { name: "保存网关" }));
+    expect(within(card).getByText("正在检测")).toBeInTheDocument();
+    expect(within(card).getByText("排队检测")).toBeInTheDocument();
+    const model = within(card).getByLabelText("model-a 思考能力");
+    expect(await within(model).findByText("支持思考强度")).toBeInTheDocument();
+    expect(within(model).getByText("reasoning.effort")).toBeInTheDocument();
+    expect(within(model).getByText("low")).toBeInTheDocument();
+    expect(within(model).getByText("medium")).toBeInTheDocument();
+    expect(within(card).getByLabelText("model-b 思考能力")).toHaveTextContent("未确认支持");
+    expect(testGateway).not.toHaveBeenCalled();
+    expect(testGatewayMatrix).not.toHaveBeenCalled();
+  });
+
+  it("distinguishes a failed detection from unsupported capability and lets the user retry", async () => {
+    const user = userEvent.setup();
+    const failed: GatewayRecord = { ...gateway, reasoningDetection: {
+      "model-a": { status: "failed", checkedAt: "2026-11-03T00:00:00Z", message: "HTTP 401: authorization: Bearer sk-invalid-secret" },
+      "model-b": { status: "unconfirmed", checkedAt: "2026-11-03T00:00:00Z", message: "参数可能被忽略，未确认支持" }
+    } };
+    vi.mocked(getCatalog).mockResolvedValue(catalog([failed]));
+    vi.mocked(refreshGatewayReasoning).mockResolvedValue({ ...failed, reasoningDiscovery: { "model-a": "checking", "model-b": "queued" } });
+    render(<GatewayManagementPage onBack={vi.fn()} />);
+    const card = (await screen.findByText("验收网关")).closest("article")!;
+    expect(within(card).getByLabelText("model-a 思考能力")).toHaveTextContent("检测失败");
+    expect(within(card).getByLabelText("model-b 思考能力")).toHaveTextContent("未确认支持");
+    expect(within(card).queryByText("支持思考强度")).not.toBeInTheDocument();
+    expect(screen.queryByText(/sk-invalid-secret/)).not.toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: "重新检测思考能力" }));
+    await waitFor(() => expect(refreshGatewayReasoning).toHaveBeenCalledWith(gateway.id));
+    expect(within(card).getByText("正在检测")).toBeInTheDocument();
+    expect(testGateway).not.toHaveBeenCalled();
   });
 
   it("adds a newly cataloged probe Harness to the matrix without page-specific code", async () => {
@@ -265,6 +356,7 @@ describe("GatewayManagementPage", () => {
     vi.mocked(createGateway).mockResolvedValue({ ...gateway, id: "gwy_new", name: "新网关" });
     render(<GatewayManagementPage onBack={vi.fn()} />);
     await user.click(await screen.findByRole("button", { name: "新增网关" }));
+    expect(screen.getByRole("checkbox", { name: "自动探测思考参数" })).toBeChecked();
     await user.click(screen.getByRole("button", { name: "保存网关" }));
     expect(await screen.findByText("请输入网关显示名称")).toBeInTheDocument();
     await user.type(screen.getByLabelText("网关显示名称"), "新网关");
@@ -287,6 +379,7 @@ describe("GatewayManagementPage", () => {
     await user.click(screen.getByRole("button", { name: "保存网关" }));
     await waitFor(() => expect(createGateway).toHaveBeenCalled());
     expect(vi.mocked(createGateway).mock.calls[0]?.[0]).toMatchObject({
+      autoReasoning: true,
       url: "https://model.openapi-sj.sii.edu.cn/v1",
       modelContextWindows: { "model-a": 1_048_576 },
       modelReasoning: {
@@ -399,6 +492,29 @@ describe("GatewayManagementPage", () => {
         gatewayReasoningOption: "high"
       })
     ));
+  });
+
+  it("accepts the server's automatically chosen reasoning option without manual selection", async () => {
+    const user = userEvent.setup();
+    const result: GatewayTestState = { ...passedHarnessTests("model-a", "codex")[1]!, reasoningOptionId: "high",
+      reasoningFingerprint: "a".repeat(64), stageResults: passedStageResults };
+    const discovered: GatewayRecord = { ...gateway, test: result, tests: [result],
+      modelReasoning: { "model-a": { parameter: "reasoning.effort", defaultOptionId: "high",
+        options: [{ id: "high", label: "High", value: "high" }] } },
+      reasoningDetection: { "model-a": { status: "verified", checkedAt: "2026-11-03T00:00:00Z", message: "参数已校验：reasoning.effort；默认 high" } } };
+    vi.mocked(testGateway).mockResolvedValue(discovered);
+    vi.mocked(getCatalog).mockResolvedValue(catalog([discovered])).mockResolvedValueOnce(catalog());
+    render(<GatewayManagementPage onBack={vi.fn()} />);
+    const card = (await screen.findByText("验收网关")).closest("article")!;
+    await user.click(within(card).getByRole("button", { name: "测试连接" }));
+    expect(screen.getByLabelText("测试网关思考强度")).toHaveValue("");
+    expect(screen.getByRole("option", { name: "自动探测（优先 high）" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "开始真实测试" }));
+    expect(await screen.findByText("真实探测完成：1/1 个组合通过。")).toBeInTheDocument();
+    expect(within(screen.getByRole("dialog", { name: "网关真实测试" })).getByText("参数已校验：reasoning.effort；默认 high")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "自动探测（默认 high）" })).toBeInTheDocument();
+    expect(screen.getByLabelText("测试网关思考强度")).toHaveValue("");
+    expect(screen.getByText("自动 · high")).toBeInTheDocument();
   });
 
   it("does not report a route-only pass when the Adapter smoke probe failed", async () => {

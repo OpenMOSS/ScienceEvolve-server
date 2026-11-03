@@ -26,7 +26,7 @@ describe.runIf(process.platform === "linux" || process.platform === "win32")("re
     expect(writer.writeFiles).toEqual([f.memoryRelative, "leftover.txt"]);
     expect(Object.isFrozen(writer.writeFiles)).toBe(true);
     expect(Object.isFrozen(writer)).toBe(true);
-    expect(authority.rawTools).toBe("forbidden");
+    expect(authority.rawTools).toBe("native");
     expect(authority.gitCapability).toBe("none");
     expect(authority.writeRoots).toEqual([f.worktree]);
     const broker = await DescriptorFilesystemBroker.open({ authority, helperPath, pythonExecutable: await python() });
@@ -50,7 +50,7 @@ describe.runIf(process.platform === "linux" || process.platform === "win32")("re
       expect(await fs.readFile(path.join(f.worktree, "business.txt"), "utf8")).toBe("accepted business");
       expect((await fs.readdir(f.worktree)).some(name => name.startsWith(".openfars-"))).toBe(false);
     } finally { await broker.close(); }
-    const prompt = filesystemAuthorityPrompt(authority, { workspacePath: f.worktree, inboxPath: f.memoryPath, memoryPath: f.memoryPath });
+    const prompt = filesystemAuthorityPrompt({ ...authority, rawTools: "forbidden" }, { workspacePath: f.worktree, inboxPath: f.memoryPath, memoryPath: f.memoryPath });
     expect(prompt).toContain(JSON.stringify(writer.writeFiles));
     expect(prompt).toContain("only the explicit closing files are writable");
   });

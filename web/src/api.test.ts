@@ -24,6 +24,8 @@ import {
   getArtifactSummary,
   getDisplayedFile,
   getCatalog,
+  getGateways,
+  refreshGatewayReasoning,
   getGitHubAccounts,
   getProject,
   getProjectExplainerHistory,
@@ -31,6 +33,7 @@ import {
   getProjectEventBootstrap,
   getProjectEventHistory,
   getProjects,
+  projectAction,
   getQueue,
   getSavedResearchTask,
   getSavedResearchTasks,
@@ -63,6 +66,7 @@ import {
   normalizeAgents
 } from "./lib";
 import { addScopedGroup, upgradeLegacyGroups } from "./components/workflow-canvas/core/scoped-workflow";
+import { clearResourceCache } from "./resource-cache";
 
 function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
@@ -74,6 +78,29 @@ function jsonResponse(value: unknown, status = 200): Response {
 describe("frontend API contract", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("returns the confirmed Stop state and revalidates the list instead of sharing its pre-Stop request", async () => {
+    clearResourceCache();
+    const paused = { id: "prj_stop_test", title: "Paused research", status: "paused", phase: "paused" };
+    const stopped = { ...paused, status: "cancelled", phase: "cancelled" };
+    let resolveOld!: (response: Response) => void;
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => new Promise<Response>(resolve => { resolveOld = resolve; }))
+      .mockResolvedValueOnce(jsonResponse({ project: stopped }))
+      .mockResolvedValue(jsonResponse({ projects: [stopped] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const old = getProjects(true);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await expect(projectAction(paused.id, "cancel")).resolves.toMatchObject({ id: paused.id, status: "cancelled" });
+    await expect(getProjects(true)).resolves.toEqual([expect.objectContaining({ status: "cancelled" })]);
+    resolveOld(jsonResponse({ projects: [paused] }));
+    await old;
+    // A late old response cannot put the pre-Stop request back into the cache.
+    fetchMock.mockResolvedValue(jsonResponse({ projects: [stopped] }));
+    await expect(getProjects(true)).resolves.toEqual([expect.objectContaining({ status: "cancelled" })]);
+    expect(fetchMock.mock.calls[1]![0]).toBe("./api/projects/prj_stop_test/cancel");
+    clearResourceCache();
   });
 
   it("uses account-scoped deletion authorization and preview receipts without forwarding repository names at confirmation", async () => {
@@ -1554,9 +1581,12 @@ describe("frontend API contract", () => {
       modelReasoning: {
         "model-a": {
           parameter: "reasoning_effort",
+          defaultOptionId: "high",
           options: [{ id: "high", label: "高", value: "high" }]
         }
       },
+      autoReasoning: true,
+      reasoningDetection: { "model-a": { status: "verified", checkedAt: "2026-09-16T00:00:00.000Z", message: "参数已校验" } },
       defaultModel: "model-a",
       protocol: "responses",
       apiKeyConfigured: true,
@@ -1595,6 +1625,21 @@ describe("frontend API contract", () => {
     expect(checked.test.stageResults?.[1]).toMatchObject({ stage: "adapter_smoke", expectation: "harness", status: "passed" });
     expect(checked.test).toMatchObject({ reasoningOptionId: "high", reasoningFingerprint: "a".repeat(64) });
     expect(checked.modelReasoning?.["model-a"]?.options[0]).toEqual({ id: "high", label: "高", value: "high" });
+    expect(checked.modelReasoning?.["model-a"]?.defaultOptionId).toBe("high");
+    expect(checked.autoReasoning).toBe(true);
+    expect(checked.reasoningDetection?.["model-a"]?.message).toBe("参数已校验");
+  });
+
+  it("keeps only declared model discovery progress and requests an explicit recheck", async () => {
+    const gateway = { id: "gwy_0123456789abcdef0123456789abcdef", name: "Background", url: "https://gateway.example/v1",
+      protocol: "responses", models: ["model-a", "model-b"], defaultModel: "model-a", apiKeyConfigured: true,
+      test: { status: "untested" }, tests: [], createdAt: "2026-11-03T00:00:00Z", updatedAt: "2026-11-03T00:00:00Z",
+      reasoningDiscovery: { "model-a": "checking", "model-b": "queued", undeclared: "checking", invalid: "secret" } };
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse({ gateways: [gateway] })).mockResolvedValueOnce(jsonResponse({ gateway }));
+    vi.stubGlobal("fetch", fetchMock);
+    expect((await getGateways()).gateways[0]?.reasoningDiscovery).toEqual({ "model-a": "checking", "model-b": "queued" });
+    expect((await refreshGatewayReasoning(gateway.id)).reasoningDiscovery).toEqual({ "model-a": "checking", "model-b": "queued" });
+    expect(fetchMock).toHaveBeenLastCalledWith(`./api/gateways/${gateway.id}/reasoning/refresh`, expect.objectContaining({ method: "POST" }));
   });
 
   it("streams gateway matrix progress events from ndjson responses", async () => {

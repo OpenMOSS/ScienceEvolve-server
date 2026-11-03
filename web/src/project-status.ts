@@ -16,3 +16,22 @@ const statuses = new Set<string>(PROJECT_VIEW_STATUSES);
 export function isProjectViewStatus(value: unknown): value is ProjectViewStatus {
   return typeof value === "string" && statuses.has(value);
 }
+
+/** Recovery and safe-point Pause must still leave the user a Stop entry. */
+export function isStoppedProject(project: { status: ProjectViewStatus; phase?: string }): boolean {
+  return project.status === "cancelled" || project.status === "stopped" ||
+    project.status === "paused" && project.phase === "collaboration:user-cancelled";
+}
+
+export function canStopProject(project: { status: ProjectViewStatus; phase?: string; archivedAt?: string }): boolean {
+  return !project.archivedAt && !isStoppedProject(project) && [
+    "queued", "running", "retrying", "interrupting", "interrupted", "pausing", "paused"
+  ].includes(project.status);
+}
+
+export function canArchiveProject(project: {
+  status: ProjectViewStatus; git?: { enabled: boolean };
+}): boolean {
+  return project.status === "completed" || project.status === "cancelled" ||
+    project.status === "paused" && project.git?.enabled === true;
+}

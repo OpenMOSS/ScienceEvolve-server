@@ -446,7 +446,7 @@ describe("ProjectExplainerService", () => {
         expect(await selectedRecommendationEvidence(input)).toMatchObject({ requirement: "Keep existing identity" });
         expect(await fs.readFile(path.join(input.workspacePath, "user_inputs", "inputs", "source.md"), "utf8")).toBe("Original input");
         expect(await fs.readFile(path.join(input.workspacePath, "user_inputs", "image.png"))).toEqual(Buffer.from([137, 80, 78, 71]));
-        if (process.platform !== "win32") expect((await fs.stat(input.workspacePath)).mode & 0o777).toBe(0o500);
+        if (process.platform !== "win32") expect((await fs.stat(input.workspacePath)).mode & 0o777).toBe(0o700);
         expect(await fs.readFile(input.memoryPath, "utf8")).not.toContain("Old chat question");
       }
       return { answer: '{"skills":[],"autoSkills":[],"mcpServers":[],"experimentMcp":false}', session: {} as SessionRef };
@@ -807,8 +807,8 @@ describe("ProjectExplainerService", () => {
       model: "fixture-model",
       reasoningEffort: "high"
     });
-    expect(calls[0]?.prompt).toContain("Never modify files, run shell commands, use Skills, business MCP or Web Search");
-    expect(calls[0]?.prompt).toContain("Use read_context or the injected read-only file tools");
+    expect(calls[0]?.prompt).toContain("Use native tools when needed");
+    expect(calls[0]?.prompt).toContain("Use read_context or native file tools");
     expect(calls[0]?.workspacePath).toContain(`${path.sep}readonly-`);
     expect(events).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: "tool", itemId: "read-1", phase: "started" }),

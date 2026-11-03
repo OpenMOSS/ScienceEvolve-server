@@ -75,6 +75,36 @@ class HoldingRunner implements AgentRunner {
 }
 
 describe("HTTP API", () => {
+  it("returns a saved gateway immediately and automatically publishes model reasoning capabilities", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-gateway-auto-save-")); temporaryRoots.push(root);
+    const eventHub = new EventHub(), storage = new ProjectStorage(root, eventHub); await storage.initialize();
+    let release!: () => void;
+    const paused = new Promise<void>(resolve => { release = resolve; });
+    const gatewayStore = new GatewayStore(root, { resolveHostname: async () => ["93.184.216.34"], fetch: async (_url, init) => {
+      await paused;
+      const body = JSON.parse(String(init?.body));
+      if (body.reasoning?.effort && !["low", "medium", "high"].includes(body.reasoning.effort))
+        return Response.json({ error: { message: "Invalid reasoning.effort: expected 'low', 'medium', 'high'" } }, { status: 400 });
+      return Response.json({ output: [] });
+    } });
+    const app = createApp({ orchestrator: {} as Orchestrator, storage, eventHub, gatewayStore, skills: testSkillCatalog(),
+      config: { modelSuggestions: [], maxEventHistory: 2 } });
+    try {
+      const created = await request(app).post("/api/gateways").send({ name: "Automatic save", url: "https://gateway.example/v1",
+        apiKey: "save-secret", protocol: "responses", models: ["model"], defaultModel: "model" }).expect(201);
+      expect(created.body.gateway.reasoningDiscovery).toEqual({ model: "checking" });
+      expect(JSON.stringify(created.body)).not.toContain("save-secret");
+      const id = created.body.gateway.id as string;
+      release();
+      await vi.waitFor(async () => expect((await gatewayStore.get(id))?.reasoningDetection?.model?.status).toBe("verified"));
+      const listed = await request(app).get("/api/gateways").expect(200);
+      expect(listed.body.gateways[0].modelReasoning.model).toMatchObject({ parameter: "reasoning.effort", defaultOptionId: "high",
+        options: [{ value: "low" }, { value: "medium" }, { value: "high" }] });
+      expect(JSON.stringify(listed.body)).not.toContain("save-secret");
+      await request(app).post(`/api/gateways/${id}/reasoning/refresh`).expect(200);
+    } finally { release(); await gatewayStore.close(); }
+  });
+
   it("queries Harness prompts read-only and rejects secret or writable configuration fields", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-prompt-query-")); temporaryRoots.push(root);
     const eventHub = new EventHub(), storage = new ProjectStorage(root, eventHub); await storage.initialize();
@@ -264,6 +294,7 @@ describe("HTTP API", () => {
       eventHub,
       skills,
       gatewayStore: new GatewayStore(root, {
+        autoReasoning: false,
         resolveHostname: async () => ["93.184.216.34"],
         fetch: (async () => new Response(JSON.stringify({ data: [{ id: "discovered-model" }] }), {
           status: 200,

@@ -441,7 +441,8 @@ function AgentConfigCard({
               onChange={(event) => onGatewayReasoningOptionChange(event.target.value || undefined)}
               aria-label={`${meta.name}网关思考强度`}
             >
-              <option value="">模型 / 网关默认（不发送字段）</option>
+              <option value="">{selectedGateway?.autoReasoning !== false && selectedGateway?.modelReasoning?.[config.model]?.defaultOptionId
+                ? `自动（${selectedGateway.modelReasoning[config.model]!.defaultOptionId}）` : "模型 / 网关默认（不发送字段）"}</option>
               {config.gatewayReasoningOption && !reasoningOptions.some((option) => option.id === config.gatewayReasoningOption) && <option value={config.gatewayReasoningOption} disabled>{config.gatewayReasoningOption} · 已失效</option>}
               {reasoningOptions.map((option) => <option key={option.id} value={option.id}>
                 {option.label} · {option.value}

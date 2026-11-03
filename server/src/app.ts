@@ -84,6 +84,10 @@ import { GitHubRepositoryManager, registerGitHubRepositoryManagementRoutes } fro
 import { GitHubAuthorizationError } from "./collaboration-git/errors.js";
 import { ProjectInputUploads, ProjectInputUploadError } from "./project-input-uploads.js";
 
+const deployedBuildInfo = await readFile(new URL("../build-info.json", import.meta.url), "utf8")
+  .then(text => JSON.parse(text) as { buildId: string; builtAt: string }).catch(() => undefined);
+const serverStartedAt = new Date().toISOString();
+
 const MAX_PENDING_SSE_EVENTS = 1_000;
 const DEFAULT_EVENT_PAGE_LIMIT = 1_000;
 const MAX_EVENT_PAGE_LIMIT = 5_000;
@@ -304,6 +308,9 @@ export function createApp(dependencies: AppDependencies) {
   app.get("/api/health", async (_request, response) => {
     response.json({
       status: "ok",
+      processId: process.pid,
+      startedAt: serverStartedAt,
+      ...(deployedBuildInfo ? { build: deployedBuildInfo } : {}),
       harnessVersion: dependencies.harnessVersion ?? "unknown",
       now: new Date().toISOString()
     });
@@ -455,7 +462,8 @@ export function createApp(dependencies: AppDependencies) {
   app.post("/api/gateways", async (request, response, next) => {
     try {
       const input = gatewayInputFromRequest(request.body);
-      response.status(201).json({ gateway: await gatewayStore.create(input) });
+      const saved = await gatewayStore.create(input);
+      response.status(201).json({ gateway: await gatewayStore.scheduleReasoningDiscovery(saved.id) });
     } catch (error) {
       next(error);
     }
@@ -493,7 +501,7 @@ export function createApp(dependencies: AppDependencies) {
         response.status(404).json({ error: "Gateway not found" });
         return;
       }
-      response.json({ gateway });
+      response.json({ gateway: await gatewayStore.scheduleReasoningDiscovery(gateway.id) });
     } catch (error) {
       next(error);
     }
@@ -577,6 +585,21 @@ export function createApp(dependencies: AppDependencies) {
     }
   });
 
+  app.post("/api/gateways/:gatewayId/reasoning/discover", async (request, response, next) => {
+    try {
+      const body = request.body && typeof request.body === "object" ? request.body as Record<string, unknown> : {};
+      const result = await gatewayStore.discoverReasoning(request.params.gatewayId,
+        typeof body.model === "string" ? body.model : undefined, responseAbortSignal(response), body.force === true);
+      response.json({ result, gateway: await gatewayStore.get(request.params.gatewayId).then(value => value ? publicGateway(value) : undefined) });
+    } catch (error) { next(error); }
+  });
+
+  app.post("/api/gateways/:gatewayId/reasoning/refresh", async (request, response, next) => {
+    try {
+      response.json({ gateway: await gatewayStore.scheduleReasoningDiscovery(request.params.gatewayId, { force: true }) });
+    } catch (error) { next(error); }
+  });
+
   app.post("/api/gateway-models/discover", async (request, response, next) => {
     try {
       const input = gatewayModelDiscoveryInputFromRequest(request.body);
@@ -654,7 +677,8 @@ export function createApp(dependencies: AppDependencies) {
 
   app.post("/api/gateways/:gatewayId/models/refresh", async (request, response, next) => {
     try {
-      response.json({ gateway: await gatewayStore.refreshModels(request.params.gatewayId) });
+      const gateway = await gatewayStore.refreshModels(request.params.gatewayId);
+      response.json({ gateway: await gatewayStore.scheduleReasoningDiscovery(gateway.id) });
     } catch (error) {
       next(error);
     }
@@ -1018,19 +1042,25 @@ export function createApp(dependencies: AppDependencies) {
   app.post("/api/projects/archive/batch", async (request, response, next) => {
     try {
       const { projectIds } = batchProjectIdsSchema.parse(request.body);
-      const results = [];
-      for (const projectId of projectIds) {
-        try {
-          const project = await orchestrator.archive(projectId);
-          results.push({ projectId, ok: true as const, project });
-        } catch (error) {
-          results.push({
-            projectId,
-            ok: false as const,
-            error: redactTrace(error instanceof Error ? error.message : "Unknown error")
-          });
+      const results: Array<{ projectId: string; ok: boolean;
+        project?: Awaited<ReturnType<Orchestrator["archive"]>>; error?: string }> = new Array(projectIds.length);
+      let nextIndex = 0;
+      // Independent projects have independent lifecycle lanes. A slow native
+      // stop must not prevent later terminal projects from being archived.
+      await Promise.all(Array.from({ length: Math.min(4, projectIds.length) }, async () => {
+        for (;;) {
+          const index = nextIndex++;
+          if (index >= projectIds.length) return;
+          const projectId = projectIds[index]!;
+          try {
+            const project = await orchestrator.archive(projectId);
+            results[index] = { projectId, ok: true, project };
+          } catch (error) {
+            results[index] = { projectId, ok: false,
+              error: redactTrace(error instanceof Error ? error.message : "Unknown error") };
+          }
         }
-      }
+      }));
       response.json({
         successCount: results.filter((item) => item.ok).length,
         failureCount: results.filter((item) => !item.ok).length,
@@ -2088,7 +2118,7 @@ export function createApp(dependencies: AppDependencies) {
         ? 404
         : /Project configuration is locked|Collaboration group .* is policy locked|locked through final pull-request resolution|No pending user intervention|No active model API recovery/.test(message)
           ? 409
-          : /Cannot add user input|100 pending user inputs|Only (?:completed or )?cancelled projects can be archived|Only archived projects can be deleted|Project deletion is already in progress|Archived project is still settling|Project explainer has an active turn/.test(message)
+          : /Cannot add user input|100 pending user inputs|Only (?:completed or cancelled|cancelled|completed, cancelled or paused Git) projects can be archived|Project archive requires confirmed native stop|Only archived projects can be deleted|Project deletion is already in progress|Archived project is still settling|Project explainer has an active turn/.test(message)
             ? 409
             : /SDK Workflow visualization is read-only|Unknown or ambiguous skill|Cannot resume|Invalid project id|Invalid GitHub account id|Project name confirmation does not match/.test(message)
               ? 400
@@ -2115,6 +2145,7 @@ function gatewayInputFromRequest(value: unknown, existingApiKey?: string): Gatew
       ? body.modelContextWindows as Record<string, number>
       : undefined,
     modelReasoning: body.modelReasoning as GatewayInput["modelReasoning"],
+    ...(typeof body.autoReasoning === "boolean" ? { autoReasoning: body.autoReasoning } : {}),
     defaultModel: typeof body.defaultModel === "string" ? body.defaultModel : "",
     protocol: protocol as AgentProtocol
   };

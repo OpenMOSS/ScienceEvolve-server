@@ -665,17 +665,18 @@ fs.writeSync(2, "api_key=runner-super-secret-token\\n");
     expect(summary.args).toContain("--strict-config");
     expect(summary.args).toContain("--ephemeral");
     const goalsFlag = summary.args.indexOf("goals");
-    expect(goalsFlag).toBeGreaterThan(0);
-    expect(summary.args[goalsFlag - 1]).toBe("--disable");
+    expect(goalsFlag).toBe(-1);
+    expect(summary.args).toContain("skip_host_skill_discovery");
     expect(summary.args).toContain("--ignore-user-config");
     expect(summary.args).toContain("--ignore-rules");
     expect(summary.args).not.toContain('windows.sandbox="elevated"');
-    expect(summary.args).toContain("multi_agent");
+    expect(summary.args.join(" ")).not.toContain("--disable multi_agent");
+    expect(summary.args).toContain("skills.include_instructions=false");
     expect(summary.args).not.toContain(
       "--dangerously-bypass-approvals-and-sandbox"
     );
     expect(summary.args).not.toContain("shell_tool");
-    expect(summary.args).toContain("sandbox_workspace_write.network_access=true");
+    expect(summary.args.slice(summary.args.indexOf("-s"), summary.args.indexOf("-s") + 2)).toEqual(["-s", "danger-full-access"]);
     expect(summary.args).toContain("--search");
     expect(summary.args.join(" ")).not.toContain("model_reasoning_effort");
     expect(summary.args).toContain('service_tier="fast"');
@@ -714,7 +715,7 @@ fs.writeSync(2, "api_key=runner-super-secret-token\\n");
     expect(summary.args.join(" ")).toContain(
       `path = "${path.join(workspace, ".scienceevolve", "agent-skills", "idea", "skills", "nature-writing", "SKILL.md")}", enabled = true`
     );
-    expect(summary.args.join(" ")).toContain(
+    expect(summary.args.join(" ")).not.toContain(
       `path = "${path.join(workspace, ".scienceevolve", "agent-skills", "idea", "skills", "nature-shared", "SKILL.md")}", enabled = true`
     );
     expect(summary.args.join(" ")).toContain(
@@ -755,20 +756,7 @@ fs.writeSync(2, "api_key=runner-super-secret-token\\n");
         "utf8"
       )
     ).toContain("selected test skill");
-    expect(
-      await fs.readFile(
-        path.join(
-          workspace,
-          ".scienceevolve",
-          "agent-skills",
-          "idea",
-          "skills",
-          "nature-shared",
-          "SKILL.md"
-        ),
-        "utf8"
-      )
-    ).toContain("support test skill");
+    await expect(fs.access(path.join(workspace, ".scienceevolve", "agent-skills", "idea", "skills", "nature-shared", "SKILL.md"))).rejects.toMatchObject({ code: "ENOENT" });
     expect(traces).toContain("Codex turn completed");
     expect(traces).toContain("正在核验实验输入。");
     expect(onModelActivity).toHaveBeenCalledTimes(5);
@@ -950,20 +938,7 @@ fs.writeSync(2, "api_key=runner-super-secret-token\\n");
         "utf8"
       )
     ).toContain("CCFA writer");
-    expect(
-      await fs.readFile(
-        path.join(
-          workspace,
-          ".scienceevolve",
-          "agent-skills",
-          "writing",
-          "skills",
-          "ccf-common",
-          "SKILL.md"
-        ),
-        "utf8"
-      )
-    ).toContain("CCFA support");
+    await expect(fs.access(path.join(workspace, ".scienceevolve", "agent-skills", "writing", "skills", "ccf-common", "SKILL.md"))).rejects.toMatchObject({ code: "ENOENT" });
 
     await fs.writeFile(
       selectedSkill,
@@ -1435,7 +1410,7 @@ await new Promise((resolve) => setTimeout(resolve, 20));
     );
     expect(summary.args.slice(summary.args.indexOf("-s"), summary.args.indexOf("-s") + 2)).toEqual([
       "-s",
-      "workspace-write"
+      "danger-full-access"
     ]);
     expect(summary.args.slice(summary.args.indexOf("-a"), summary.args.indexOf("-a") + 2)).toEqual([
       "-a",

@@ -280,7 +280,7 @@ describe("shared Project Explainer core", () => {
     await service.ask("project", "What is complete?", (event) => { events.push(`${event.kind}:${event.text}`); }, new AbortController().signal);
     await service.ask("project", "Continue", () => undefined, new AbortController().signal);
 
-    if (process.platform !== "win32") expect(invocations[0]?.mode).toBe(0o500);
+    if (process.platform !== "win32") expect(invocations[0]?.mode).toBe(0o700);
     expect(invocations[0]?.inbox).not.toContain("verified evidence");
     expect(invocations[0]?.selectedEvidence).toBe("verified evidence");
     expect(invocations[0]?.inbox).toContain("What is complete?");

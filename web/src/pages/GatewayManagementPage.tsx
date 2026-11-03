@@ -20,6 +20,8 @@ import {
   deleteGateway,
   discoverGatewayModels,
   getCatalog,
+  getGateways,
+  refreshGatewayReasoning,
   refreshGatewayModels,
   revealGatewayCredential,
   setDefaultGateway,
@@ -57,6 +59,7 @@ const EMPTY_GATEWAY: GatewayInput = {
   models: [],
   modelContextWindows: {},
   modelReasoning: {},
+  autoReasoning: true,
   defaultModel: "",
   protocol: "responses"
 };
@@ -79,6 +82,7 @@ interface TestStep {
   harnessLabel: string;
   model: string;
   reasoningOptionId?: string;
+  testedReasoningOptionId?: string;
   status: "queued" | "running" | "passed" | "failed" | "cancelled";
   error?: string;
   durationMs?: number;
@@ -89,8 +93,31 @@ const REASONING_PARAMETER_LABELS: Record<GatewayReasoningParameterPath, string> 
   reasoning_effort: "reasoning_effort",
   "reasoning.effort": "reasoning.effort",
   "chat_template_kwargs.reasoning_effort": "chat_template_kwargs.reasoning_effort",
-  "thinking.effort": "thinking.effort"
+  "thinking.effort": "thinking.effort",
+  "output_config.effort": "output_config.effort"
 };
+
+function GatewayReasoningSummary({ gateway, model }: { gateway: GatewayRecord; model: string }) {
+  const progress = gateway.reasoningDiscovery?.[model];
+  const detection = gateway.reasoningDetection?.[model];
+  const config = gateway.modelReasoning?.[model];
+  const status = progress ?? detection?.status ?? (config?.options.length ? "manual" : gateway.autoReasoning === false ? "disabled" : "untested");
+  const labels: Record<string, string> = { queued: "排队检测", checking: "正在检测", verified: "支持思考强度",
+    unconfirmed: "未确认支持", failed: "检测失败", manual: "手动配置（未自动验证）", disabled: "自动检测已关闭", untested: "尚未检测" };
+  return <div className={`gateway-reasoning-summary ${status}`} aria-label={`${model} 思考能力`}>
+    <div><code>{model}</code><strong>{progress && <LoaderCircle className="spin" size={13} />}{labels[status]}</strong></div>
+    {progress ? <p>{progress === "checking" ? "正在识别思考参数与可用档位，完成后自动显示。" : "等待检测当前模型。"}</p>
+      : <>{config?.options.length ? <dl>
+        <div><dt>参数字段</dt><dd><code>{config.parameter}</code></dd></div>
+        <div><dt>可用档位</dt><dd>{config.options.map(option => <span key={option.id}>{option.label === option.value ? option.value : `${option.label} (${option.value})`}</span>)}</dd></div>
+        {gateway.autoReasoning !== false && config.defaultOptionId && <div><dt>默认档位</dt><dd>{config.defaultOptionId}</dd></div>}
+      </dl> : null}
+      {detection && <p>{redactGatewayFailure(detection.message)}</p>}
+      {status === "untested" && <p>进入网关页后自动补检，完成后显示参数与档位。</p>}
+      {status === "manual" && <p>保留手动配置。参数是否有效可通过连接测试验证。</p>}
+      </>}
+  </div>;
+}
 
 function testedAtLabel(value?: string): string {
   if (!value) return "尚未测试";
@@ -250,6 +277,8 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingGatewayId, setEditingGatewayId] = useState<string>();
   const [draft, setDraft] = useState<GatewayInput>(EMPTY_GATEWAY);
+  const [expandedReasoningModels, setExpandedReasoningModels] = useState<Set<string>>(() => new Set());
+  const [editedReasoningModels, setEditedReasoningModels] = useState<Set<string>>(() => new Set());
   const [submitted, setSubmitted] = useState(false);
   const [modelRefreshBusy, setModelRefreshBusy] = useState(false);
   const [modelRefreshState, setModelRefreshState] = useState<{ status: "success" | "error"; message: string }>();
@@ -268,6 +297,29 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
   const probeHarnesses = harnesses.filter((item) =>
     item.available && harnessSupportsPurpose(item, "probe")
   );
+  const pendingReasoningIds = gateways.filter(gateway => Object.keys(gateway.reasoningDiscovery ?? {}).length)
+    .map(gateway => gateway.id).sort().join(",");
+
+  useEffect(() => {
+    if (!pendingReasoningIds) return;
+    let active = true;
+    let timer: number | undefined;
+    const pendingIds = new Set(pendingReasoningIds.split(","));
+    const poll = async () => {
+      try {
+        const result = await getGateways();
+        if (!active) return;
+        // A slow poll must not undo a later save or resurrect a deleted card.
+        setGateways(current => current.map(gateway => {
+          const next = pendingIds.has(gateway.id) ? result.gateways.find(item => item.id === gateway.id) : undefined;
+          return next && (next.revision ?? 1) >= (gateway.revision ?? 1) && next.updatedAt >= gateway.updatedAt ? next : gateway;
+        }));
+      } catch { /* Keep the pending state; the next poll can recover. */ }
+      if (active) timer = window.setTimeout(() => void poll(), 1500);
+    };
+    timer = window.setTimeout(() => void poll(), 500);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [pendingReasoningIds]);
 
   const updateGatewayRecord = (gateway: GatewayRecord) => {
     setGateways((current) => current.map((item) => item.id === gateway.id ? gateway : item));
@@ -281,6 +333,18 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
       setGateways(catalog.gateways ?? []);
       setHarnesses(catalog.harnesses ?? []);
       setDefaultGatewayId(catalog.defaultGatewayId);
+      // Visiting the configuration page explicitly requests missing capability
+      // discovery for saved gateways. GET/list itself remains read-only.
+      const missing = (catalog.gateways ?? []).filter(gateway => gateway.autoReasoning !== false && gateway.models.some(model =>
+        !gateway.reasoningDetection?.[model] && !gateway.reasoningDiscovery?.[model] && !gateway.modelReasoning?.[model]?.options.length));
+      void Promise.all(missing.map(async gateway => {
+        try {
+          const checked = await refreshGatewayReasoning(gateway.id);
+          setGateways(current => current.map(item => item.id === checked.id && (checked.revision ?? 1) >= (item.revision ?? 1) && checked.updatedAt >= item.updatedAt ? checked : item));
+        } catch (reason) {
+          setPageError(`网关“${gateway.name}”的自动检测未能启动：${redactGatewayFailure(reason)}`);
+        }
+      }));
     } catch (reason) {
       setPageError(redactGatewayFailure(reason));
     } finally {
@@ -317,6 +381,8 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
     hideCredential();
     setEditingGatewayId(undefined);
     setDraft({ ...EMPTY_GATEWAY, models: [], modelContextWindows: {}, modelReasoning: {}, apiKey: "" });
+    setExpandedReasoningModels(new Set());
+    setEditedReasoningModels(new Set());
     setSubmitted(false);
     setModelRefreshState(undefined);
     setModelAddOpen(false);
@@ -328,6 +394,8 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
 
   const openEdit = (gateway: GatewayRecord) => {
     hideCredential();
+    setExpandedReasoningModels(new Set());
+    setEditedReasoningModels(new Set());
     setEditingGatewayId(gateway.id);
     setDraft({
       name: gateway.name,
@@ -343,7 +411,8 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
         { ...config, options: config.options.map((option) => ({ ...option })) }
       ])),
       defaultModel: gateway.defaultModel,
-      protocol: gateway.protocol
+      protocol: gateway.protocol,
+      autoReasoning: gateway.autoReasoning !== false
     });
     setSubmitted(false);
     setModelRefreshState(undefined);
@@ -363,14 +432,22 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
     setBusyGatewayId(busyId);
     setPageError("");
     try {
+      // Discovery may finish while the editor is open. Preserve its result
+      // unless the user actually edited that model's advanced settings.
+      const latest = gateways.find(gateway => gateway.id === editingGatewayId);
+      const modelReasoning = Object.fromEntries(draft.models.flatMap(model => {
+        const config = editedReasoningModels.has(model) ? draft.modelReasoning?.[model]
+          : latest?.modelReasoning?.[model] ?? draft.modelReasoning?.[model];
+        return config ? [[model, config]] : [];
+      }));
       const saved = editingGatewayId
-        ? await updateGateway(editingGatewayId, { ...draft, defaultModel: draft.defaultModel.trim() })
-        : await createGateway({ ...draft, defaultModel: draft.defaultModel.trim() });
+        ? await updateGateway(editingGatewayId, { ...draft, modelReasoning, defaultModel: draft.defaultModel.trim() })
+        : await createGateway({ ...draft, modelReasoning, defaultModel: draft.defaultModel.trim() });
       setGateways((current) => current.some((item) => item.id === saved.id)
         ? current.map((item) => item.id === saved.id ? saved : item)
         : [...current, saved]);
       if (!defaultGatewayId) setDefaultGatewayId(saved.id);
-      setNotice(`网关“${saved.name}”已保存。`);
+      setNotice(`网关“${saved.name}”已保存。${Object.keys(saved.reasoningDiscovery ?? {}).length ? "已自动安排思考能力检测，结果将自动更新。" : ""}`);
       setEditorOpen(false);
       hideCredential();
     } catch (reason) {
@@ -486,21 +563,36 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
   };
 
   const enableModelReasoning = (model: string, enabled: boolean) => {
+    setExpandedReasoningModels(current => {
+      const next = new Set(current);
+      if (enabled) next.add(model); else next.delete(model);
+      return next;
+    });
+    if (!enabled) return;
     setDraft((current) => {
       const modelReasoning = { ...current.modelReasoning };
-      if (enabled) {
-        modelReasoning[model] = modelReasoning[model] ?? {
+      modelReasoning[model] = modelReasoning[model] ?? structuredClone(gateways.find(gateway => gateway.id === editingGatewayId)?.modelReasoning?.[model] ?? {
           parameter: "reasoning_effort",
           options: []
-        };
-      } else {
-        delete modelReasoning[model];
-      }
+        });
       return { ...current, modelReasoning };
     });
   };
 
+  const markReasoningEdited = (model: string) => setEditedReasoningModels(current => new Set([...current, model]));
+
+  const resetModelReasoning = (model: string) => {
+    markReasoningEdited(model);
+    setDraft(current => {
+      const modelReasoning = { ...current.modelReasoning };
+      delete modelReasoning[model];
+      return { ...current, modelReasoning };
+    });
+    enableModelReasoning(model, false);
+  };
+
   const updateModelReasoningParameter = (model: string, parameter: GatewayReasoningParameterPath) => {
+    markReasoningEdited(model);
     setDraft((current) => {
       const config = current.modelReasoning?.[model];
       if (!config) return current;
@@ -520,6 +612,7 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
     field: keyof GatewayReasoningOption,
     value: string
   ) => {
+    markReasoningEdited(model);
     setDraft((current) => {
       const config = current.modelReasoning?.[model];
       if (!config) return current;
@@ -529,6 +622,7 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
           ...current.modelReasoning,
           [model]: {
             ...config,
+            ...(field === "id" && config.defaultOptionId === config.options[index]?.id ? { defaultOptionId: value } : {}),
             options: config.options.map((option, optionIndex) =>
               optionIndex === index ? { ...option, [field]: value } : option
             )
@@ -539,6 +633,7 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
   };
 
   const addModelReasoningOption = (model: string) => {
+    markReasoningEdited(model);
     setDraft((current) => {
       const config = current.modelReasoning?.[model];
       if (!config || config.options.length >= 32) return current;
@@ -562,6 +657,7 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
   };
 
   const removeModelReasoningOption = (model: string, index: number) => {
+    markReasoningEdited(model);
     setDraft((current) => {
       const config = current.modelReasoning?.[model];
       if (!config) return current;
@@ -571,6 +667,7 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
           ...current.modelReasoning,
           [model]: {
             ...config,
+            ...(config.defaultOptionId === config.options[index]?.id ? { defaultOptionId: undefined } : {}),
             options: config.options.filter((_, optionIndex) => optionIndex !== index)
           }
         }
@@ -697,6 +794,7 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
     }
     return {
       ...step,
+      testedReasoningOptionId: result.reasoningOptionId,
       status: result.status === "passed" ? "passed" : "failed",
       error: result.status === "passed"
         ? undefined
@@ -718,6 +816,7 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
       ...step,
       status: testDialog.mode === "connection" ? "running" : "queued",
       error: undefined,
+      testedReasoningOptionId: undefined,
       durationMs: undefined,
       stageResults: testDialog.mode === "connection" ? runningStageResults() : queuedStageResults()
     }));
@@ -770,7 +869,7 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
           matrix.results.find((result) =>
             result.harness === step.harness &&
             result.model === step.model &&
-            result.reasoningOptionId === step.reasoningOptionId
+            (!step.reasoningOptionId || result.reasoningOptionId === step.reasoningOptionId)
           )
         )));
         await syncCatalogAfterTest();
@@ -851,6 +950,14 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
     }
   };
 
+  const refreshReasoning = async (gateway: GatewayRecord) => {
+    setBusyGatewayId(gateway.id);
+    setPageError("");
+    try { updateGatewayRecord(await refreshGatewayReasoning(gateway.id)); }
+    catch (reason) { setPageError(redactGatewayFailure(reason)); }
+    finally { setBusyGatewayId(""); }
+  };
+
   const remove = async (gateway: GatewayRecord) => {
     if (!window.confirm(`确定删除全局网关“${gateway.name}”吗？已启动项目的快照不会改变。`)) return;
     setBusyGatewayId(gateway.id);
@@ -929,6 +1036,9 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
                   <div><dt>最近测试</dt><dd>{testedAtLabel(gateway.test.testedAt)}</dd></div>
                   <div><dt>凭据</dt><dd>{gateway.apiKeyConfigured ? "服务端已配置" : "未配置"}</dd></div>
                 </dl>
+                <section className="gateway-reasoning-capabilities" aria-label={`${gateway.name} 思考能力检测结果`}>
+                  {gateway.models.map(model => <GatewayReasoningSummary key={model} gateway={gateway} model={model} />)}
+                </section>
                 <div className="gateway-management-routes" aria-label={`${gateway.name} Harness 路由状态`}>
                   {visibleHarnesses.map((harness) => {
                     const latest = gateway.models
@@ -950,6 +1060,7 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
                   <button type="button" onClick={() => openEdit(gateway)}>编辑</button>
                   <button type="button" disabled={busy} onClick={() => openTest(gateway, "connection")}>测试连接</button>
                   <button type="button" disabled={busy || !visibleHarnesses.length} onClick={() => openTest(gateway, "matrix")}>验证全部 Harness</button>
+                  <button type="button" disabled={busy || gateway.autoReasoning === false || Boolean(Object.keys(gateway.reasoningDiscovery ?? {}).length)} onClick={() => void refreshReasoning(gateway)}>重新检测思考能力</button>
                   {defaultGatewayId !== gateway.id && <button type="button" disabled={busy} onClick={() => void chooseDefault(gateway)}>设为默认</button>}
                   <button type="button" className="danger" disabled={busy} onClick={() => void remove(gateway)}>删除</button>
                 </div>
@@ -971,6 +1082,17 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
               {editingGatewayId && <div className="gateway-modal-credential"><div><button type="button" disabled={credentialBusy} onClick={() => void reveal()}>{credential ? <EyeOff size={14} /> : <Eye size={14} />}{credential ? "隐藏现有凭据" : "查看现有凭据"}</button><button type="button" disabled={credentialBusy} onClick={() => void copyCredential()}><Copy size={14} />复制现有凭据</button></div>{credential && <output aria-label="当前网关凭据"><code>{credential}</code><small>30 秒后自动隐藏</small></output>}</div>}
               <label><span>当前协议</span><select aria-label="网关当前协议" value={draft.protocol} onChange={(event) => setDraft((current) => ({ ...current, protocol: event.target.value as GatewayInput["protocol"] }))}>{GATEWAY_PROTOCOLS.map((protocol) => <option value={protocol} key={protocol}>{protocolLabel(protocol)}</option>)}</select></label>
               <label><span>默认 model</span><select aria-label="网关默认 model" value={draft.defaultModel} aria-invalid={submitted && Boolean(errors.defaultModel)} disabled={!draft.models.length} onChange={(event) => setDraft((current) => ({ ...current, defaultModel: event.target.value }))}><option value="" disabled>请选择默认 model</option>{draft.models.map((model) => <option value={model} key={model}>{model}</option>)}</select>{submitted && errors.defaultModel && <small role="alert">{errors.defaultModel}</small>}</label>
+              <section className="gateway-reasoning-setting" aria-label="思考能力自动检测设置">
+                <div className="gateway-reasoning-setting-copy">
+                  <div><label htmlFor="gateway-auto-reasoning">自动探测思考参数</label><span className={draft.autoReasoning !== false ? "enabled" : "disabled"}>{draft.autoReasoning !== false ? "已开启" : "已关闭"}</span></div>
+                  <p id="gateway-auto-reasoning-help">保存后自动识别参数和档位；已有网关自动补检，无需手填。</p>
+                </div>
+                <label className="gateway-reasoning-switch">
+                  <input id="gateway-auto-reasoning" type="checkbox" aria-label="自动探测思考参数" aria-describedby="gateway-auto-reasoning-help" checked={draft.autoReasoning !== false} onChange={event => setDraft(current => ({ ...current, autoReasoning: event.target.checked }))} />
+                  <span className="gateway-reasoning-switch-track" aria-hidden="true" />
+                </label>
+                <p className="gateway-reasoning-setting-default"><span>默认策略</span>优先使用已确认的 <strong>high</strong>，不支持时选择可用档位。</p>
+              </section>
               <section className="gateway-model-editor wide" aria-label="网关模型列表">
                 <span className="gateway-model-list-heading"><span>可用 models</span><span className="gateway-model-list-actions"><button type="button" onClick={() => { setModelAddOpen(true); setModelAddError(""); }} aria-label="添加 model"><Plus size={13} />添加 model</button><button type="button" disabled={modelRefreshBusy} onClick={() => void refreshEditingModels()} aria-label="刷新网关 model 列表"><RefreshCw className={modelRefreshBusy ? "spin" : undefined} size={13} />刷新 models</button></span></span>
                 {modelAddOpen && <div className="gateway-model-add-row"><input autoFocus type="text" value={newModelName} placeholder="输入 model 名称" aria-label="新 model 名称" aria-invalid={Boolean(modelAddError)} onChange={(event) => { setNewModelName(event.target.value); setModelAddError(""); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addDraftModel(); } else if (event.key === "Escape") { setModelAddOpen(false); setNewModelName(""); setModelAddError(""); } }} /><button type="button" onClick={addDraftModel}>确认</button><button type="button" onClick={() => { setModelAddOpen(false); setNewModelName(""); setModelAddError(""); }}>取消</button>{modelAddError && <small role="alert">{modelAddError}</small>}</div>}
@@ -983,13 +1105,20 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
                       <div className="gateway-model-row">
                         <code title={model}>{model}</code>
                         <label className="gateway-model-context"><span>上下文</span><input type="number" min={1} max={MAX_MODEL_CONTEXT_WINDOW} step={1} value={contextWindow || ""} aria-label={`${model} 上下文长度`} aria-invalid={submitted && invalidContext} onChange={(event) => updateModelContextWindow(model, event.target.value === "" ? 0 : event.target.valueAsNumber)} /><em>tokens</em></label>
-                        <label className="gateway-model-reasoning-toggle"><input type="checkbox" checked={Boolean(reasoningConfig)} onChange={(event) => enableModelReasoning(model, event.target.checked)} aria-label={`${model} 自定义网关思考强度`} /><span>思考参数</span></label>
+                        <label className="gateway-model-reasoning-toggle"><input type="checkbox" checked={expandedReasoningModels.has(model)} onChange={(event) => enableModelReasoning(model, event.target.checked)} aria-label={`${model} 自定义网关思考强度`} /><span>高级：手动覆盖</span></label>
                         <button type="button" className="gateway-model-delete" aria-label={`删除 model ${model}`} onClick={() => removeDraftModel(model)}><Trash2 size={13} />删除</button>
                       </div>
-                      {reasoningConfig && <div className="gateway-model-reasoning-editor">
+                      {(() => {
+                        const saved = gateways.find(gateway => gateway.id === editingGatewayId);
+                        return saved && saved.models.includes(model) && draft.url.trim() === saved.url && draft.protocol === saved.protocol && !draft.apiKey.trim()
+                          ? <GatewayReasoningSummary gateway={saved} model={model} />
+                          : <small className="gateway-reasoning-save-hint">{draft.autoReasoning === false ? "自动检测已关闭。" : "保存后自动检测此模型的思考能力、参数和档位。"}</small>;
+                      })()}
+                      {expandedReasoningModels.has(model) && reasoningConfig && <div className="gateway-model-reasoning-editor">
+                        <small>自动检测无需填写以下内容；仅在需要覆盖结果时修改。</small>
                         <label><span>发送字段</span><select aria-label={`${model} 思考参数字段`} value={reasoningConfig.parameter} onChange={(event) => updateModelReasoningParameter(model, event.target.value as GatewayReasoningParameterPath)}>{GATEWAY_REASONING_PARAMETER_PATHS.map((parameter) => <option key={parameter} value={parameter}>{REASONING_PARAMETER_LABELS[parameter]}</option>)}</select></label>
                         <div className="gateway-reasoning-options">
-                          <div className="gateway-reasoning-options-head"><span>可选强度（未选择时不发送该字段）</span><button type="button" disabled={reasoningConfig.options.length >= 32} onClick={() => addModelReasoningOption(model)}><Plus size={12} />添加选项</button></div>
+                          <div className="gateway-reasoning-options-head"><span>可选强度（未手动选择时采用已确认的自动默认值）</span><button type="button" disabled={reasoningConfig.options.length >= 32} onClick={() => addModelReasoningOption(model)}><Plus size={12} />添加选项</button></div>
                           {reasoningConfig.options.map((option, index) => <div className="gateway-reasoning-option-row" key={index}>
                             <label><span>ID</span><input value={option.id} maxLength={64} aria-label={`${model} 思考选项 ${index + 1} ID`} onChange={(event) => updateModelReasoningOption(model, index, "id", event.target.value)} /></label>
                             <label><span>显示名</span><input value={option.label} maxLength={120} aria-label={`${model} 思考选项 ${index + 1} 显示名`} onChange={(event) => updateModelReasoningOption(model, index, "label", event.target.value)} /></label>
@@ -997,6 +1126,7 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
                             <button type="button" aria-label={`删除 ${model} 思考选项 ${index + 1}`} onClick={() => removeModelReasoningOption(model, index)}><Trash2 size={13} /></button>
                           </div>)}
                           {!reasoningConfig.options.length && <small>尚未添加可选强度；Agent 将只能使用模型默认值。</small>}
+                          <button type="button" onClick={() => resetModelReasoning(model)}>清除覆盖，保存后自动检测</button>
                         </div>
                       </div>}
                     </div>;
@@ -1041,13 +1171,14 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
                 </select>
               </label>
             )}
-            {activeTestReasoningOptions.length > 0 && <label className="gateway-test-model-picker gateway-test-reasoning-picker">
+            <label className="gateway-test-model-picker gateway-test-reasoning-picker">
               <span>网关思考强度</span>
               <select aria-label="测试网关思考强度" value={testSteps[0]?.reasoningOptionId ?? ""} disabled={testRunning} onChange={(event) => chooseTestReasoningOption(event.target.value || undefined)}>
-                <option value="">模型 / 网关默认（不发送字段）</option>
+                <option value="">{activeTestGateway.autoReasoning === false ? "模型 / 网关默认（不发送字段）" : `自动探测${activeTestGateway.modelReasoning?.[testSteps[0]?.model ?? ""]?.defaultOptionId ? `（默认 ${activeTestGateway.modelReasoning[testSteps[0]!.model]!.defaultOptionId}）` : "（优先 high）"}`}</option>
                 {activeTestReasoningOptions.map((option) => <option key={option.id} value={option.id}>{option.label} · {option.value}</option>)}
               </select>
-            </label>}
+            </label>
+            {activeTestGateway.reasoningDetection?.[testSteps[0]?.model ?? ""] && <p role="status">{activeTestGateway.reasoningDetection[testSteps[0]!.model]!.message}</p>}
             {testDialog.mode === "matrix" && <div className="gateway-test-progress" aria-live="polite">
               <div><strong>{progressLabel}</strong><span>{progressTotal ? Math.round((progressValue / progressTotal) * 100) : 0}%</span></div>
               <progress max={Math.max(1, progressTotal)} value={progressValue} />
@@ -1061,7 +1192,7 @@ export function GatewayManagementPage({ onBack }: { onBack: () => void }) {
                     <span>{step.status === "running" ? <LoaderCircle className="spin" size={14} /> : step.status === "passed" ? <CheckCircle2 size={14} /> : step.status === "failed" ? <AlertTriangle size={14} /> : <span className="gateway-test-step-dot" />}</span>
                     <strong>{step.harnessLabel}</strong>
                     <code>{step.model}</code>
-                    <small className="gateway-test-reasoning-label">{step.reasoningOptionId ? activeTestReasoningOption?.label ?? step.reasoningOptionId : "默认思考强度"}</small>
+                    <small className="gateway-test-reasoning-label">{step.reasoningOptionId ? activeTestReasoningOption?.label ?? step.reasoningOptionId : step.testedReasoningOptionId ? `自动 · ${step.testedReasoningOptionId}` : "默认思考强度"}</small>
                     <em>{durationLabel(step.durationMs)}</em>
                     {hasStages && <ChevronDown className={expanded ? "expanded" : undefined} size={14} />}
                     {step.error && <small>{step.error}</small>}

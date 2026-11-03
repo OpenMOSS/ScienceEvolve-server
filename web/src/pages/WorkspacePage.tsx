@@ -124,8 +124,12 @@ import {
   StatusBadge
 } from "../components/Common";
 import { AgentCallGraph } from "../components/AgentCallGraph";
+import { ProjectStopDialog } from "../components/ProjectStopDialog";
+import { canStopProject } from "../project-status";
 import { WorkflowAdjustmentEditor } from "../components/WorkflowAdjustmentEditor";
 import { AgentToolRecommendation } from "../components/AgentToolRecommendation";
+import { ProjectAuthorizationNotice } from "../components/ProjectAuthorizationNotice";
+import { withProjectAuthorizationWaiting } from "../lib";
 import { AgentPromptPanels } from "../components/workflow-canvas/AgentPromptPanels";
 import { cacheResource, readCachedResource } from "../resource-cache";
 import { ExperimentMcpControl } from "../components/ExperimentMcpControl";
@@ -3246,7 +3250,7 @@ export function FinalResultsView({
                   <h2>{project.status === "completed" ? "项目已完成" : "当前结果"}</h2>
                 </span>
               </div>
-              <StatusBadge status={project.status} runtime={project.runtime} />
+              <StatusBadge status={project.status} phase={project.phase} runtime={project.runtime} />
             </button>
             {expandedSections.summary && (
               <div className="final-result-section-body final-result-summary-body">
@@ -3884,40 +3888,6 @@ function RuntimeIntegrityCard({ project }: { project: Project }) {
                 : "尚无已发布 Artifact"}</dd>
         </div>
       </dl>
-    </div>
-  );
-}
-
-function CancelDialog({
-  title,
-  loading,
-  onCancel,
-  onConfirm
-}: {
-  title: string;
-  loading: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onCancel}>
-      <div
-        className="confirm-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="cancel-title"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <span className="dialog-danger-icon"><CircleStop size={23} /></span>
-        <h2 id="cancel-title">停止这个科研项目？</h2>
-        <p>
-          「{title}」的当前智能体进程将被终止。已经生成的轨迹与产物仍会保留。
-        </p>
-        <div className="dialog-actions">
-          <Button variant="secondary" onClick={onCancel} disabled={loading}>继续运行</Button>
-          <Button variant="danger" onClick={onConfirm} loading={loading}>确认停止</Button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -4693,7 +4663,8 @@ export function WorkspacePage({
   projectId: string;
   onBack: () => void;
 }) {
-  const [project, setProject] = useState<Project | undefined>(() => readCachedResource<Project>(`project:${projectId}`));
+  const [sourceProject, setProject] = useState<Project | undefined>(() => readCachedResource<Project>(`project:${projectId}`));
+  const project = useMemo(() => sourceProject ? withProjectAuthorizationWaiting(sourceProject) : undefined, [sourceProject]);
   const [projectLoading, setProjectLoading] = useState(() => !readCachedResource(`project:${projectId}`));
   const [projectError, setProjectError] = useState("");
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
@@ -5317,14 +5288,7 @@ export function WorkspacePage({
     !waitingForUser &&
     !mainRecoveryRequired &&
     ["paused", "pausing", "interrupted"].includes(project.status);
-  const canCancel = !mainRecoveryRequired && [
-    "running",
-    "queued",
-    "retrying",
-    "interrupted",
-    "pausing",
-    "paused"
-  ].includes(project.status);
+  const canCancel = canStopProject(project);
   const canAddProjectUserInput = ![
     "cancelled",
     "cancelling",
@@ -5349,7 +5313,7 @@ export function WorkspacePage({
           <div className="workspace-title">
             <h1>{project.title}</h1>
             <span>
-              <StatusBadge status={project.status} runtime={project.runtime} />
+              <StatusBadge status={project.status} phase={project.phase} runtime={project.runtime} />
               <small>更新于 {formatRelativeTime(project.updatedAt)}</small>
               <code>{project.id}</code>
             </span>
@@ -5629,6 +5593,7 @@ export function WorkspacePage({
         </section>
       )}
 
+      <ProjectAuthorizationNotice project={project} />
       {mainRecoveryRequired && (
         <section
           className="checkpoint-recovery-banner main-recovery-banner"
@@ -5923,7 +5888,7 @@ export function WorkspacePage({
       </nav>
 
       {cancelOpen && (
-        <CancelDialog
+        <ProjectStopDialog
           title={project.title}
           loading={actionLoading === "cancel"}
           onCancel={() => setCancelOpen(false)}
