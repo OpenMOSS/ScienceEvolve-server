@@ -1,4 +1,9 @@
 /* Live embedding keeps the demo's drawing and animation system. */
+.runtime-exit-layer, .runtime-exit-edge { pointer-events: none; }
+.runtime-mode.runtime-playback-paused * { animation-play-state: paused !important; }
+.runtime-mode.runtime-playback-paused .flow-particle.is-runtime-flow { display: none; }
+.runtime-mode .run-floating-update.is-seeking { animation: none; }
+.runtime-mode .run-update-content { white-space: pre-wrap; max-height: 130px; overflow: auto; }
 .runtime-mode, .runtime-mode body { min-width: 0; height: 100%; }
 .runtime-mode .app-header,
 .runtime-mode .left-panel,
@@ -14,8 +19,8 @@
 .runtime-mode .node-port,
 .runtime-mode .node-more,
 .runtime-mode .main-dispatch-port,
-.runtime-mode .canvas-toolbar .toolbar-separator,
-.runtime-mode .edge-hit { display: none !important; }
+.runtime-mode .canvas-toolbar .toolbar-separator { display: none !important; }
+.runtime-mode .edge-hit, .runtime-mode .edge-label { cursor: pointer; }
 .runtime-mode .app-shell { height: 100%; min-height: 0; }
 .runtime-mode .workspace,
 .runtime-mode .workspace.is-demo-running { height: 100%; max-height: 100%; grid-template-columns: minmax(0, 1fr); }
@@ -51,6 +56,9 @@
 .runtime-mode .workflow-edge.runtime-edge-traversed { stroke: #25714e; opacity: .7; }
 .runtime-mode .workflow-edge.runtime-edge-candidate { stroke: #b56f17; }
 .runtime-mode .workflow-edge.runtime-edge-rejected { opacity: .25; }
+.runtime-mode .workflow-edge:is(.loop-member, .loop-return, .loop-exit):is(.is-related-highlight, .is-selected, .is-outgoing-highlight) {
+  stroke: var(--loop-color, #247b8a); stroke-width: 4; opacity: 1;
+}
 .runtime-mode .edge-label.runtime-edge-active rect { fill: #e7f1e9; stroke: #25714e; }
 /* Runtime activity must preserve the parallel edge's semantic color, dash
    pattern and double-chevron marker, including before any Agent starts. */

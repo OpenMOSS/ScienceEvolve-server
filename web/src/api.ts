@@ -12,6 +12,7 @@ import {
   normalizeGatewayModelReasoningConfigs,
   isVisibleHarness
 } from "./lib";
+import type { WorkflowReplayConfigurationHistory, WorkflowReplayEventPage } from "./components/workflow-canvas/core/workflow-replay";
 import type {
   Artifact,
   ArtifactCatalogPage,
@@ -27,6 +28,7 @@ import type {
   DisplayItem,
   AgentName,
   Project,
+  ProjectFolder,
   ProjectExplainerEvent,
   ProjectExplainerEventKind,
   ProjectExplainerHistory,
@@ -488,7 +490,44 @@ function unwrapProject(value: unknown): unknown {
 
 export async function getProjects(includeArchived = false): Promise<Project[]> {
   const query = includeArchived ? "?view=summary&includeArchived=true" : "?view=summary";
-  return loadResource(`projects:${includeArchived}`, async () => normalizeProjects(await request(`/api/projects${query}`)));
+  return loadResource(`projects:${includeArchived}`, async () => normalizeProjects(await request(`/api/projects${query}`, { cache: "no-store" })));
+}
+
+function projectFoldersResponse(value: unknown): ProjectFolder[] {
+  const folders = value && typeof value === "object" && "folders" in value ? value.folders : undefined;
+  if (!Array.isArray(folders)) throw new Error("项目文件夹响应缺少 folders");
+  const ids = new Set<string>(), names = new Set<string>(), projectIds = new Set<string>();
+  for (const folder of folders) {
+    if (!folder || typeof folder !== "object" || typeof folder.id !== "string" || !/^folder_[a-f0-9]{32}$/.test(folder.id) ||
+      typeof folder.name !== "string" || !folder.name.trim() || !Array.isArray(folder.projectIds) ||
+      ids.has(folder.id) || names.has(folder.name.toLowerCase())) throw new Error("项目文件夹响应包含无效或重复的文件夹");
+    ids.add(folder.id); names.add(folder.name.toLowerCase());
+    for (const id of folder.projectIds) {
+      if (typeof id !== "string" || !/^prj_[a-f0-9]{32}$/.test(id) || projectIds.has(id)) throw new Error("项目文件夹响应包含无效或重复的项目归属");
+      projectIds.add(id);
+    }
+  }
+  return folders;
+}
+
+export async function getProjectFolders(): Promise<ProjectFolder[]> {
+  return projectFoldersResponse(await request("/api/project-folders", { cache: "no-store" }));
+}
+
+export async function createProjectFolder(name: string): Promise<ProjectFolder[]> {
+  return projectFoldersResponse(await request("/api/project-folders", { method: "POST", body: JSON.stringify({ name }) }));
+}
+
+export async function renameProjectFolder(folderId: string, name: string): Promise<ProjectFolder[]> {
+  return projectFoldersResponse(await request(`/api/project-folders/${encodeURIComponent(folderId)}`, { method: "PATCH", body: JSON.stringify({ name }) }));
+}
+
+export async function deleteProjectFolder(folderId: string): Promise<ProjectFolder[]> {
+  return projectFoldersResponse(await request(`/api/project-folders/${encodeURIComponent(folderId)}`, { method: "DELETE" }));
+}
+
+export async function moveProjectsToFolder(projectIds: string[], folderId: string | null): Promise<ProjectFolder[]> {
+  return projectFoldersResponse(await request("/api/project-folders/assignments", { method: "PUT", body: JSON.stringify({ projectIds, folderId }) }));
 }
 
 export async function getQueue(): Promise<QueueSnapshot> {
@@ -776,6 +815,7 @@ function normalizeProjectExplainerEvent(
 export interface ProjectEventBootstrap {
   events: AgentEvent[];
   timelineEvents: AgentEvent[];
+  timelineHasMore: boolean;
   totalEvents: number;
   lastSeq: number;
 }
@@ -790,6 +830,31 @@ function normalizedEventList(value: unknown): AgentEvent[] {
   return value
     .map(normalizeEvent)
     .filter((event): event is AgentEvent => Boolean(event));
+}
+
+export async function getWorkflowReplayConfigurationHistory(projectId: string, signal?: AbortSignal): Promise<WorkflowReplayConfigurationHistory> {
+  const result = await request(`/api/projects/${encodeURIComponent(projectId)}/workflow/replay/configuration`, { signal }) as WorkflowReplayConfigurationHistory;
+  if (!Array.isArray(result?.revisions) || !Array.isArray(result.configurations)
+    || result.revisions.some(entry => !Number.isSafeInteger(entry.revision) || entry.revision < 1 || !Array.isArray(entry.orchestration?.agents) || !Number.isFinite(Date.parse(entry.ts)))
+    || result.configurations.some(entry => !Number.isSafeInteger(entry.collaborationSeq) || !entry.agents || !Number.isFinite(Date.parse(entry.ts))))
+    throw new Error("Workflow 历史配置响应不完整。");
+  return result;
+}
+
+export async function getWorkflowReplayEventPage(projectId: string, input: { before?: number; through?: number } = {}, signal?: AbortSignal): Promise<WorkflowReplayEventPage> {
+  const params = new URLSearchParams({ limit: "500" });
+  if (input.before !== undefined) params.set("before", String(input.before));
+  if (input.through !== undefined) params.set("through", String(input.through));
+  const result = await request(`/api/projects/${encodeURIComponent(projectId)}/workflow/replay/events?${params}`, { signal }) as WorkflowReplayEventPage;
+  if (!Array.isArray(result?.events) || typeof result.hasMore !== "boolean" || !Number.isSafeInteger(result.throughSeq) || result.throughSeq < 0)
+    throw new Error("Workflow 历史事件响应不完整。");
+  const events = result.events.map(event => {
+    if (!event || !Number.isSafeInteger(event.seq) || event.seq < 1 || typeof event.type !== "string" || !event.type
+      || typeof event.ts !== "string" || !Number.isFinite(Date.parse(event.ts))) throw new Error("Workflow 历史事件缺少有效序号、类型或时间。");
+    return normalizeEvent(event);
+  });
+  if (events.some(event => !event)) throw new Error("Workflow 历史中存在无法读取的执行事件。");
+  return { ...result, events: events as AgentEvent[] };
 }
 
 export async function getProjectEventBootstrap(
@@ -811,6 +876,7 @@ export async function getProjectEventBootstrap(
   return {
     events,
     timelineEvents,
+    timelineHasMore: record.timelineHasMore === true,
     totalEvents: Number.isSafeInteger(totalEvents)
       ? Math.max(events.length, totalEvents)
       : events.length,
@@ -823,12 +889,14 @@ export async function getProjectEventBootstrap(
 export async function getProjectEventHistory(
   projectId: string,
   before: number,
-  limit = 1_000
+  limit = 1_000,
+  view?: "timeline"
 ): Promise<ProjectEventHistoryPage> {
   const params = new URLSearchParams({
     before: String(before),
     limit: String(limit)
   });
+  if (view) params.set("view", view);
   const result = await request(
     `/api/projects/${encodeURIComponent(projectId)}/events/history?${params}`
   );
@@ -898,7 +966,7 @@ export async function getSavedResearchTask(
 }
 async function loadSavedResearchTask(taskId: string): Promise<SavedResearchTask> {
   const result = await request(
-    `/api/saved-research-tasks/${encodeURIComponent(taskId)}`
+    `/api/saved-research-tasks/${encodeURIComponent(taskId)}`, { cache: "no-store" }
   );
   const record =
     result && typeof result === "object"
@@ -2182,16 +2250,8 @@ export async function getArtifact(
   projectId: string,
   artifact: Artifact
 ): Promise<ArtifactContent> {
-  const params = new URLSearchParams({ path: artifact.path });
-  params.set("origin", "workspace");
-  if (artifact.agent) params.set("agent", artifact.agent);
-  if (artifact.workspaceId) params.set("workspaceId", artifact.workspaceId);
-  else {
-    if (artifact.id) params.set("artifactId", artifact.id);
-    if (artifact.commitSha) params.set("commitSha", artifact.commitSha);
-  }
   const response = await fetch(
-    `${API_BASE}/api/projects/${encodeURIComponent(projectId)}/artifacts/content?${params}`,
+    getArtifactResourceUrl(projectId, artifact, false),
     { headers: { Accept: "text/plain, application/json" } }
   );
   // Preserve the original bytes-as-text for JSON/CSV/code previews. Parsing a
@@ -2213,7 +2273,7 @@ export async function getArtifact(
   return { ...artifact, content: body };
 }
 
-/** Read a Main-selected file directly from its Agent shared workspace. */
+/** Read a Main-selected file from its explicit publication or workspace source. */
 export async function getDisplayedFile(
   projectId: string,
   item: DisplayItem
@@ -2243,23 +2303,25 @@ export function getArtifactViewUrl(
   return getArtifactResourceUrl(projectId, artifact, false);
 }
 
+export function getArtifactHtmlPreviewUrl(projectId: string, artifact: Artifact): string {
+  return getArtifactResourceUrl(projectId, artifact, false, true);
+}
+
 function getArtifactResourceUrl(
   projectId: string,
   artifact: Artifact,
-  download: boolean
+  download: boolean,
+  preview = false
 ): string {
-  const params = new URLSearchParams({
-    path: artifact.path,
-    ...(download ? { download: "1" } : {}),
-    origin: "workspace"
-  });
-  if (artifact.agent) params.set("agent", artifact.agent);
-  if (artifact.workspaceId) params.set("workspaceId", artifact.workspaceId);
-  else {
-    if (artifact.id) params.set("artifactId", artifact.id);
-    if (artifact.commitSha) params.set("commitSha", artifact.commitSha);
-  }
-  return `${API_BASE}/api/projects/${encodeURIComponent(projectId)}/artifacts/content?${params}`;
+  const source = artifact.workspaceId || artifact.agent;
+  if (!source) throw new Error(`${preview ? "HTML preview" : "Artifact content"} requires an Agent or workspace source`);
+  if (artifact.workspaceId && artifact.commitSha) throw new Error("A live workspace preview cannot use a publication commit");
+  const [project, kind, id, revision] = [projectId, artifact.workspaceId ? "workspace" : "agent", source, artifact.commitSha ?? "live"].map(encodeURIComponent);
+  const file = artifact.path.split("/").map(encodeURIComponent).join("/");
+  const params = new URLSearchParams();
+  if (!artifact.workspaceId && artifact.id) params.set("artifactId", artifact.id);
+  if (download) params.set("download", "1");
+  return `${API_BASE}/api/projects/${project}/artifacts/${preview ? "preview" : "content"}/${kind}/${id}/${revision}/${file}${params.size ? `?${params}` : ""}`;
 }
 
 export function eventStreamUrl(projectId: string, after: number): string {

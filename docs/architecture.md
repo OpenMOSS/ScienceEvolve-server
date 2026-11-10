@@ -80,7 +80,7 @@ An Adapter owns only its descriptor, executable discovery, native
 arguments/non-secret environment additions, native session ID format and shallow
 mapping of the CLI's official structured event stream. The common launch host
 rejects a changed cwd, SessionRef identity, protected authority field, route
-credential or undeclared environment addition. OpenFARS never reconstructs tool
+credential or undeclared environment addition. ScienceEvolve never reconstructs tool
 calls from prose or executes a model tool call on an Adapter's behalf.
 
 The activity monitor accepts only canonical model events and structured tool

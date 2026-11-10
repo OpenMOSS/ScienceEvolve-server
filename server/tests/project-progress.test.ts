@@ -156,7 +156,7 @@ describe("workflow project progress", () => {
     expect(overallProgress(state({ orchestration: mainOnly, status: "completed" })).percent).toBe(100);
   });
 
-  it("keeps 100 percent while naming unresolved technical failures", () => {
+  it("keeps completion separate from historical failures without confirmed follow-up", () => {
     const progress = overallProgress(state({
       status: "completed",
       runCounts: { main: 0 },
@@ -164,7 +164,8 @@ describe("workflow project progress", () => {
     }));
     expect(progress.percent).toBe(100);
     expect(progress.label).toContain("2");
-    expect(progress.label).toContain("技术故障");
+    expect(progress.label).toContain("历史失败");
+    expect(progress.label).not.toContain("未解决的技术故障");
   });
 
   it("uses the canonical recovery reason instead of saying an already started project is waiting to start", () => {

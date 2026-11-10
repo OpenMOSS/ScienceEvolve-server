@@ -2,10 +2,11 @@ import { currentScopedGroupRun, scopedGroupDisplayState } from "../../scoped-run
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { AgentEvent, Project } from "../../types";
 import { agentMeta } from "../../lib";
-import type { CanvasModel, CanvasNode } from "./core/canvas-model";
+import type { CanvasBounds, CanvasModel, CanvasNode } from "./core/canvas-model";
 import { collaborationProgress } from "./core/collaboration-activity";
 import { runtimeNodeLabel, type WorkflowRuntimeState } from "./core/workflow-runtime";
 import { scopedGroupName, scopedReferenceDisplayState } from "./core/scoped-runtime-view";
+import { configurationChange } from "./core/workflow-replay";
 
 interface WorkflowCanvasLiveProps {
   model: CanvasModel;
@@ -118,9 +119,26 @@ export function buildLiveCanvasSnapshot({ model, runtime, project, events, selec
   };
 }
 
-export function WorkflowCanvasLive(props: WorkflowCanvasLiveProps) {
+export type WorkflowCanvasSnapshot = ReturnType<typeof buildLiveCanvasSnapshot>;
+export interface WorkflowCanvasPlayback {
+  index: number;
+  playing: boolean;
+  reset: boolean;
+  revision: number;
+  bounds?: CanvasBounds;
+  change?: { title: string; content: string; reason: string; nodeId?: string; kind: string };
+}
+
+export function WorkflowCanvasLive(props: WorkflowCanvasLiveProps & {
+  snapshot?: WorkflowCanvasSnapshot; playback?: WorkflowCanvasPlayback; title?: string;
+}) {
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const snapshot = useMemo(() => buildLiveCanvasSnapshot(props), [props.model, props.runtime, props.project, props.events, props.selectedNodeId, props.expandedGroupIds, props.scopeId]);
+  const previousAgents = useRef(props.project.agents);
+  const snapshot = useMemo(() => ({ ...(props.snapshot ?? buildLiveCanvasSnapshot(props)),
+    ...(props.playback ? { playback: props.playback } : { change: configurationChange(previousAgents.current, props.project.agents,
+      [...props.events].reverse().find(event => event.type === "workflow.reconfigured") ?? { message: "" }) }) }),
+    [props.snapshot, props.playback, props.model, props.runtime, props.project, props.events, props.selectedNodeId, props.expandedGroupIds, props.scopeId]);
+  useEffect(() => { previousAgents.current = props.project.agents; }, [props.project.agents]);
   const sendSnapshot = useCallback(() => {
     frameRef.current?.contentWindow?.postMessage({ type: "scienceevolve.workflow.runtime.snapshot", snapshot }, window.location.origin);
   }, [snapshot]);
@@ -161,8 +179,8 @@ export function WorkflowCanvasLive(props: WorkflowCanvasLiveProps) {
     key={props.project.id}
     ref={frameRef}
     className="workflow-runtime-live-frame"
-    title="运行 Workflow 大画布"
-    aria-label="运行 Workflow 大画布"
+    title={props.title ?? "运行 Workflow 大画布"}
+    aria-label={props.title ?? "运行 Workflow 大画布"}
     src={`${import.meta.env.BASE_URL}workflow-canvas-demo/index.html?runtime=1&project=${encodeURIComponent(props.project.id)}`}
     onLoad={sendSnapshot}
   />;

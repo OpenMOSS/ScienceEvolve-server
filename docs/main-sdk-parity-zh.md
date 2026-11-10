@@ -16,7 +16,7 @@ ScienceEvolve 的 Web/Server（下文称 `main`）与默认 `@scienceevolve/sdk`
 | 选择已保存的 `gatewayId` | 网关库与显式 `gatewayBindings`，或部署提供的原生 Codex 别名 | 调用前解析并锁定模型路线 |
 | 服务端分配项目目录与 Git worktree | 调用方可传 `workspace`；Git-on 隔离执行并交付回原目录 | 工作目录、输入与交付由宿主验证 |
 | 可视化 Workflow 画布 | JSON、API、CLI | 同一 Workflow schema 与校验规则 |
-| Codex、pi、DSH、Claude Code | 另有 SDK 宿主扩展 Hermes Harness | 共同调度与每轮能力校验 |
+| Codex、pi、DSH | 另有 SDK 宿主扩展 Hermes Harness | 共同调度与每轮能力校验 |
 
 SDK 不包含 Web 页面，`main` 也不会接受调用方提供的任意服务器绝对路径。凭据、Gateway 快照、宿主路径和 `dataDir` 都不是通用 Workflow 字段。SDK 的 API-key env/profile 配置通过显式导入保存到部署网关库，不使用旧 workflow 的 `gatewaySource` 活绑定；当前入口见 [SDK CLI/API 手册](/../feat/sdk-only-v0.1.1/sdk/docs/main-cli-zh.md)。
 

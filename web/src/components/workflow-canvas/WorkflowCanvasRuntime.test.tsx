@@ -830,7 +830,7 @@ describe("WorkflowCanvasRuntime fixed preview", () => {
     render(<WorkflowCanvasRuntime project={failureProject} events={[]} />);
 
     const history = screen.getByLabelText("失败与重试历史");
-    expect(within(history).getByText("当前已恢复")).toBeInTheDocument();
+    expect(within(history).getByText("历史操作末次记录均为成功")).toBeInTheDocument();
     const attempts = within(history).getAllByRole("listitem");
     expect(attempts).toHaveLength(2);
     expect(attempts[0]).toHaveTextContent("Git 尝试失败");
@@ -851,7 +851,7 @@ describe("WorkflowCanvasRuntime fixed preview", () => {
         ...DEFAULT_AGENTS,
         main: {
           ...DEFAULT_AGENTS.main,
-          harness: "claude-code",
+          harness: "fixture-anthropic",
           model: "nex-agi/Nex-N2-Pro",
           gatewayId: "gwy_0123456789abcdef0123456789abcdef",
           gatewaySnapshot: {
@@ -869,13 +869,13 @@ describe("WorkflowCanvasRuntime fixed preview", () => {
     const view = render(<WorkflowCanvasRuntime
       project={lockedProject}
       events={events}
-      harnesses={[{ id: "claude-code", label: "Claude Code" }]}
+      harnesses={[{ id: "fixture-anthropic", label: "Fixture Harness" }]}
     />);
 
     fireEvent.click(view.container.querySelector('[data-runtime-surface-mode="preview"] [data-node-id="main"]')!);
     const dialog = screen.getByRole("dialog", { name: "运行 Workflow 画布" });
     const detail = within(dialog).getByLabelText("运行节点详情");
-    expect(detail).toHaveTextContent("Claude Code");
+    expect(detail).toHaveTextContent("Fixture Harness");
     expect(detail).toHaveTextContent("验收 Anthropic 网关");
     expect(detail).toHaveTextContent("nex-agi/Nex-N2-Pro");
     expect(detail).toHaveTextContent("Anthropic Messages");

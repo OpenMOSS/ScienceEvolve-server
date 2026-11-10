@@ -1,5 +1,6 @@
 import { Check, CircleDot, CircleStop, GitCommitHorizontal, GitMerge, GitPullRequest, ListChecks, Pause, Play, TriangleAlert } from "lucide-react";
 import { useMemo } from "react";
+import { summarizeFailureAttempts } from "../../../../server/src/internal/shared/failure-attempt-history.js";
 import type { AgentEvent, Project } from "../../types";
 import {
   buildCollaborationActivities,
@@ -86,21 +87,16 @@ export function FailureAttemptHistory({
   );
   if (!completeTimeline.length) return null;
   const timeline = completeTimeline.slice(-limit);
-  const latestByOperation = new Map<string, (typeof completeTimeline)[number]>();
-  for (const item of completeTimeline) {
-    latestByOperation.set(`${item.attempt.scope}\0${item.attempt.operation}`, item);
-  }
-  const unresolved = project.failureSummary?.unresolvedFailures ??
-    [...latestByOperation.values()].filter((item) => item.attempt.status === "failed").length;
+  const unresolved = summarizeFailureAttempts(project.failureAttempts ?? []).unresolvedFailures;
 
   return <section className="failure-attempt-history" aria-label="失败与重试历史">
     <header>
       <div>
         <h3>失败与重试历史</h3>
-        <small>每次尝试均为不可覆盖的耐久记录</small>
+        <small>每次失败和后续成功都会保留</small>
       </div>
       <strong data-state={unresolved > 0 ? "failed" : "healthy"}>
-        {unresolved > 0 ? `${unresolved} 项待恢复` : "当前已恢复"}
+        {unresolved > 0 ? `${unresolved} 组历史失败尚无确认的解决记录` : "历史失败均有确认的后续成功记录"}
       </strong>
     </header>
     {completeTimeline.length > timeline.length && <p>
@@ -123,6 +119,8 @@ export function FailureAttemptHistory({
             </div>
             <code>{item.attempt.scope} / {item.attempt.operation}</code>
             <p>{item.attempt.redactedMessage}</p>
+            {item.resolution && <p>{item.resolution === "current" ? "当前阻塞" :
+              item.resolution === "resolved" ? "已确认后续成功" : "历史失败，尚未确认解决"}</p>}
             <small>
               <time dateTime={item.occurredAt}>{readableTime(item.occurredAt)}</time>
               {item.attempt.agentId ? ` · ${item.attempt.agentId}` : ""}

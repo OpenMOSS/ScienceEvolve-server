@@ -152,10 +152,12 @@ describe("AgentConfigPresetStore", () => {
     expect(initial[0].agents.main.instructions).toContain("structured routing decision");
     expect(initial[0].agents).toHaveProperty("main");
     expect(initial[0].agents).not.toHaveProperty("__system_controller__");
-    expect(initial[0].agents.execution).toMatchObject({
-      permission: "compute",
-      webSearch: true
-    });
+    expect(initial[0].orchestration.agents.map(agent => agent.name)).toEqual(["main", "文献研究员", "因果裁判", "证据复核员", "定点补证员", "研究总编"]);
+    expect(initial[0].orchestration.loops).toEqual([{ id: "evidence_refinement", from: "定点补证员", to: "证据复核员", maxIterations: 2, exitTo: "研究总编" }]);
+    expect(initial[0].orchestration.canvas?.layoutMode).toBe("layered");
+    expect(initial[0].orchestration.canvas?.nodes.证据复核员.x).toBe(initial[0].orchestration.canvas?.nodes.定点补证员.x);
+    expect(initial[0].agents.因果裁判.decisionBy).toBe("agent");
+    expect(initial[0].agents.文献研究员.webSearch).toBe(true);
     const saved = await store.saveFromProject(project);
     expect(saved).toMatchObject({
       id: expect.stringMatching(/^cfg_[a-f0-9]{32}$/),

@@ -277,7 +277,7 @@ describe("collaboration activity projection", () => {
     ]));
   });
 
-  it("keeps every durable failure attempt in chronological retry order", () => {
+  it("keeps chronological failure history without inferring recovery from a shared tool name", () => {
     const raw = projectFixture();
     const project = normalizeProject({
       ...raw,
@@ -345,20 +345,25 @@ describe("collaboration activity projection", () => {
       attempt: { redactedMessage: "provider rejected [REDACTED]" }
     });
     expect(timeline[1]).toMatchObject({
-      ordinal: 2,
-      retry: true,
-      title: "Git 重试成功"
+      ordinal: 1,
+      retry: false,
+      title: "Git 尝试成功"
     });
     expect(project.failureSummary).toMatchObject({
-      currentStatus: "healthy",
+      currentStatus: "failed",
       totalAttempts: 2,
-      unresolvedFailures: 0,
+      unresolvedFailures: 1,
       latestFailure: { attemptId: "attempt-git-1" },
       operations: [{
+        status: "failed",
+        attemptId: "attempt-git-1",
+        attemptCount: 1,
+        failureCount: 1
+      }, {
         status: "succeeded",
         attemptId: "attempt-git-2",
-        attemptCount: 2,
-        failureCount: 1
+        attemptCount: 1,
+        failureCount: 0
       }]
     });
   });

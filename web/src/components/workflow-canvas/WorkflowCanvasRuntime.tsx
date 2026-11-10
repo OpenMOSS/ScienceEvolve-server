@@ -16,6 +16,7 @@ import {
   GitBranch,
   GitGraph,
   GitPullRequest,
+  History,
   Maximize,
   Minus,
   Plus,
@@ -36,6 +37,7 @@ import { CopyableTechnicalValue } from "./CopyableTechnicalValue";
 import { GitTreeDialog } from "./GitTreeDialog";
 import { RuntimeAgentNodeDetail } from "./RuntimeAgentNodeDetail";
 import { WorkflowCanvasLive } from "./WorkflowCanvasLive";
+import { WorkflowCanvasReplay } from "./WorkflowCanvasReplay";
 import { buildScopedRuntimeView, scopedGroupName, scopedReferenceDisplayState } from "./core/scoped-runtime-view";
 import { adaptWorkflowToCanvas } from "./core/canvas-adapter";
 import { canvasContentBounds, fitCanvasViewport, zoomCanvasViewportAt } from "./core/canvas-viewport";
@@ -183,6 +185,9 @@ export function RuntimeCanvasSurface({
 }: RuntimeCanvasSurfaceProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const [selectedLoopEdge, setSelectedLoopEdge] = useState<CanvasEdgeGeometry>();
+  const selectedEdge = model.edges.find(edge => edge.id === selectedLoopEdge?.id &&
+    edge.source === selectedLoopEdge.source && edge.target === selectedLoopEdge.target);
   const [nodeSizes, setNodeSizes] = useState<Record<string, CanvasSize>>({});
   const surfaceNodes = useMemo(
     () => model.nodes.map((node) => nodeSizes[node.id] ? { ...node, ...nodeSizes[node.id] } : node),
@@ -395,8 +400,13 @@ export function RuntimeCanvasSurface({
       <CanvasEdges
         edges={renderedEdges}
         nodes={surfaceNodes}
-        focusedNodeId={runtime.currentNodeId}
+        focusedNodeId={selectedEdge ? undefined : selectedNodeId ?? runtime.currentNodeId}
+        selectedLoopId={selectedEdge?.loop?.id}
+        selectedEdgeId={selectedEdge?.id}
+        focusMode="selected"
         interactive={false}
+        flowFixedEdges
+        onSelectEdge={setSelectedLoopEdge}
       />
       <CanvasNodes
         nodes={surfaceNodes}
@@ -412,6 +422,7 @@ export function RuntimeCanvasSurface({
         groupMemberStates={runtimeGroupMemberStates(project)}
         resolvePresentation={resolvePresentation}
         onSelectNode={(node) => {
+          setSelectedLoopEdge(undefined);
           onSelectNode?.(node);
           if (mode === "preview") onOpen?.();
         }}
@@ -658,9 +669,11 @@ function RuntimeCanvasDialog({
   onSelectNode,
   onClose,
   expandedGroupIds,
-  onToggleGroup
-}: RuntimeCanvasSurfaceProps & { events: AgentEvent[]; onClose: () => void }) {
+  onToggleGroup,
+  initialReplay = false
+}: RuntimeCanvasSurfaceProps & { events: AgentEvent[]; onClose: () => void; initialReplay?: boolean }) {
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [replayOpen, setReplayOpen] = useState(initialReplay);
   const [activeScopedGroupId, setActiveScopedGroupId] = useState<string>();
   const [scopeSelections, setScopeSelections] = useState<Record<string, string>>({});
   const scopedView = useMemo(() => activeScopedGroupId && project.orchestration.schemaVersion === 3
@@ -740,11 +753,14 @@ function RuntimeCanvasDialog({
         <header className="workflow-runtime-dialog-head">
           <div>
             <span className="panel-kicker">RUNTIME WORKFLOW</span>
-            <h2 id="workflow-runtime-dialog-title">{previewOpen ? "执行速览" : activeScopedGroupId ? "组内运行 Workflow" : "运行 Workflow 画布"}</h2>
-            <small>{previewOpen ? "用户输入 → Agent 执行与输出 → 调度交接" : "动态 Workflow · 当前课题实时执行状态"}</small>
+            <h2 id="workflow-runtime-dialog-title">{replayOpen ? "历史执行回顾" : previewOpen ? "执行速览" : activeScopedGroupId ? "组内运行 Workflow" : "运行 Workflow 画布"}</h2>
+            <small>{replayOpen ? "按已保存的执行记录快速回顾 · 可暂停和定位" : previewOpen ? "用户输入 → Agent 执行与输出 → 调度交接" : "动态 Workflow · 当前课题实时执行状态"}</small>
           </div>
           <div className="workflow-runtime-dialog-actions">
-          <button type="button" className="workflow-runtime-preview-toggle" aria-pressed={previewOpen} onClick={() => setPreviewOpen(!previewOpen)}>
+          <button type="button" className="workflow-runtime-preview-toggle" aria-pressed={replayOpen} onClick={() => { setReplayOpen(!replayOpen); setPreviewOpen(false); }}>
+            <History size={14} />{replayOpen ? "返回实时 Workflow" : "历史回顾"}
+          </button>
+          <button type="button" className="workflow-runtime-preview-toggle" aria-pressed={previewOpen} onClick={() => { setPreviewOpen(!previewOpen); setReplayOpen(false); }}>
             {previewOpen ? "返回 Workflow" : "执行速览"}
           </button>
           <button
@@ -758,12 +774,13 @@ function RuntimeCanvasDialog({
           </div>
         </header>
         {previewOpen && <ExecutionPreview project={project} events={events} runtime={runtime} />}
-        {scopedView && !previewOpen && <nav className="scoped-breadcrumbs" aria-label="运行 Workflow 范围路径">
+        {replayOpen && <WorkflowCanvasReplay key={project.id} project={project} onClose={onClose} />}
+        {scopedView && !previewOpen && !replayOpen && <nav className="scoped-breadcrumbs" aria-label="运行 Workflow 范围路径">
           <button type="button" className="scoped-parent-link" onClick={() => setActiveScopedGroupId(scopedView.group.parentGroupId)}><ArrowLeft size={14} />返回父图</button>
           <button type="button" onClick={() => setActiveScopedGroupId(undefined)}>项目</button>
           {scopedView.path.map((group, index) => <span key={group.id}><span aria-hidden="true">›</span><button type="button" aria-current={index === scopedView.path.length - 1 ? "page" : undefined} onClick={() => setActiveScopedGroupId(group.id)}>{scopedGroupName(project, group.id)}</button></span>)}
         </nav>}
-        <div className="workflow-runtime-dialog-canvas" hidden={previewOpen} aria-label={scopedView ? `${scopedGroupName(project, scopedView.group.id)} 组内运行 Workflow` : "项目运行 Workflow"}>
+        <div className="workflow-runtime-dialog-canvas" hidden={previewOpen || replayOpen} aria-label={scopedView ? `${scopedGroupName(project, scopedView.group.id)} 组内运行 Workflow` : "项目运行 Workflow"}>
           <WorkflowCanvasLive
             model={viewModel}
             runtime={viewRuntime}
@@ -784,7 +801,7 @@ function RuntimeCanvasDialog({
             <RuntimeNodeDetail node={selectedNode} runtime={viewRuntime} project={project} events={events} harnesses={harnesses} resolvePresentation={resolvePresentation} />
           )}
         </div>
-        <div className="workflow-runtime-dialog-path" aria-label="实际执行路径">
+        <div className="workflow-runtime-dialog-path" hidden={replayOpen} aria-label="实际执行路径">
           <span>Cycle {project.cycle}</span>
           {viewRuntime.recentInvocationPath.length
             ? viewRuntime.recentInvocationPath.slice(-12).map((entry, index) => (
@@ -861,6 +878,7 @@ export function WorkflowCanvasRuntime({ project, events, harnesses, runtime: run
   );
   const { geometry } = useCanvasRouting(model.edges, model.nodes);
   const [modalOpen, setModalOpen] = useState(false);
+  const [initialReplay, setInitialReplay] = useState(false);
   const [gitTreeOpen, setGitTreeOpen] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string>();
   const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(new Set());
@@ -876,7 +894,7 @@ export function WorkflowCanvasRuntime({ project, events, harnesses, runtime: run
     });
   }, []);
 
-  const openModal = useCallback(() => setModalOpen(true), []);
+  const openModal = useCallback(() => { setInitialReplay(false); setModalOpen(true); }, []);
   const closeModal = useCallback(() => {
     setModalOpen(false);
     setSelectedNodeId(undefined);
@@ -890,13 +908,15 @@ export function WorkflowCanvasRuntime({ project, events, harnesses, runtime: run
             <span className="panel-kicker">RUNTIME WORKFLOW</span>
             <strong>配置拓扑 · 实际执行覆盖层</strong>
           </div>
-          <span>
+          <div className="workflow-runtime-map-actions"><span>
             {runtime.currentNodeId
               ? `${runtimeNodeLabel(runtime.nodeStates[runtime.currentNodeId])} · ${runtime.currentNodeId}`
               : runtime.queuedNodeId
                 ? `${runtimeNodeLabel(runtime.nodeStates[runtime.queuedNodeId])} · ${runtime.queuedNodeId}`
                 : "等待运行"}
-          </span>
+          </span><button type="button" className="workflow-runtime-preview-toggle" onClick={() => { setInitialReplay(true); setModalOpen(true); }}>
+            <History size={14} />历史回顾
+          </button></div>
         </div>
         {Object.values(runtime.loopStates).length > 0 && (
           <div className="workflow-runtime-loop-summary" aria-label="Loop 运行计数">
@@ -966,6 +986,7 @@ export function WorkflowCanvasRuntime({ project, events, harnesses, runtime: run
           expandedGroupIds={expandedGroupIds}
           onToggleGroup={toggleGroup}
           onClose={closeModal}
+          initialReplay={initialReplay}
         />
       )}
       {gitTreeOpen && <GitTreeDialog project={project} onClose={() => setGitTreeOpen(false)} />}

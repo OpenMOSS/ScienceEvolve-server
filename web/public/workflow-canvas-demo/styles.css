@@ -1749,6 +1749,7 @@ button:disabled {
   transition: opacity 120ms ease, stroke-width 120ms ease, filter 120ms ease;
 }
 
+
 .workflow-edge.strong {
   stroke: var(--green);
   marker-end: url(#arrow-strong);
@@ -4355,3 +4356,21 @@ button:disabled {
     height: 30px;
   }
 }
+
+.workflow-edge.loop-member, .workflow-edge.loop-return {
+  stroke: var(--loop-color, #6d55b6);
+  marker-end: url(#arrow-strong);
+}
+.workflow-edge.loop-exit {
+  stroke: #247b8a;
+  stroke-dasharray: 7 6;
+  marker-end: url(#arrow-strong);
+}
+.workflow-edge:is(.loop-member, .loop-return, .loop-exit):is(.is-selected, .is-related-highlight, .is-outgoing-highlight) {
+  stroke: var(--loop-color, #247b8a);
+  stroke-width: 4;
+  opacity: 1;
+  filter: drop-shadow(0 0 5px var(--loop-color, #247b8a));
+}
+.flow-particle.is-loop-flow :is(.flow-particle-core, .flow-particle-tail, .flow-particle-halo) { fill: var(--loop-color); }
+.flow-particle.is-loop-flow .flow-particle-tail-line { stroke: var(--loop-color); }

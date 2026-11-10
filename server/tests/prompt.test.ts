@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildAgentDispatchSummary,
   buildInboxMarkdown,
+  buildMainInvocationContext,
   BUILTIN_AGENT_PROMPTS,
   MAIN_SYSTEM_PROMPT,
   workerHandoffMarkdown
@@ -112,6 +113,16 @@ describe("Agent prompt contracts", () => {
     expect(inbox).not.toContain("HISTORY_INDEX_SENTINEL");
     expect(inbox).not.toContain("SKILL_PATH_SENTINEL");
     expect(inbox).not.toContain(state.agents.idea.instructions);
+  });
+
+  it("passes HTML delivery intent through the existing Main invocation context", () => {
+    const state = projectState();
+    state.orchestration.resultFormat = { presets: ["HTML 文件", "Markdown 文件"], custom: "保留交互图表" };
+    const context = buildMainInvocationContext(state);
+    expect(context.resultFormat).toContain("期望结果形式：HTML 文件、Markdown 文件。");
+    expect(context.resultFormat).toContain("补充交付要求：保留交互图表");
+    state.orchestration.resultFormat = { presets: [], custom: "", none: true };
+    expect(buildMainInvocationContext(state).resultFormat).not.toContain("HTML 文件");
   });
 
   it("preserves the complete Main assignment and acceptance, without forwarding global user updates to a Worker", () => {

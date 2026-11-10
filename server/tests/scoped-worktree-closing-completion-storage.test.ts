@@ -28,6 +28,14 @@ async function fixture(memory: string | undefined = "My separate closing observa
 }
 
 describe("private original-Agent closing supplement files", () => {
+  it("preserves a Chinese Agent identity and original memory in its accepted closing receipt", async () => {
+    const f = await fixture(); f.record.agentId = "探测证据员";
+    const saved = await f.storage.saveScopedWorktreeClosingCompletion(f.record);
+    expect(JSON.parse(await fs.readFile(saved.receiptPath, "utf8"))).toEqual(f.record);
+    expect(await fs.readFile(saved.memoryPath!, "utf8")).toBe(f.record.memory);
+    await f.assertRetained();
+  });
+
   it("writes only the accepted private snapshot and restores missing files without replacing original facts", async () => {
     const f = await fixture(), saved = await f.storage.saveScopedWorktreeClosingCompletion(f.record);
     expect(saved.receiptPath).toBe(path.join(f.projectPath, "runtime", "inv_closing", "worktree-closing", "finish.json"));

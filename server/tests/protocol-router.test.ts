@@ -34,7 +34,6 @@ const request = {
 
 const reasoningMatrixHarnesses = [
   { harness: "codex", sourceProtocol: "responses" },
-  { harness: "claude-code", sourceProtocol: "anthropic-messages" },
   { harness: "pi", sourceProtocol: "chat-completions" },
   { harness: "dsh", sourceProtocol: "chat-completions" }
 ] as const satisfies ReadonlyArray<{ harness: string; sourceProtocol: AgentProtocol }>;

@@ -174,9 +174,9 @@ describe("non-Git serial workflow journal foundation", () => {
   });
 
   it("protects the original Main Harness at acceptance and a late Worker Session at publication", async () => {
-    const f = await fixture(), main = f.main(); main.proposal.agents.main.harness = "claude-code";
+    const f = await fixture(), main = f.main(); main.proposal.agents.main.harness = "dsh";
     expect(() => f.database.stageSerialMainWorkflowAdjustment(main)).toThrow(/Session.*Harness/);
-    const next = f.main(); next.proposal.agents.idea.harness = "claude-code";
+    const next = f.main(); next.proposal.agents.idea.harness = "dsh";
     const accepted = f.database.stageSerialMainWorkflowAdjustment(next), original = { ...next.session!, nativeId: "original-worker" };
     f.sessions.agentSessions!.idea = original; f.sessions.agentSessionIds!.idea = original.nativeId;
     expect(f.publish(accepted.record.requestId)).toMatchObject({ status: "pending", workflowRevision: 1, reason: expect.stringContaining("Harness") });

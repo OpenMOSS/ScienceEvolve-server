@@ -19,6 +19,11 @@ import {
   getCatalog,
   getGitHubAccounts,
   getProjects,
+  getProjectFolders,
+  createProjectFolder,
+  renameProjectFolder,
+  deleteProjectFolder,
+  moveProjectsToFolder,
   getQueue,
   getSavedResearchTasks,
   projectAction,
@@ -32,6 +37,7 @@ import type {
   GitHubAccountRecord,
   GatewayRecord,
   Project,
+  ProjectFolder,
   ProjectStatus,
   QueueSnapshot,
   SavedResearchTask
@@ -62,6 +68,11 @@ vi.mock("../api", () => ({
   getHarnessPrompt: vi.fn(async () => ({ status: "source-unavailable", reason: "Native source is unavailable in this UI fixture" })),
   getGitHubAccounts: vi.fn(),
   getProjects: vi.fn(),
+  getProjectFolders: vi.fn(),
+  createProjectFolder: vi.fn(),
+  renameProjectFolder: vi.fn(),
+  deleteProjectFolder: vi.fn(),
+  moveProjectsToFolder: vi.fn(),
   getQueue: vi.fn(),
   getSavedResearchTasks: vi.fn(),
   projectAction: vi.fn(),
@@ -229,7 +240,61 @@ describe("ProjectListPage task overview", () => {
     expect(screen.getByText(generatedTask.title)).toBeVisible();
   });
 
+  it("shows draft preflight notices only after Start and submits unchanged configuration when forced", async () => {
+    const agents = structuredClone(defaultAgentsWithCatalogHarness);
+    agents.main.harness = "retired-harness";
+    const task = { ...generatedTask, agents };
+    vi.mocked(getSavedResearchTasks).mockResolvedValue([task]);
+    vi.mocked(createProject).mockRejectedValue(new Error("服务端无法启动 retired-harness"));
+    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    const library = screen.getByRole("region", { name: "已保存科研任务" });
+    const start = await within(library).findByRole("button", { name: `启动任务 ${task.title}` });
+    expect(within(library).queryByText(/retired-harness/)).not.toBeInTheDocument();
+    fireEvent.click(start);
+    expect(within(library).getByText(/retired-harness 不在服务端 Harness 目录中/)).toBeVisible();
+    expect(within(library).queryByRole("alert")).not.toBeInTheDocument();
+    expect(createProject).not.toHaveBeenCalled();
+    fireEvent.click(within(library).getByRole("button", { name: "取消" }));
+    expect(within(library).queryByText(/retired-harness/)).not.toBeInTheDocument();
+    expect(createProject).not.toHaveBeenCalled();
+    fireEvent.click(start);
+    fireEvent.click(within(library).getByRole("button", { name: "强制启动" }));
+    await waitFor(() => expect(createProject).toHaveBeenCalledOnce());
+    expect(vi.mocked(createProject).mock.calls[0]![0].agents?.main.harness).toBe("retired-harness");
+    expect(await within(library).findByRole("alert")).toHaveTextContent("服务端无法启动 retired-harness");
+    expect(within(library).queryByText(/已启动新项目/)).not.toBeInTheDocument();
+  });
+
+  it("waits for runtime directories before checking a cached draft's gateway and Git account", async () => {
+    const catalog = await getCatalog();
+    let resolveCatalog!: (value: typeof catalog) => void;
+    let resolveAccounts!: (value: Awaited<ReturnType<typeof getGitHubAccounts>>) => void;
+    vi.mocked(getCatalog).mockImplementation(() => new Promise(resolve => { resolveCatalog = resolve; }));
+    vi.mocked(getGitHubAccounts).mockImplementation(() => new Promise(resolve => { resolveAccounts = resolve; }));
+    const task = { ...generatedTask, agents: defaultAgentsWithCatalogHarness,
+      git: { enabled: true, provider: "github" as const, accountId: GITHUB_ACCOUNT_ID } };
+    cacheResource("saved-tasks", [task]);
+    vi.mocked(getSavedResearchTasks).mockResolvedValue([task]);
+    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    const library = screen.getByRole("region", { name: "已保存科研任务" });
+    expect(within(library).queryByText(/所选全局网关不存在|授权正常的 GitHub 账号|启动前检查未通过/)).not.toBeInTheDocument();
+    expect(within(library).queryByRole("alert")).not.toBeInTheDocument();
+    expect(within(library).queryByText(/运行目录仍在加载/)).not.toBeInTheDocument();
+    fireEvent.click(within(library).getByRole("button", { name: `启动任务 ${task.title}` }));
+    expect(within(library).getByText(/运行目录仍在加载/).closest('[role="status"]')).toHaveClass("launch-advisory");
+    expect(createProject).not.toHaveBeenCalled();
+    await act(async () => resolveCatalog(catalog));
+    expect(within(library).queryByText(/授权正常的 GitHub 账号/)).not.toBeInTheDocument();
+    await act(async () => resolveAccounts({ accounts: [], oauthConfigured: false }));
+    expect(within(library).getByText(/请选择|请编辑任务并选择一个授权正常的 GitHub 账号/)).toBeVisible();
+  });
+
   beforeEach(() => {
+    vi.mocked(getProjectFolders).mockReset().mockResolvedValue([]);
+    vi.mocked(createProjectFolder).mockReset();
+    vi.mocked(renameProjectFolder).mockReset();
+    vi.mocked(deleteProjectFolder).mockReset();
+    vi.mocked(moveProjectsToFolder).mockReset();
     localStorage.clear();
     clearProjectListMemoryCache();
     vi.mocked(getProjects).mockReset().mockResolvedValue([project]);
@@ -280,6 +345,157 @@ describe("ProjectListPage task overview", () => {
     vi.mocked(downloadWorkflowSource).mockReset();
     vi.mocked(importAgentConfigPreset).mockReset();
     vi.mocked(updateAgentConfigPreset).mockReset();
+  });
+
+  it("filters project folders together with status, search and the archive view", async () => {
+    const running = { ...project, id: "prj_folder_running", title: "文献检索", status: "running" as const };
+    const completed = { ...project, id: "prj_folder_complete", title: "实验报告", status: "completed" as const };
+    const unfiled = { ...project, id: "prj_folder_unfiled", title: "待分类研究" };
+    const archived = { ...completed, id: "prj_folder_archived", title: "历史文献", archivedAt: "2026-11-01T00:00:00Z" };
+    vi.mocked(getProjects).mockResolvedValue([running, completed, unfiled, archived]);
+    vi.mocked(getProjectFolders).mockResolvedValue([{ id: "folder_research", name: "研究资料", projectIds: [running.id, completed.id, archived.id] }]);
+    const user = userEvent.setup();
+    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    await user.click(await screen.findByRole("button", { name: "研究资料" }));
+    expect(screen.getByRole("heading", { name: running.title })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: unfiled.title })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "进行中" }));
+    expect(screen.queryByRole("heading", { name: completed.title })).not.toBeInTheDocument();
+    await user.type(screen.getByRole("textbox", { name: "搜索项目" }), "实验");
+    expect(screen.getByText("此分类下没有匹配的项目")).toBeVisible();
+    await user.clear(screen.getByRole("textbox", { name: "搜索项目" }));
+    await user.click(screen.getByRole("tab", { name: "全部项目" }));
+    await user.click(screen.getByRole("button", { name: "未分类" }));
+    expect(screen.getByRole("heading", { name: unfiled.title })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "研究资料" }));
+    await user.click(screen.getByRole("button", { name: "已归档（1）" }));
+    expect(screen.getByRole("heading", { name: archived.title })).toBeVisible();
+    expect(screen.getByRole("combobox", { name: `项目 ${archived.title} 所属文件夹` })).toHaveValue("folder_research");
+  });
+
+  it("creates, renames and deletes folders while preserving projects, and cancels without submitting", async () => {
+    let folders: ProjectFolder[] = [];
+    vi.mocked(getProjectFolders).mockImplementation(async () => folders);
+    vi.mocked(createProjectFolder).mockImplementation(async name => (folders = [{ id: "folder_research", name, projectIds: [project.id] }]));
+    vi.mocked(renameProjectFolder).mockImplementation(async (_id, name) => (folders = folders.map(folder => ({ ...folder, name }))));
+    vi.mocked(deleteProjectFolder).mockImplementation(async () => (folders = []));
+    const user = userEvent.setup();
+    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    const create = await screen.findByRole("button", { name: "新建文件夹" });
+    await waitFor(() => expect(create).toBeEnabled());
+    await user.click(create);
+    await user.type(screen.getByRole("textbox", { name: "文件夹名称" }), "取消的分类");
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "取消" }));
+    expect(createProjectFolder).not.toHaveBeenCalled();
+    expect(create).toHaveFocus();
+    await user.click(create);
+    await user.type(screen.getByRole("textbox", { name: "文件夹名称" }), "文献");
+    await user.click(screen.getByRole("button", { name: "保存文件夹" }));
+    await user.click(await screen.findByRole("button", { name: "文献" }));
+    await user.click(screen.getByRole("button", { name: "重命名文件夹" }));
+    await user.clear(screen.getByRole("textbox", { name: "文件夹名称" }));
+    await user.type(screen.getByRole("textbox", { name: "文件夹名称" }), "文献研究");
+    await user.click(screen.getByRole("button", { name: "保存文件夹" }));
+    expect(await screen.findByRole("button", { name: "文献研究" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "删除文件夹" }));
+    const dialog = screen.getByRole("dialog", { name: "删除文件夹" });
+    expect(dialog).toHaveTextContent("其中的项目会移回“未分类”");
+    await user.click(within(dialog).getByRole("button", { name: "删除文件夹" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "未分类" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("heading", { name: project.title })).toBeVisible();
+    expect(deleteArchivedProject).not.toHaveBeenCalled();
+    expect(projectAction).not.toHaveBeenCalled();
+  });
+
+  it("moves a single project only after confirmation from the folder API and reports failures", async () => {
+    const folder = { id: "folder_research", name: "文献", projectIds: [] as string[] };
+    vi.mocked(getProjectFolders).mockResolvedValue([folder]);
+    vi.mocked(moveProjectsToFolder).mockRejectedValueOnce(new Error("分类存储暂不可写")).mockImplementation(async () => {
+      const next = [{ ...folder, projectIds: [project.id] }];
+      vi.mocked(getProjectFolders).mockResolvedValue(next);
+      return next;
+    });
+    const user = userEvent.setup();
+    const view = render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    const select = await screen.findByRole("combobox", { name: `项目 ${project.title} 所属文件夹` });
+    await waitFor(() => expect(select).toBeEnabled());
+    await user.selectOptions(select, folder.id);
+    expect(await screen.findByText("分类存储暂不可写")).toBeVisible();
+    expect(select).toHaveValue("");
+    await user.selectOptions(select, folder.id);
+    await waitFor(() => expect(select).toHaveValue(folder.id));
+    expect(moveProjectsToFolder).toHaveBeenCalledWith([project.id], folder.id);
+    view.unmount();
+    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole("combobox", { name: `项目 ${project.title} 所属文件夹` })).toHaveValue(folder.id));
+  });
+
+  it("allows running projects in batch folder moves and selects only the rendered page", async () => {
+    const projects = Array.from({ length: 13 }, (_, index) => ({ ...project,
+      id: `prj_folder_${index}`, title: `分类项目 ${index}`, status: "running" as const,
+      createdAt: new Date(Date.UTC(2026, 10, 1, 0, 0, index)).toISOString() }));
+    const folder = { id: "folder_research", name: "文献", projectIds: [] as string[] };
+    vi.mocked(getProjects).mockResolvedValue(projects);
+    vi.mocked(getProjectFolders).mockResolvedValue([folder]);
+    vi.mocked(moveProjectsToFolder).mockResolvedValue([{ ...folder, projectIds: projects.slice(1).map(p => p.id) }]);
+    const user = userEvent.setup();
+    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    await screen.findByRole("heading", { name: "分类项目 12" });
+    await user.click(screen.getByRole("button", { name: "批量分类" }));
+    expect(screen.getByRole("checkbox", { name: "选择项目 分类项目 12" })).toBeEnabled();
+    expect(screen.queryByRole("checkbox", { name: "选择项目 分类项目 0" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "全选当前页面项目" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "批量分类目标文件夹" }), folder.id);
+    await user.click(screen.getByRole("button", { name: "移动所选项目" }));
+    await waitFor(() => expect(moveProjectsToFolder).toHaveBeenCalledWith(expect.arrayContaining(projects.slice(1).map(p => p.id)), folder.id));
+    expect(vi.mocked(moveProjectsToFolder).mock.calls[0][0]).toHaveLength(12);
+    expect(archiveProjects).not.toHaveBeenCalled();
+  });
+
+  it("does not let an earlier folder refresh undo a confirmed move", async () => {
+    const folder = { id: "folder_research", name: "文献", projectIds: [] as string[] };
+    const moved = [{ ...folder, projectIds: [project.id] }];
+    let finishRefresh!: (folders: ProjectFolder[]) => void;
+    vi.mocked(getProjectFolders).mockResolvedValueOnce([folder]).mockImplementationOnce(() => new Promise(resolve => { finishRefresh = resolve; })).mockResolvedValue(moved);
+    vi.mocked(moveProjectsToFolder).mockResolvedValue(moved);
+    const user = userEvent.setup();
+    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    const select = await screen.findByRole("combobox", { name: `项目 ${project.title} 所属文件夹` });
+    await waitFor(() => expect(select).toBeEnabled());
+    act(() => window.dispatchEvent(new Event("focus")));
+    await waitFor(() => expect(getProjectFolders).toHaveBeenCalledTimes(2));
+    await user.selectOptions(select, folder.id);
+    await waitFor(() => expect(select).toHaveValue(folder.id));
+    await act(async () => finishRefresh([folder]));
+    expect(select).toHaveValue(folder.id);
+  });
+
+  it("keeps the folder dialog open on a server error and closes it with Escape", async () => {
+    vi.mocked(createProjectFolder).mockRejectedValue(new Error("文件夹名称已存在"));
+    const user = userEvent.setup();
+    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    const create = await screen.findByRole("button", { name: "新建文件夹" });
+    await waitFor(() => expect(create).toBeEnabled());
+    await user.click(create);
+    await user.type(screen.getByRole("textbox", { name: "文件夹名称" }), "文献");
+    await user.click(screen.getByRole("button", { name: "保存文件夹" }));
+    expect(await within(screen.getByRole("dialog")).findByRole("alert")).toHaveTextContent("文件夹名称已存在");
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(create).toHaveFocus();
+  });
+
+  it("shows folder-load errors without inventing classifications or hiding the project list", async () => {
+    vi.mocked(getProjectFolders).mockRejectedValue(new Error("分类文件无效"));
+    const user = userEvent.setup();
+    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    expect(await screen.findByText("文件夹加载失败：分类文件无效")).toBeVisible();
+    expect(screen.getByRole("heading", { name: project.title })).toBeVisible();
+    expect(screen.getByRole("button", { name: "新建文件夹" })).toBeDisabled();
+    vi.mocked(getProjectFolders).mockResolvedValue([]);
+    await user.click(screen.getByRole("button", { name: "重新加载文件夹" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "新建文件夹" })).toBeEnabled());
   });
 
   it("shows cached project cards immediately on re-entry while refreshing in the background", async () => {
@@ -423,6 +639,30 @@ describe("ProjectListPage task overview", () => {
     expect(await screen.findByRole("heading", { name: updated.title })).toBeVisible();
     expect(getQueue).toHaveBeenCalledTimes(1);
     await act(async () => resolveQueue(queue));
+  });
+
+  it("updates project cards every two seconds without a page reload", async () => {
+    vi.useFakeTimers();
+    try {
+      await act(async () => { render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />); });
+      expect(screen.getByRole("heading", { name: project.title })).toBeVisible();
+      vi.mocked(getProjects).mockResolvedValueOnce([{ ...project, title: "两秒后的最新状态", status: "completed" }]);
+      await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+      const card = screen.getByRole("heading", { name: "两秒后的最新状态" }).closest("article")!;
+      expect(card).toHaveAttribute("data-status-category", "terminal");
+      expect(within(card).getByText("已完成")).toBeVisible();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("revalidates immediately after a slow response when focus requested fresher status", async () => {
+    let finish!: (projects: Project[]) => void;
+    vi.mocked(getProjects).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    vi.mocked(getProjects).mockResolvedValueOnce([{ ...project, title: "焦点恢复后的最新状态", status: "running" }]);
+    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    fireEvent(window, new Event("focus"));
+    await act(async () => finish([project]));
+    expect(await screen.findByRole("heading", { name: "焦点恢复后的最新状态" })).toBeVisible();
+    expect(getProjects).toHaveBeenCalledTimes(2);
   });
 
   it("does not let a pending action on an unmounted page overwrite a newer cached snapshot", async () => {
@@ -571,14 +811,14 @@ describe("ProjectListPage task overview", () => {
     expect(screen.getByRole("textbox", { name: "研究任务需求" })).toHaveValue(draft);
   });
 
-  it("fails closed on Catalog load failure while quick draft save remains available", async () => {
+  it("shows Catalog load failure on launch while quick draft save remains available", async () => {
     vi.mocked(getCatalog).mockRejectedValue(new Error("运行目录服务超时"));
     const savedTask: SavedResearchTask = {
       schemaVersion: 2,
       kind: "scienceevolve-saved-research-task",
       id: "task_quick_catalog_failure_000000001",
       title: "Catalog 故障期间的快速草稿",
-      requirement: "Catalog 暂时不可用时保存快速研究任务副本，但绝不能启动项目。",
+      requirement: "Catalog 暂时不可用时仍可保存完整研究任务副本。",
       createdAt: "2026-09-16T00:00:00.000Z",
       updatedAt: "2026-09-16T00:00:00.000Z",
       agents: DEFAULT_AGENTS,
@@ -596,15 +836,15 @@ describe("ProjectListPage task overview", () => {
     const quickForm = input.closest("form");
     expect(quickForm).not.toBeNull();
     await user.type(input, savedTask.requirement);
-    expect(await within(quickForm!).findByText(/运行目录加载失败，暂不能启动项目：运行目录服务超时/))
-      .toHaveAttribute("role", "alert");
+    expect(within(quickForm!).queryByText(/运行目录加载失败/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "提交并继续" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "提交并继续" }));
+    expect(within(quickForm!).getByText("运行目录加载失败：运行目录服务超时").closest('[role="status"]')).toHaveClass("launch-advisory");
     const savedStart = await screen.findByRole("button", { name: `启动任务 ${savedTask.title}` });
     expect(savedStart).toBeEnabled();
     await user.click(savedStart);
-    expect(await within(screen.getByRole("region", { name: "已保存科研任务" })).findByRole("alert"))
-      .toHaveTextContent("运行目录加载失败，暂不能启动项目：运行目录服务超时");
+    expect(within(screen.getByRole("region", { name: "已保存科研任务" })).getByText("运行目录加载失败：运行目录服务超时").closest('[role="status"]'))
+      .toHaveClass("launch-advisory");
 
     await user.click(screen.getByRole("button", { name: "保存研究任务副本" }));
 
@@ -612,7 +852,7 @@ describe("ProjectListPage task overview", () => {
     expect(createProject).not.toHaveBeenCalled();
   });
 
-  it("reports an empty loaded Catalog as a runtime configuration error", async () => {
+  it("reports an empty loaded Catalog only when launching", async () => {
     vi.mocked(getCatalog).mockResolvedValue({
       skills: [],
       models: [],
@@ -623,12 +863,13 @@ describe("ProjectListPage task overview", () => {
 
     render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
 
-    expect((await screen.findAllByText(/服务端没有可用的 Workflow Harness/)).length)
-      .toBeGreaterThan(0);
-    expect(screen.queryByText(/运行目录加载失败，暂不能启动项目/))
-      .not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "研究任务需求" }), { target: { value: "运行目录为空时允许显式尝试启动。" } });
+    await act(async () => {});
+    expect(screen.queryByText(/服务端没有可用的 Workflow Harness/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "提交并继续" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "提交并继续" }));
+    expect(screen.getByText(/运行目录已加载，但服务端没有可用的 Workflow Harness。/).closest('[role="status"]')).toHaveClass("launch-advisory");
+    expect(screen.getByRole("button", { name: "强制启动" })).toBeEnabled();
   });
 
   it("reports missing global Gateways after clicking quick and saved-task launch", async () => {
@@ -637,7 +878,7 @@ describe("ProjectListPage task overview", () => {
       kind: "scienceevolve-saved-research-task",
       id: "task_no_gateway_000000000000000001",
       title: "无网关历史任务",
-      requirement: "服务端没有任何全局网关时，快速入口和历史任务都不能启动。",
+      requirement: "服务端没有任何全局网关时显示实际配置检查结果。",
       createdAt: "2026-09-16T00:00:00.000Z",
       updatedAt: "2026-09-16T00:00:00.000Z",
       agents: DEFAULT_AGENTS,
@@ -668,18 +909,17 @@ describe("ProjectListPage task overview", () => {
 
     render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
 
-    const noGatewayAlerts = await screen.findAllByText(
-      /运行目录已加载，但服务端没有可用的全局网关。/
-    );
-    expect(noGatewayAlerts.length).toBeGreaterThan(0);
-    expect(noGatewayAlerts[0]).toHaveAttribute("role", "alert");
+    await screen.findByRole("button", { name: `启动任务 ${savedTask.title}` });
+    expect(screen.queryByText(/服务端没有可用的全局网关/)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "研究任务需求" }), { target: { value: savedTask.requirement } });
     expect(screen.getByRole("button", { name: "提交并继续" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "提交并继续" }));
+    expect(screen.getByText(/运行目录已加载，但服务端没有可用的全局网关。/).closest('[role="status"]')).toHaveClass("launch-advisory");
     const savedStart = await screen.findByRole("button", { name: `启动任务 ${savedTask.title}` });
     expect(savedStart).toBeEnabled();
     fireEvent.click(savedStart);
-    expect(await within(screen.getByRole("region", { name: "已保存科研任务" })).findByRole("alert"))
-      .toHaveTextContent("服务端没有可用的全局网关");
+    expect(within(screen.getByRole("region", { name: "已保存科研任务" })).getByText(/服务端没有可用的全局网关/).closest('[role="status"]'))
+      .toHaveClass("launch-advisory");
     expect(createProject).not.toHaveBeenCalled();
   });
 
@@ -1027,6 +1267,8 @@ describe("ProjectListPage task overview", () => {
     );
     await user.click(screen.getByRole("button", { name: "提交并继续" }));
 
+    expect(createProject).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole("button", { name: "强制启动" }));
     await waitFor(() => expect(createProject).toHaveBeenCalledTimes(1));
     const expectedExecution = structuredClone(savedPreset.agents.execution);
     delete expectedExecution.reasoningEffort;
@@ -1214,7 +1456,7 @@ describe("ProjectListPage task overview", () => {
     });
     expect(screen.getByRole("button", { name: "提交并继续" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "提交并继续" }));
-    expect(screen.getByRole("alert")).toHaveTextContent(/启动前检查未通过：.*必须选择全局网关/);
+    expect(screen.getByText("main：必须选择全局网关").closest('[role="status"]')).toHaveClass("launch-advisory");
     expect(createProject).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "保存 SDK run" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "修改 SDK run 名称" })).toBeDisabled();
@@ -1249,6 +1491,9 @@ describe("ProjectListPage task overview", () => {
     await screen.findByRole("option", { name: "SDK other" });
     fireEvent.change(screen.getByLabelText("快速启动 Agent 配置"), { target: { value: imported.id } });
     await act(async () => { resolveCatalog(catalog); });
+    expect(screen.queryByText(/idea：missing-sdk-harness 不在服务端 Harness 目录中/)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "研究任务需求" }), { target: { value: "检查当前导入的 Harness 并保留原配置。" } });
+    fireEvent.click(screen.getByRole("button", { name: "提交并继续" }));
     expect(screen.getByText(/idea：missing-sdk-harness 不在服务端 Harness 目录中/)).toBeInTheDocument();
     expect(screen.getByText(/idea：必须选择全局网关/)).toBeInTheDocument();
     expect(createProject).not.toHaveBeenCalled();
@@ -1409,7 +1654,7 @@ describe("ProjectListPage task overview", () => {
     expect(screen.getByRole("menuitem", { name: /更新当前配置/ })).toBeDisabled();
   });
 
-  it("blocks quick submission when the server catalog marks the selected Harness unavailable", async () => {
+  it("allows forced quick submission when the server catalog marks the selected Harness unavailable", async () => {
     const unavailableAgents = structuredClone(DEFAULT_AGENTS);
     unavailableAgents.main.harness = "dsh";
     vi.mocked(getAgentConfigPresets).mockResolvedValue([{
@@ -1419,6 +1664,7 @@ describe("ProjectListPage task overview", () => {
     vi.mocked(getCatalog).mockResolvedValue({
       skills: [],
       models: ["nex-agi/Nex-N2-Pro"],
+      gateways: [runtimeGateway],
       agentPrompts: {},
       harnesses: [{
         id: "dsh",
@@ -1440,15 +1686,20 @@ describe("ProjectListPage task overview", () => {
     render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
 
     const input = screen.getByPlaceholderText("描述研究问题、数据约束、评价指标和期望产物…");
-    await user.type(input, "验证快速入口在 Harness 不可用时不会提交真实项目。 ");
-    expect(await screen.findByText(/启动前配置检查未通过：main：dsh 当前不可用/)).toBeVisible();
+    await user.type(input, "验证快速入口可以在显示 Harness 检查结果后强制提交。 ");
+    expect(screen.queryByText(/main：dsh 当前不可用/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "提交并继续" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "提交并继续" }));
+    expect(screen.getByText(/main：dsh 当前不可用/).closest('[role="status"]')).toHaveClass("launch-advisory");
     expect(screen.getByRole("button", { name: "保存研究任务副本" })).not.toBeDisabled();
     expect(createProject).not.toHaveBeenCalled();
+    vi.mocked(createProject).mockResolvedValue(project);
+    fireEvent.click(screen.getByRole("button", { name: "强制启动" }));
+    await waitFor(() => expect(createProject).toHaveBeenCalledOnce());
+    expect(vi.mocked(createProject).mock.calls[0]![0].agents.main.harness).toBe("dsh");
   });
 
-  it("blocks a saved task that references a Harness missing from the current Catalog", async () => {
+  it("allows forced submission of a saved task with a Harness missing from the current Catalog", async () => {
     const retiredAgents = structuredClone(defaultAgentsWithCatalogHarness);
     retiredAgents.main.harness = "retired-harness";
     const savedTask: SavedResearchTask = {
@@ -1456,7 +1707,7 @@ describe("ProjectListPage task overview", () => {
       kind: "scienceevolve-saved-research-task",
       id: "task_retired_harness_000000000001",
       title: "历史 Harness 任务",
-      requirement: "保留历史 Harness ID，但在当前 Catalog 未注册时不得启动。",
+      requirement: "保留历史 Harness ID，并允许在确认检查提示后提交。",
       createdAt: "2026-09-16T00:00:00.000Z",
       updatedAt: "2026-09-16T00:00:00.000Z",
       agents: retiredAgents,
@@ -1470,8 +1721,11 @@ describe("ProjectListPage task overview", () => {
     expect(start).toBeEnabled();
     fireEvent.click(start);
     expect(await screen.findByText(/main：retired-harness 不在服务端 Harness 目录中/)).toBeVisible();
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("retired-harness"));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(createProject).not.toHaveBeenCalled();
+    vi.mocked(createProject).mockResolvedValue(project);
+    fireEvent.click(screen.getByRole("button", { name: "强制启动" }));
+    await waitFor(() => expect(createProject).toHaveBeenCalledOnce());
   });
 
   it("warns about failed gateway tests but allows quick and saved task starts", async () => {
@@ -1510,18 +1764,21 @@ describe("ProjectListPage task overview", () => {
 
     const quickInput = screen.getByRole("textbox", { name: "研究任务需求" });
     await user.type(quickInput, "即使网关验证失败，也允许尝试启动快速任务。");
-    expect(await within(quickInput.closest("form")!).findByText(/网关连接验证未通过，允许启动：/)).toBeVisible();
+    expect(within(quickInput.closest("form")!).queryByText(/网关尚未通过/)).not.toBeInTheDocument();
     const quickStart = screen.getByRole("button", { name: "提交并继续" });
     expect(quickStart).not.toBeDisabled();
     await user.click(quickStart);
+    expect(within(quickInput.closest("form")!).getByText(/main：网关尚未通过/).closest('[role="status"]')).toHaveClass("launch-advisory");
+    await user.click(within(quickInput.closest("form")!).getByRole("button", { name: "强制启动" }));
     await waitFor(() => expect(createProject).toHaveBeenCalledTimes(1));
 
     const savedStart = screen.getByRole("button", { name: `启动任务 ${savedTask.title}` });
     expect(savedStart).not.toBeDisabled();
-    expect(within(screen.getByRole("region", { name: "已保存科研任务" })).getByText(
-      /网关连接验证未通过，允许启动：main：网关尚未通过/
-    )).toBeVisible();
+    expect(within(screen.getByRole("region", { name: "已保存科研任务" })).queryByText(/网关尚未通过/)).not.toBeInTheDocument();
     await user.click(savedStart);
+    const library = screen.getByRole("region", { name: "已保存科研任务" });
+    expect(within(library).getByText(/main：网关尚未通过/).closest('[role="status"]')).toHaveClass("launch-advisory");
+    await user.click(within(library).getByRole("button", { name: "强制启动" }));
     await waitFor(() => expect(createProject).toHaveBeenCalledTimes(2));
   });
 

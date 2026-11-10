@@ -82,8 +82,8 @@ const harnesses: HarnessCatalogEntry[] = [
     available: true
   },
   {
-    id: "claude-code",
-    label: "Claude Code",
+    id: "fixture-anthropic",
+    label: "Fixture Harness",
     adapterVersion: "1",
     nativeProtocol: "anthropic-messages",
     purposes: ["workflow", "probe"],
@@ -125,7 +125,7 @@ function matrixResults(model = "model-a"): GatewayRecord["test"][] {
     { status: "passed", protocol: gateway.protocol, model, harness: "codex", durationMs: 1200, stageResults: [{ stage: "text_ordinary", label: "文本普通", expectation: "text", stream: false, status: "passed", durationMs: 1200, httpStatus: 200 }] },
     { status: "passed", protocol: gateway.protocol, model, harness: "dsh", durationMs: 900, stageResults: [{ stage: "text_ordinary", label: "文本普通", expectation: "text", stream: false, status: "passed", durationMs: 900, httpStatus: 200 }] },
     { status: "passed", protocol: gateway.protocol, model, harness: "pi", durationMs: 1000, stageResults: [{ stage: "text_ordinary", label: "文本普通", expectation: "text", stream: false, status: "passed", durationMs: 1000, httpStatus: 200 }] },
-    { status: "failed", protocol: gateway.protocol, model, harness: "claude-code", error: "authorization: Bearer sk-secret-value", durationMs: 60000, stageResults: [{ stage: "text_ordinary", label: "文本普通", expectation: "text", stream: false, status: "failed", durationMs: 60000, error: "authorization: Bearer sk-secret-value" }] }
+    { status: "failed", protocol: gateway.protocol, model, harness: "fixture-anthropic", error: "authorization: Bearer sk-secret-value", durationMs: 60000, stageResults: [{ stage: "text_ordinary", label: "文本普通", expectation: "text", stream: false, status: "failed", durationMs: 60000, error: "authorization: Bearer sk-secret-value" }] }
   ];
 }
 
@@ -347,7 +347,7 @@ describe("GatewayManagementPage", () => {
     expect(within(card).getByText("Codex · 未通过")).toBeInTheDocument();
     expect(within(card).getByText("dsh · 未验证")).toBeInTheDocument();
     expect(within(card).getByText("pi · 未验证")).toBeInTheDocument();
-    expect(within(card).getByText("Claude Code · 未验证")).toBeInTheDocument();
+    expect(within(card).getByText("Fixture Harness · 未验证")).toBeInTheDocument();
     expect(within(card).queryByText(/\d+\s*通过/)).not.toBeInTheDocument();
   });
 
@@ -450,13 +450,13 @@ describe("GatewayManagementPage", () => {
     await user.click(screen.getByRole("button", { name: "开始真实测试" }));
     await waitFor(() => expect(testGatewayMatrix).toHaveBeenCalledTimes(1));
     expect(testGatewayMatrix).toHaveBeenCalledWith(gateway.id, {
-      harnesses: ["codex", "dsh", "pi", "claude-code"],
+      harnesses: ["codex", "dsh", "pi", "fixture-anthropic"],
       models: ["model-b"]
     }, expect.objectContaining({ signal: expect.any(AbortSignal), onProgress: expect.any(Function) }));
     expect(testGateway).not.toHaveBeenCalled();
     expect(await screen.findByText("真实探测完成：3/4 个组合通过。")).toBeInTheDocument();
     expect(screen.queryByText("sk-secret-value")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Claude Code.*model-b/s }));
+    await user.click(screen.getByRole("button", { name: /Fixture Harness.*model-b/s }));
     expect(await screen.findByText("文本普通")).toBeInTheDocument();
     expect(screen.getAllByText("60s").length).toBeGreaterThan(0);
     expect(redactGatewayFailure("authorization: Bearer sk-secret-value")).toContain("[REDACTED]");
@@ -650,7 +650,7 @@ describe("GatewayManagementPage", () => {
       { status: "passed", protocol: gateway.protocol, model: "model-a", harness: "codex", durationMs: 1200, stageResults: [{ stage: "text_ordinary", label: "文本普通", expectation: "text", stream: false, status: "passed", durationMs: 1200, httpStatus: 200 }] },
       { status: "passed", protocol: gateway.protocol, model: "model-a", harness: "dsh", durationMs: 900, stageResults: [{ stage: "text_ordinary", label: "文本普通", expectation: "text", stream: false, status: "passed", durationMs: 900, httpStatus: 200 }] },
       { status: "passed", protocol: gateway.protocol, model: "model-a", harness: "pi", durationMs: 1000, stageResults: [{ stage: "text_ordinary", label: "文本普通", expectation: "text", stream: false, status: "passed", durationMs: 1000, httpStatus: 200 }] },
-      { status: "passed", protocol: gateway.protocol, model: "model-a", harness: "claude-code", durationMs: 1100, stageResults: [{ stage: "text_ordinary", label: "文本普通", expectation: "text", stream: false, status: "passed", durationMs: 1100, httpStatus: 200 }] }
+      { status: "passed", protocol: gateway.protocol, model: "model-a", harness: "fixture-anthropic", durationMs: 1100, stageResults: [{ stage: "text_ordinary", label: "文本普通", expectation: "text", stream: false, status: "passed", durationMs: 1100, httpStatus: 200 }] }
     ];
     vi.mocked(testGatewayMatrix).mockImplementation(async (_id, _options, init) => {
       init?.onProgress?.({

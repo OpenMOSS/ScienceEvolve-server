@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { zstdCompressSync } from "node:zlib";
 import { EventHub } from "../src/event-hub.js";
+import { EventLogIndex } from "../src/event-log-index.js";
 import { ProjectFileBrowser } from "../src/project-file-browser.js";
 import { assertDshSessionArtifact, dshSessionArtifactPath } from "../src/harness-runtime/adapters/dsh-adapter.js";
 import {
@@ -222,7 +223,7 @@ describe("ProjectStorage project workspace", () => {
       const strong = (target: string) => [{ target, kind: "strong" as const }];
       state.orchestration = normalizeAgentOrchestrationTemplate({ ...state.orchestration,
         input: { source: "input", target: "main" },
-        collaborations: ["G", "H"].map(id => ({ id, displayName: id, memberAgentIds: [], renamePolicy: "editable" })),
+        collaborations: ["G", "H"].map(id => ({ id, displayName: id, memberAgentIds: ["idea", "execution"], renamePolicy: "editable" })),
         scopedWorkflow: { schemaVersion: 1, rootAgentIds: ["main", "writing", "review"], groups: [
           { id: "G", leaderAgentId: "main", allowLeaderReconfiguration: true,
             workflow: { nodes: [{ kind: "collaboration", nodeId: "child_h", groupId: "H" }],
@@ -242,6 +243,31 @@ describe("ProjectStorage project workspace", () => {
     await new ProjectStorage(root, new EventHub()).createProject(state);
     const reloaded = new ProjectStorage(root, new EventHub());
     expect(await reloaded.loadState(state.id)).toMatchObject({ id: state.id, orchestration: state.orchestration, agentSessions: state.agentSessions });
+    expect((await reloaded.listStates()).map(item => item.id)).toEqual([state.id]);
+  });
+
+  it("reloads a v3 Agent shared by root and two groups with its original session", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "scienceevolve-storage-shared-v3-")); temporaryRoots.push(root);
+    const state = minimalState("prj_77777777777777777777777777777777");
+    state.git = { enabled: true, status: "ready" };
+    const strong = (target: string) => [{ target, kind: "strong" as const }];
+    state.orchestration = normalizeAgentOrchestrationTemplate({ ...normalizeNewGitOrchestration(state.orchestration),
+      input: { source: "input", target: "main" },
+      collaborations: ["G", "H"].map(id => ({ id, displayName: id, memberAgentIds: ["idea", "execution"], renamePolicy: "editable" })),
+      scopedWorkflow: { schemaVersion: 1, rootAgentIds: ["main", "idea", "writing", "review"], groups: ["G", "H"].map(id => ({
+        id, leaderAgentId: "main", allowLeaderReconfiguration: false,
+        workflow: { nodes: [{ kind: "agent", nodeId: `${id}_idea`, agentId: "idea" }, { kind: "agent", nodeId: `${id}_execution`, agentId: "execution" }],
+          input: { source: "input", edges: [{ target: `${id}_idea`, kind: "parallel" }] },
+          routes: { [`${id}_idea`]: strong(`${id}_execution`), [`${id}_execution`]: strong("finish") } }
+      })) },
+      routes: { main: [], idea: strong("G"), G: strong("H"), H: strong("writing"), writing: strong("review"), review: strong("finish") },
+      decisionPlans: { main: "start", idea: "shared methods", G: "observations", H: "models", writing: "combine", review: "verify" }
+    });
+    state.agentSessions = { idea: { schemaVersion: 1, harnessId: "codex", adapterVersion: "4", generation: 0,
+      nativeId: "stable-shared-session", durable: true, createdAt: "2026-09-30T00:00:00.000Z" } };
+    await new ProjectStorage(root, new EventHub()).createProject(state);
+    const reloaded = new ProjectStorage(root, new EventHub());
+    expect(await reloaded.loadState(state.id)).toMatchObject({ orchestration: state.orchestration, agentSessions: state.agentSessions });
     expect((await reloaded.listStates()).map(item => item.id)).toEqual([state.id]);
   });
 
@@ -342,7 +368,7 @@ describe("ProjectStorage project workspace", () => {
       taskId: "task-execution",
       status: "accepted",
       handoffPath,
-      memoryPath: expect.stringContaining("agent-memory/execution/Memory.md")
+      memory: "Keep the verified execution result available to the next task."
     });
     expect(await storage.loadState(state.id)).toMatchObject({
       taskCompletions: { "task-execution": { status: "accepted", handoffPath } }
@@ -353,7 +379,7 @@ describe("ProjectStorage project workspace", () => {
       .filter((name) => name.endsWith("_handoff.md"))).toHaveLength(1);
   });
 
-  it("saves each Git task Memory in its real worktree and reuses it after recovery", async () => {
+  it("records completion and recovery without changing the Agent's committed Memory", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "scienceevolve-task-memory-")); temporaryRoots.push(root);
     const storage = new ProjectStorage(root, new EventHub());
     const state = minimalState("prj_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab");
@@ -368,24 +394,41 @@ describe("ProjectStorage project workspace", () => {
     const envelope: ControlActionEnvelope = { projectId: state.id, agent: "execution", invocationId: "inv_memory_first",
       callId: "finish-memory", stateVersion: 1, receivedAt: "2026-10-16T00:00:00.000Z",
       action: { tool: "finish_task", memory: "Selected an explicit research scope and recorded the missing inputs." } };
-    const receipt = await storage.requestTaskCompletion(state, "task-first", envelope, { executionWorktree: worktree });
-    expect(receipt.memoryPath).toBe(memory);
-    expect(await fs.readFile(memory, "utf8")).toContain("# Existing verified facts");
-    expect(await git(worktree, ["status", "--porcelain"])).toContain("agent-memory/execution/Memory.md");
-    await git(worktree, ["add", "-f", "."]);
-    await git(worktree, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "--quiet", "-m", "Task memory"]);
-    await storage.requestTaskCompletion(state, "task-first", { ...envelope, invocationId: "inv_memory_resume" }, { executionWorktree: worktree });
-    await storage.synchronizeGitTaskMemory(state, "task-first", "execution", worktree);
+    const head = await git(worktree, ["rev-parse", "HEAD"]);
+    const receipt = await storage.requestTaskCompletion(state, "task-first", envelope);
+    expect(receipt).toMatchObject({ memory: "Selected an explicit research scope and recorded the missing inputs." });
+    expect(receipt.memoryPath).toBeUndefined();
+    await storage.requestTaskCompletion(state, "task-first", { ...envelope, invocationId: "inv_memory_resume" });
     expect(await git(worktree, ["status", "--porcelain"])).toBe("");
-    expect((await fs.readFile(memory, "utf8")).match(/## Task task-first/g)).toHaveLength(1);
     await storage.requestTaskCompletion(state, "task-second", { ...envelope, invocationId: "inv_memory_second",
-      action: { tool: "finish_task", summary: "Completed the next task under the existing assumptions." } }, { executionWorktree: worktree });
-    expect(await git(worktree, ["status", "--porcelain"])).toContain("agent-memory/execution/Memory.md");
-    expect(await fs.readFile(memory, "utf8")).toContain("## Task task-second");
+      action: { tool: "finish_task" } });
+    expect(await git(worktree, ["status", "--porcelain"])).toBe("");
+    expect(await git(worktree, ["rev-parse", "HEAD"])).toBe(head);
+    expect(await fs.readFile(memory, "utf8")).toBe("# Existing verified facts\n");
     expect(state.taskCompletions?.["task-first"]).toEqual(receipt);
+    expect(state.taskCompletions?.["task-second"]).toMatchObject({ status: "requested" });
   });
 
-  it("does not persist a completion when Agent memory cannot be saved", async () => {
+  it("records a Chinese manager's completion without writing a workspace Memory file", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "scienceevolve-chinese-manager-memory-")); temporaryRoots.push(root);
+    const storage = new ProjectStorage(root, new EventHub());
+    const state = minimalState("prj_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab"); await storage.createProject(state);
+    const envelope: ControlActionEnvelope = { projectId: state.id, agent: "观测总师", invocationId: "inv_chinese_manager",
+      callId: "finish-manager", stateVersion: 1, receivedAt: new Date().toISOString(),
+      action: { tool: "finish_task", summary: "核对已合并交付", memory: "保留原任务及已确认的合并结果。" } };
+    const receipt = await storage.requestTaskCompletion(state, "management:group:inv_chinese_manager", envelope);
+    expect(receipt.agent).toBe("观测总师");
+    expect(receipt.memory).toBe("保留原任务及已确认的合并结果。");
+    expect(receipt.memoryPath).toBeUndefined();
+    await expect(fs.access(path.join(storage.projectDir(state.id), "workspaces", "agent-memory", "观测总师", "Memory.md")))
+      .rejects.toMatchObject({ code: "ENOENT" });
+    expect(await storage.requestTaskCompletion(state, receipt.taskId, envelope)).toEqual(receipt);
+    for (const invalid of ["../观测总师", "观测/总师", "观测\\总师"]) {
+      await expect(storage.saveRoleMemorySnapshot(state.id, invalid, "unsafe")).rejects.toThrow("invalid or too large");
+    }
+  });
+
+  it("records completion independently of an unavailable Memory target and rejects an explicit unsafe Memory write", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "scienceevolve-task-completion-failure-"));
     temporaryRoots.push(root);
     const storage = new ProjectStorage(root, new EventHub());
@@ -401,13 +444,15 @@ describe("ProjectStorage project workspace", () => {
       callId: "finish-failure",
       stateVersion: 0,
       receivedAt: new Date().toISOString(),
-      action: { tool: "finish_task", memory: "This must not be accepted." }
+      action: { tool: "finish_task", memory: "Receipt content only." }
     };
 
     await expect(storage.requestTaskCompletion(state, "task-memory-failure", envelope))
+      .resolves.toMatchObject({ status: "requested", memory: "Receipt content only." });
+    await expect(storage.saveRoleMemorySnapshot(state.id, "execution", "Explicit write"))
       .rejects.toThrow("memory snapshot target is not a regular file");
-    expect(await storage.loadState(state.id)).not.toHaveProperty("taskCompletions");
-    await expect(fs.access(path.join(storage.projectDir(state.id), "runtime", "task-completions")))
+    expect((await storage.loadState(state.id)).taskCompletions?.["task-memory-failure"]).toMatchObject({ status: "requested" });
+    await expect(fs.access(path.join(root, "outside-memory.md")))
       .rejects.toMatchObject({ code: "ENOENT" });
   });
 
@@ -642,6 +687,7 @@ describe("ProjectStorage project workspace", () => {
     const first = await storage.appendEvent(state, { type: "project.created", message: "committed seed" });
     const eventsPath = path.join(storage.projectDir(state.id), "events.jsonl");
     const readFile = fs.readFile.bind(fs), replay = storage.replayEvents.bind(storage);
+    const page = EventLogIndex.prototype.page;
     let appended = 0;
     const appendDuringRead = async () => {
       // A reader that discards its whole snapshot on every append never
@@ -662,6 +708,10 @@ describe("ProjectStorage project workspace", () => {
         return visit(event);
       }, signal);
     });
+    if (kind !== "events") vi.spyOn(EventLogIndex.prototype, "page").mockImplementation(async function(this: EventLogIndex, ...args) {
+      await appendDuringRead();
+      return page.apply(this, args);
+    });
     try {
       const events = kind === "events" ? await storage.readEvents(state.id)
         : kind === "bootstrap" ? (await storage.readEventBootstrap(state.id)).events
@@ -670,6 +720,52 @@ describe("ProjectStorage project workspace", () => {
       expect(appended).toBe(1);
       expect(state.eventSeq).toBe(2);
     } finally { vi.restoreAllMocks(); }
+  });
+
+  it("bounds the initial business timeline while retaining every original event for cursor history", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "scienceevolve-bounded-history-")); temporaryRoots.push(root);
+    const storage = new ProjectStorage(root, new EventHub()), state = minimalState("prj_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    await storage.createProject(state);
+    for (let offset = 0; offset < 400; offset += 100) await storage.appendEvents(state,
+      Array.from({ length: 100 }, (_, index) => ({ type: "handoff.saved" as const, message: `Original handoff ${offset + index}` })));
+    const snapshot = await storage.readEventBootstrap(state.id, 20);
+    expect(snapshot.events).toHaveLength(20); expect(snapshot.timelineEvents).toHaveLength(200);
+    expect(snapshot.totalEvents).toBe(400); expect(snapshot.lastSeq).toBe(400);
+    expect(snapshot.timelineHasMore).toBe(true);
+    const timeline = await storage.readTimelineHistory(state.id, snapshot.timelineEvents[0]!.seq, 200);
+    expect(timeline.events).toHaveLength(200); expect(timeline.hasMore).toBe(false);
+    expect(timeline.events[0]?.seq).toBe(1); expect(timeline.events.at(-1)?.seq).toBe(200);
+    expect(timeline.events.every(event => event.message === "")).toBe(true);
+    const older = await storage.readEventHistory(state.id, 201, 200);
+    expect(older.events).toHaveLength(200); expect(older.events[0]?.message).toBe("Original handoff 0");
+    expect(older.events.at(-1)?.seq).toBe(200); expect(older.hasMore).toBe(false);
+    expect(await storage.readEvents(state.id)).toHaveLength(400);
+  });
+
+  it("reads committed events during later project writes without exposing an unfinished log append", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "scienceevolve-inflight-event-prefix-")); temporaryRoots.push(root);
+    const storage = new ProjectStorage(root, new EventHub()), state = minimalState("prj_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    await storage.createProject(state);
+    const first = await storage.appendEvent(state, { type: "project.created", message: "committed seed" });
+    const releaseMutation = storage.reserveProjectMutation(state.id);
+    const appendFile = fs.appendFile.bind(fs);
+    let releaseAppend!: () => void, entered = false;
+    const gate = new Promise<void>(resolve => { releaseAppend = resolve; });
+    vi.spyOn(fs, "appendFile").mockImplementation(async (...args) => {
+      if (args[0] === path.join(storage.projectDir(state.id), "timeline.md")) { entered = true; await gate; }
+      return appendFile(...args);
+    });
+    const append = storage.appendEvent(state, { type: "agent.trace", message: "unfinished append" });
+    try {
+      await vi.waitFor(() => expect(entered).toBe(true));
+      const reads = await Promise.all([storage.readEventBootstrap(state.id, 200), storage.readEventHistory(state.id, 3, 200)]);
+      expect(reads[0].events).toEqual([first]); expect(reads[0].totalEvents).toBe(1);
+      expect(reads[1].events).toEqual([first]);
+      expect(storage.hasActiveProjectMutation(state.id)).toBe(true);
+      releaseAppend(); await append;
+      expect((await storage.readEventBootstrap(state.id, 200)).events.map(event => event.message)).toEqual(["committed seed", "unfinished append"]);
+      expect(storage.hasActiveProjectMutation(state.id)).toBe(true);
+    } finally { releaseAppend(); releaseMutation(); await append; vi.restoreAllMocks(); }
   });
 
   it("keeps original output and dispatch fields in bootstrap history after traces leave the recent window", async () => {

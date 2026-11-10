@@ -36,6 +36,25 @@ async function setup() {
 const mutation = (revision: number, operationId: string, patch?: unknown) => ({ expectedRevision: revision, operationId, ...(patch ? { patch } : {}) });
 
 describe("Project Explainer agent tools and durable project drafts", () => {
+  it("retains the saved action facts when its UI notification fails, without creating another draft on replay", async () => {
+    const f = await setup();
+    const endpoint = await openExplainerAssistantMcp(f.store, f.context.id, new AbortController().signal, async () => { throw new Error("UI stream closed"); });
+    const client = new Client({ name: "notification-failure-client", version: "1" });
+    try {
+      await client.connect(new StreamableHTTPClientTransport(new URL(endpoint.url)));
+      const args = mutation(0, "saved-before-notification", { title: "保留真实结果", requirement: "界面通知失败时仍返回已保存草稿的真实状态" });
+      const first = await client.callTool({ name: "create_draft", arguments: args });
+      expect(first.isError).toBe(true);
+      const facts = first.structuredContent as any;
+      expect(facts.error).toMatchObject({ stage: "action_notification", message: "UI stream closed" });
+      expect(facts.result).toMatchObject({ kind: "draft.created", savedTask: { id: expect.any(String) } });
+      expect(await f.tasks.get(facts.result.savedTask.id)).toBeDefined();
+      const replay = await client.callTool({ name: "create_draft", arguments: args });
+      expect((replay.structuredContent as any).result.savedTask.id).toBe(facts.result.savedTask.id);
+      expect(await f.tasks.list()).toHaveLength(1);
+    } finally { await client.close(); await endpoint.close(); }
+  });
+
   it("creates a new roster on the first call without inheriting unrelated Agent settings or routes", async () => {
     const f = await setup(), before = structuredClone(f.context.draft);
     const graph = { ...before.orchestration, agents: [{ name: "main", template: "main" }, { name: "coder", template: "execution" }, { name: "auditor", template: "review" }],
@@ -652,6 +671,23 @@ describe("Project Explainer agent tools and durable project drafts", () => {
     expect(f.submitWorkflow).toHaveBeenCalledOnce();
     expect(f.submitWorkflow.mock.calls[0][0]).toBe(projectId);
     expect(f.submitWorkflow.mock.calls[0][1]).not.toHaveProperty("projectId");
+  });
+
+  it("returns the actual Workflow submission state through MCP without claiming it has been applied", async () => {
+    const f = await setup(), projectId = `prj_${"f".repeat(32)}`;
+    f.project.mockResolvedValue({ id: projectId, title: "运行项目", requirement: "检查配置调整的实际提交状态",
+      agents: f.context.draft.agents, orchestration: f.context.draft.orchestration } as ProjectState);
+    await f.store.bindProject(f.context.id, projectId);
+    const endpoint = await openExplainerAssistantMcp(f.store, f.context.id, new AbortController().signal, async () => undefined);
+    const client = new Client({ name: "workflow-result-client", version: "1" });
+    try {
+      await client.connect(new StreamableHTTPClientTransport(new URL(endpoint.url)));
+      const response = await client.callTool({ name: "submit_workflow_adjustment", arguments: mutation(1, "native-workflow-status") });
+      expect(response.isError).not.toBe(true);
+      const value = JSON.parse((response.content as { text: string }[])[0]!.text);
+      expect(value.result).toEqual({ record: { requestId: "native-workflow-status", status: "pending" } });
+      expect(value.kind).toBe("workflow.submitted");
+    } finally { await client.close(); await endpoint.close(); }
   });
 
   it("restores the matching original Workflow base when an assistant rebase is undone", async () => {

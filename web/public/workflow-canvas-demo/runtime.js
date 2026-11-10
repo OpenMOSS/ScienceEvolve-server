@@ -10,6 +10,50 @@
   var logs = [];
   var expanded = false;
   var scopeId = null;
+  var changeCard = document.getElementById("run-floating-update");
+  var changeState = null;
+  var changeFrame = 0;
+  var lastChangeKey = "";
+  var playbackPaused = false;
+
+  function advanceChange(now) {
+    changeFrame = 0;
+    if (!changeState || playbackPaused) return;
+    changeState.elapsed += now - changeState.last;
+    changeState.last = now;
+    var progress = Math.min(1, changeState.elapsed / 700);
+    changeState.element.textContent = changeState.content.slice(0, Math.ceil(changeState.content.length * progress));
+    canvasApi.positionChange(changeState.nodeId);
+    if (changeState.elapsed >= 3200) { changeCard.hidden = true; changeState = null; }
+    else changeFrame = requestAnimationFrame(advanceChange);
+  }
+
+  function showChange(snapshot) {
+    var change = snapshot.playback ? snapshot.playback.change : snapshot.change;
+    if (snapshot.playback?.reset) {
+      cancelAnimationFrame(changeFrame); changeFrame = 0; changeState = null; changeCard.hidden = true; lastChangeKey = "";
+    }
+    if (change) {
+      var key = JSON.stringify([scopeId, snapshot.playback?.index, change]);
+      if (key !== lastChangeKey) {
+        lastChangeKey = key;
+        cancelAnimationFrame(changeFrame); changeFrame = 0;
+        changeCard.replaceChildren(); changeCard.className = "run-floating-update is-" + change.kind + (snapshot.playback?.reset ? " is-seeking" : "");
+        var heading = document.createElement("div"); heading.className = "run-update-kicker";
+        var icon = document.createElement("span"); icon.className = "run-update-icon"; icon.textContent = change.kind === "prompt" ? "P" : change.kind === "edge" ? "→" : "+";
+        var title = document.createElement("span"); title.textContent = change.title;
+        var state = document.createElement("b"); state.textContent = "已记录"; heading.append(icon, title, state);
+        var content = document.createElement("div"); content.className = "run-update-content";
+        var reason = document.createElement("small"); reason.textContent = change.reason;
+        changeCard.append(heading, content, reason); changeCard.hidden = false;
+        changeState = { element: content, content: change.content, nodeId: change.nodeId,
+          elapsed: snapshot.playback?.reset || change.kind !== "prompt" ? 700 : 0, last: performance.now() };
+        content.textContent = changeState.elapsed ? change.content : "";
+        canvasApi.positionChange(change.nodeId);
+      }
+    }
+    if (changeState && !playbackPaused && !changeFrame) { changeState.last = performance.now(); changeFrame = requestAnimationFrame(advanceChange); }
+  }
 
   function renderLogs() {
     logList.replaceChildren();
@@ -34,16 +78,18 @@
     if (!snapshot || snapshot.projectId !== projectId || !canvasApi) return;
     if (scopeId !== (snapshot.scopeId || null)) touchPan = null;
     scopeId = snapshot.scopeId || null;
+    playbackPaused = Boolean(snapshot.playback && !snapshot.playback.playing);
     canvasApi.update(snapshot);
+    showChange(snapshot);
     document.documentElement.classList.add("runtime-ready");
     statusBar.hidden = false;
-    document.getElementById("run-status-label").textContent = labels[snapshot.status] || snapshot.status;
+    document.getElementById("run-status-label").textContent = snapshot.playback ? playbackPaused ? "回顾已暂停" : "历史回顾中" : labels[snapshot.status] || snapshot.status;
     document.getElementById("run-status-detail").textContent = snapshot.workflow.name;
     document.getElementById("run-status-dot").className = "run-status-dot phase-" + snapshot.status;
-    document.getElementById("run-scenario-label").textContent = "实时运行";
+    document.getElementById("run-scenario-label").textContent = snapshot.playback ? "历史执行记录" : "实时运行";
     document.getElementById("run-current-agent").textContent = "当前：" + (snapshot.currentNodeId || "--");
     document.getElementById("run-parallel-count").textContent = "执行中：" + Object.values(snapshot.nodeStates).filter(function (state) { return state === "running" || state === "retrying"; }).length;
-    document.getElementById("run-version").textContent = "Cycle " + snapshot.cycle;
+    document.getElementById("run-version").textContent = snapshot.playback ? "Workflow v" + snapshot.playback.revision : "Cycle " + snapshot.cycle;
     document.getElementById("run-log-panel").hidden = false;
     logs = snapshot.logs;
     renderLogs();
@@ -82,7 +128,7 @@
   canvas.addEventListener("pointerdown", function (event) {
     if (event.pointerType !== "touch") return;
     if (event.target.closest("button, a, input, textarea, select")) return;
-    touchPan = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false, node: event.target.closest("[data-node]") };
+    touchPan = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false, node: event.target.closest("[data-node]"), edge: event.target.closest("[data-edge-hit]") };
     canvas.setPointerCapture(event.pointerId);
     event.preventDefault();
   });
@@ -98,6 +144,7 @@
   canvas.addEventListener("pointerup", function (event) {
     if (!touchPan || touchPan.id !== event.pointerId) return;
     if (!touchPan.moved && touchPan.node) canvasApi.select(touchPan.node.dataset.node);
+    if (!touchPan.moved && touchPan.edge) canvasApi.selectEdge(touchPan.edge.dataset.edgeHit);
     touchPan = null;
   });
   canvas.addEventListener("pointercancel", function () { touchPan = null; });

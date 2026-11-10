@@ -63,6 +63,11 @@ const adapter = (item: HarnessDescriptor): HarnessAdapter => ({
 });
 
 describe("HarnessRegistry", () => {
+  it("exposes the three built-in Harnesses and rejects Claude Code", () => {
+    const registry = new HarnessRegistry();
+    expect(registry.list().map(item => item.id).sort()).toEqual(["codex", "dsh", "pi"]);
+    expect(() => registry.descriptor("claude-code")).toThrow(UnknownHarnessError);
+  });
   it("requires exactly one default and rejects duplicate IDs", () => {
     expect(() => new HarnessRegistry([descriptor("one")])).toThrow(/exactly one default/);
     expect(() => new HarnessRegistry([descriptor("one", true), descriptor("one")])).toThrow(/Duplicate/);
@@ -89,10 +94,6 @@ describe("HarnessRegistry", () => {
     const byId = Object.fromEntries(
       BUILTIN_HARNESS_DESCRIPTORS.map((item) => [item.id, item])
     );
-    expect(byId["claude-code"]?.purposes).toContain("explainer");
-    expect(byId["claude-code"]?.capabilities.readOnlyExplainer).toBe(true);
-    expect(byId["claude-code"]?.capabilities.explainerInputFormats).toEqual(["text", "image", "pdf"]);
-    expect(byId["claude-code"]?.userSelectable).toBe(false);
     expect(byId.codex?.purposes).toContain("explainer");
     expect(byId.codex?.capabilities.readOnlyExplainer).toBe(true);
     expect(byId.codex?.explainerIsolation).toBe("adapter-read-only-tools");
@@ -111,14 +112,13 @@ describe("HarnessRegistry", () => {
     );
     expect(byId.codex?.route).toEqual({ requireMainControlTools: true, nativeProfileAuth: true });
     expect(harnessSupportsNativeProfile("codex")).toBe(true);
-    for (const id of ["pi", "dsh", "claude-code", "unregistered-harness"])
+    for (const id of ["pi", "dsh", "unregistered-harness"])
       expect(harnessSupportsNativeProfile(id)).toBe(false);
-    expect(byId["claude-code"]?.route).toMatchObject({ requireMainControlTools: true });
     expect(byId.dsh?.route).toEqual({ webSearchMcp: true });
     expect(byId.pi?.route).toEqual({ webSearchMcp: true });
   });
 
-  it("advertises Web Search for every non-Claude workflow Harness", () => {
+  it("advertises Web Search for every workflow Harness", () => {
     const byId = Object.fromEntries(
       BUILTIN_HARNESS_DESCRIPTORS.map((item) => [item.id, item])
     );
@@ -127,7 +127,7 @@ describe("HarnessRegistry", () => {
     }
   });
 
-  it("compiles the four Harness catalogs from exact permission-scoped runtime schemas", () => {
+  it("compiles the three Harness catalogs from exact permission-scoped runtime schemas", () => {
     const base: CapabilityContext = {
       secret: "catalog-secret",
       projectId: `prj_${"a".repeat(32)}`,
@@ -198,7 +198,7 @@ describe("HarnessRegistry", () => {
     for (const snapshot of snapshots) {
       const runtimeTools = toolsFor(snapshot.context);
       expect(runtimeTools.map((tool) => tool.name)).toEqual(snapshot.names);
-      for (const harnessId of ["codex", "claude-code", "pi", "dsh"]) {
+      for (const harnessId of ["codex", "pi", "dsh"]) {
         const catalog = registry.nativeToolCatalog(
           harnessId,
           "scienceevolve-orchestration-control",
@@ -246,7 +246,7 @@ describe("HarnessRegistry", () => {
       const byId = Object.fromEntries(
         BUILTIN_HARNESS_DESCRIPTORS.map((item) => [item.id, item])
       );
-      for (const id of ["dsh", "pi", "claude-code"] as const) {
+      for (const id of ["dsh", "pi"] as const) {
         const item = byId[id]!;
         const shim = installedHarnessCandidates(item)[0]!;
         const executable = await resolveHarnessExecutable(item, shim);

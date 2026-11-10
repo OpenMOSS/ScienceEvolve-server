@@ -40,19 +40,29 @@ describe("fixed MCP directory", () => {
       expect(() => normalizeMcpServerSelection([{ name, project: "sleep" }])).toThrow("内置 MCP");
     }
   });
-  it("publishes exactly the nine fixed name and URL identities without credentials", () => {
+  it("publishes exactly the nineteen fixed name and URL identities without credentials", () => {
     const directory = publicFixedMcpDirectory();
-    expect(directory).toHaveLength(9);
+    expect(directory).toHaveLength(19);
     expect(directory.map((entry) => entry.name)).toEqual([
+      "abaqus_tools",
       "ai4fusion-mcp",
       "ai4polymat-epoxy",
       "aistudio-auth",
-      "astronomy_knowledge_base",
+      "bio-tools",
+      "biorxiv",
       "bohrium-auth",
-      "inkstone-auth",
+      "chembl",
       "citation-check",
+      "clinical-trials",
       "idea-agent",
-      "reading_agent"
+      "inkstone-auth",
+      "ketcher-chemistry",
+      "particle_tools",
+      "pubmed",
+      "pymol",
+      "reading_agent",
+      "reading_agent_v2",
+      "sciencepro-auth"
     ]);
     for (const entry of directory) {
       expect(entry.url).toBe(`${FIXED_MCP_BASE_URL}/${entry.name}`);

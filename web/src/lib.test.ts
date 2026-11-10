@@ -82,13 +82,13 @@ describe("API data normalization", () => {
   it("exposes only archive summaries while preserving retired Agent identity and actual Session counts", () => {
     const archive = { agentId: "retired_researcher", harnessId: "codex", workflowRevision: 4,
       sessions: { retired_researcher: { legacyId: "original-legacy-id" },
-        "retired_researcher::collaboration:delivery:scope": { session: { harnessId: "claude-code", nativeId: "original-native-id" } } } };
+        "retired_researcher::collaboration:delivery:scope": { session: { harnessId: "fixture-anthropic", nativeId: "original-native-id" } } } };
     const project = normalizeProject({ id: "archived-session-fixture", archivedAgentSessions: [archive, { ...archive, workflowRevision: 0 }, { ...archive, sessions: {} },
         { ...archive, agentId: "retired_nonpersistent", definition: { name: "retired_nonpersistent" }, sessions: {} }],
       tokenUsage: { totalTokens: 20, byAgent: { retired_researcher: { inputTokens: 10, outputTokens: 3, totalTokens: 13, invocations: 1 },
         retired_nonpersistent: { inputTokens: 5, outputTokens: 2, totalTokens: 7, invocations: 1 } } },
       performance: { byAgent: { retired_researcher: { invocationId: "inv_original", agent: "retired_researcher", startedAt: "2026-10-11T00:00:00Z", status: "completed", outputTokens: 3 } } } });
-    expect(project.archivedAgentSessions).toEqual([{ agentId: "retired_researcher", harnesses: ["codex", "claude-code"], workflowRevision: 4, sessionCount: 2 },
+    expect(project.archivedAgentSessions).toEqual([{ agentId: "retired_researcher", harnesses: ["codex", "fixture-anthropic"], workflowRevision: 4, sessionCount: 2 },
       { agentId: "retired_nonpersistent", harnesses: ["codex"], workflowRevision: 4, sessionCount: 0 }]);
     expect(JSON.stringify(project.archivedAgentSessions)).not.toContain("original-native-id");
     expect(project.tokenUsage!.byAgent.retired_researcher.totalTokens).toBe(13); expect(project.tokenUsage!.totalTokens).toBe(20);
@@ -277,8 +277,8 @@ describe("API data normalization", () => {
       updatedAt: "2026-09-12T00:00:00.000Z"
     };
     const harnesses: HarnessCatalogEntry[] = [{
-      id: "claude-code",
-      label: "Claude Code",
+      id: "fixture-anthropic",
+      label: "Fixture Harness",
       adapterVersion: "1",
       nativeProtocol: "anthropic-messages",
       purposes: ["workflow", "explainer", "probe"],
@@ -320,7 +320,7 @@ describe("API data normalization", () => {
     const agents = {
       main: {
         ...structuredClone(DEFAULT_AGENTS.main),
-        harness: "claude-code" as const,
+        harness: "fixture-anthropic" as const,
         gatewayId
       }
     };
@@ -338,7 +338,7 @@ describe("API data normalization", () => {
     });
     expect(gatewayCombinationTestState(
       gateway,
-      "claude-code",
+      "fixture-anthropic",
       "nex-agi/Nex-N2-Pro",
       harnesses
     )).toMatchObject({
@@ -350,7 +350,7 @@ describe("API data normalization", () => {
       status: "failed",
       error: "上游返回 HTTP 401"
     });
-    expect(gatewayHarnessTestState(gateway, "claude-code", harnesses)).toEqual({ status: "untested" });
+    expect(gatewayHarnessTestState(gateway, "fixture-anthropic", harnesses)).toEqual({ status: "untested" });
     expect(gatewayModelTestOptions(gateway, "codex", harnesses)[0]).toMatchObject({
       model: "nex-agi/Nex-N2-Pro",
       test: { status: "failed" }
@@ -362,7 +362,7 @@ describe("API data normalization", () => {
       [gateway],
       harnesses
     )).toEqual([
-      "main：Claude Code 当前不可用（项目内置入口不可执行）"
+      "main：Fixture Harness 当前不可用（项目内置入口不可执行）"
     ]);
     expect(agentRuntimeConfigurationWarnings(
       { agents: [{ name: "main", template: "main" }] },
@@ -391,7 +391,7 @@ describe("API data normalization", () => {
         status: "passed",
         protocol: "responses",
         model: "nex-agi/Nex-N2-Pro",
-        harness: "claude-code",
+        harness: "fixture-anthropic",
         nativeProtocol: "anthropic-messages",
         routeMode: "proxy",
         routeDirection: "anthropic-messages->responses",
@@ -401,25 +401,25 @@ describe("API data normalization", () => {
         status: "passed",
         protocol: "responses",
         model: "nex-agi/Nex-N2-Pro",
-        harness: "claude-code",
+        harness: "fixture-anthropic",
         nativeProtocol: "anthropic-messages",
         routeMode: "proxy",
         routeDirection: "anthropic-messages->responses",
         probeKind: "adapter-smoke",
-        cacheKey: "claude-code-route",
+        cacheKey: "fixture-anthropic-route",
         adapterVersion: "1",
-        executableFingerprint: "fixture-claude-code",
+        executableFingerprint: "fixture-fixture-anthropic",
         gatewayRevision: 1,
         routerCompatibilityVersion: "1"
       }
     ];
     expect(gatewayCombinationTestState(
       gateway,
-      "claude-code",
+      "fixture-anthropic",
       "nex-agi/Nex-N2-Pro",
       harnesses
     ).status).toBe("passed");
-    expect(gatewayHarnessTestState(gateway, "claude-code", harnesses)).toEqual({ status: "passed" });
+    expect(gatewayHarnessTestState(gateway, "fixture-anthropic", harnesses)).toEqual({ status: "passed" });
     expect(agentRuntimeConfigurationErrors(
       { agents: [{ name: "main", template: "main" }] },
       agents,
@@ -429,25 +429,25 @@ describe("API data normalization", () => {
 
     expect(gatewayCombinationTestState(
       gateway,
-      "claude-code",
+      "fixture-anthropic",
       "nex-agi/Nex-N2-Pro",
-      harnesses.map((entry) => entry.id === "claude-code"
+      harnesses.map((entry) => entry.id === "fixture-anthropic"
         ? { ...entry, adapterVersion: "2" }
         : entry)
     ).status).toBe("untested");
     expect(gatewayCombinationTestState(
       gateway,
-      "claude-code",
+      "fixture-anthropic",
       "nex-agi/Nex-N2-Pro",
-      harnesses.map((entry) => entry.id === "claude-code"
-        ? { ...entry, executableFingerprint: "replacement-claude-code" }
+      harnesses.map((entry) => entry.id === "fixture-anthropic"
+        ? { ...entry, executableFingerprint: "replacement-fixture-anthropic" }
         : entry)
     ).status).toBe("untested");
     expect(gatewayCombinationTestState(
       gateway,
-      "claude-code",
+      "fixture-anthropic",
       "nex-agi/Nex-N2-Pro",
-      harnesses.map((entry) => entry.id === "claude-code"
+      harnesses.map((entry) => entry.id === "fixture-anthropic"
         ? { ...entry, routerCompatibilityVersion: "2" }
         : entry)
     ).status).toBe("untested");
@@ -461,7 +461,7 @@ describe("API data normalization", () => {
       { main: { ...agents.main, webSearch: true } },
       [gateway],
       harnesses
-    )).toContain("main：Claude Code 不支持 Web Search");
+    )).toContain("main：Fixture Harness 不支持 Web Search");
     harnesses[0] = {
       ...harnesses[0]!,
       capabilities: { ...harnesses[0]!.capabilities, webSearch: true }
@@ -469,7 +469,7 @@ describe("API data normalization", () => {
 
     expect(gatewayCombinationTestState(
       { ...gateway, revision: 2 },
-      "claude-code",
+      "fixture-anthropic",
       "nex-agi/Nex-N2-Pro",
       harnesses
     ).status).toBe("untested");
@@ -479,7 +479,7 @@ describe("API data normalization", () => {
       { main: { ...agents.main, gatewayId: undefined } },
       [gateway],
       harnesses
-    )).toEqual(["main：使用 claude-code 时必须选择全局网关"]);
+    )).toEqual(["main：使用 fixture-anthropic 时必须选择全局网关"]);
 
     expect(agentRuntimeConfigurationErrors(
       { agents: [{ name: "main", template: "main" }] },
@@ -695,10 +695,10 @@ describe("API data normalization", () => {
       },
       available: true
     };
-    const claudeExplainer: HarnessCatalogEntry = {
+    const alternateExplainer: HarnessCatalogEntry = {
       ...registeredUnsupported,
-      id: "fixture-claude",
-      label: "Fixture Claude",
+      id: "fixture-native",
+      label: "Fixture Harness",
       nativeProtocol: "anthropic-messages",
       purposes: ["workflow", "explainer", "probe"],
       capabilities: {
@@ -708,12 +708,12 @@ describe("API data normalization", () => {
     };
 
     const registered = harnessOptionsForPurpose(
-      [registeredUnsupported, claudeExplainer],
+      [registeredUnsupported, alternateExplainer],
       "explainer",
       registeredUnsupported.id
     );
     expect(registered.map((entry) => entry.id)).toEqual([
-      claudeExplainer.id,
+      alternateExplainer.id,
       registeredUnsupported.id
     ]);
     expect(registered.at(-1)).toMatchObject({
@@ -723,7 +723,7 @@ describe("API data normalization", () => {
     });
 
     const historical = harnessOptionsForPurpose(
-      [claudeExplainer],
+      [alternateExplainer],
       "explainer",
       "removed-explainer"
     );
@@ -1021,7 +1021,7 @@ describe("API data normalization", () => {
         readOnlyExplainer: false, webSearch: true, skills: true, mcp: true
       }
     };
-    const hidden = { ...codex, id: "claude-code", label: "Claude Code", default: false, userSelectable: false };
+    const hidden = { ...codex, id: "fixture-anthropic", label: "Fixture Harness", default: false, userSelectable: false };
     const agents = { main: { ...DEFAULT_AGENTS.main, harness: hidden.id } };
     expect(applyCatalogDefaultHarness(agents, [codex, hidden]).main.harness).toBe("codex");
     expect(harnessOptionsForPurpose([codex, hidden], "workflow", hidden.id).map((item) => item.id))

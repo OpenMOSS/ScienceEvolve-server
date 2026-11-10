@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { parse as parseToml } from "smol-toml";
+import { NATIVE_PROCESS_SUPPORT_ENV } from "../src/harness-runtime/native-processes.js";
 import {
   AgentApiError,
   AgentAuthenticationError,
@@ -730,7 +732,9 @@ fs.writeSync(2, "api_key=runner-super-secret-token\\n");
     );
     expect(mcpConfig).toContain('"scienceevolve-workspace"');
     expect(mcpConfig).toContain('"scienceevolve-sleep"');
-    expect(mcpConfig).toMatch(/"scienceevolve-sleep" = \{[^}]*tool_timeout_sec = 43260/);
+    const servers = parseToml(mcpConfig!).mcp_servers as Record<string, { command?: string; env?: Record<string, string> }>;
+    expect(servers["scienceevolve-sleep"]).toMatchObject({ tool_timeout_sec: 43260 });
+    for (const row of Object.values(servers)) if (row.command) expect(row.env?.[NATIVE_PROCESS_SUPPORT_ENV]).toBe("1");
     expect(mcpConfig).toContain('"openfars-web"');
     expect(mcpConfig).toContain("/web-mcp");
     expect(mcpConfig).toContain('bearer_token_env_var = "SCIENCEEVOLVE_GATEWAY_API_KEY"');

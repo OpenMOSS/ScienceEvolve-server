@@ -741,8 +741,8 @@ describe("ProjectExplainerService", () => {
   it("migrates a saved non-selectable explainer selection and discards its session", async () => {
     const hiddenDescriptor: HarnessDescriptor = {
       ...descriptors[1]!,
-      id: "claude-code",
-      label: "Claude Code",
+      id: "hidden-harness",
+      label: "Hidden Harness",
       userSelectable: false
     };
     const { explainer, projectId, gateway, storage } = await setup(
@@ -776,7 +776,7 @@ describe("ProjectExplainerService", () => {
     const { projectId, storage } = await setup();
     const catalog = [
       { ...descriptors[0]!, id: "codex", label: "Codex", default: true, available: false },
-      { ...descriptors[1]!, id: "claude-code", label: "Claude Code", userSelectable: false, available: true },
+      { ...descriptors[1]!, id: "hidden-harness", label: "Hidden Harness", userSelectable: false, available: true },
       { ...descriptors[1]!, available: true }
     ];
     const runtime: ProjectExplainerRuntime = {

@@ -2,7 +2,7 @@
 
 [← 返回中文 README](../README_zh-CN.md#configuration) · [Harness 运行时](../harness/README.md) · [English](adding-a-harness-en.md) | **简体中文**
 
-OpenFARS 使用代码级 Adapter 注册，不支持从请求或磁盘动态加载任意第三方插件。
+ScienceEvolve 使用代码级 Adapter 注册，不支持从请求或磁盘动态加载任意第三方插件。
 新增 Harness 的扩展契约是：实现一个自带 `HarnessDescriptor` 的 Adapter，然后在
 应用组合根通过 `additionalAdapters` 注册这一个对象。Registry、Catalog、Gateway
 矩阵和前端都从该对象的 descriptor 派生；Orchestrator、Project Explainer、

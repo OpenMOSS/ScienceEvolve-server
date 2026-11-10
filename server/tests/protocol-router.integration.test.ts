@@ -121,6 +121,106 @@ describe("protocol proxy loopback integration", () => {
     upstream = undefined;
   });
 
+  it("reserves the shared timeout budget for buffered recovery and remembers it for the invocation", async () => {
+    const bodies: Array<{ stream: boolean }> = [];
+    const activity = vi.fn();
+    let streamClosed = false;
+    upstream = createServer(async (request, response) => {
+      let raw = "";
+      for await (const chunk of request) raw += chunk.toString();
+      const body = JSON.parse(raw) as { stream: boolean };
+      bodies.push(body);
+      if (body.stream) {
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.write('data: {"choices":[{"delta":{"role":"assistant"},"finish_reason":null}]}\n\n');
+        response.once("close", () => { streamClosed = true; });
+        return;
+      }
+      await delay(700);
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify(responseBody("chat-completions")));
+    });
+    const address = await listen(upstream);
+    proxy = await startProtocolProxy({ sourceProtocol: "responses", targetProtocol: "chat-completions",
+      gatewayUrl: `http://127.0.0.1:${address.port}/v1`, force: true, timeoutMs: 3_000, onActivity: activity });
+    const request = () => fetch(`${proxy!.baseUrl}/responses`, { method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${proxy!.token}` },
+      body: JSON.stringify(sourceBody("responses", true)), signal: AbortSignal.timeout(4_000) });
+    const first = request();
+    await vi.waitFor(() => expect(bodies).toHaveLength(2), { timeout: 2_000 });
+    expect(activity).not.toHaveBeenCalled();
+    expect(await (await first).text()).toContain("hello from chat");
+    expect(streamClosed).toBe(true);
+    expect(await (await request()).text()).toContain("hello from chat");
+    expect(bodies.map(body => body.stream)).toEqual([true, false, false]);
+    expect(proxy.getFailure?.()).toBeUndefined();
+  });
+
+  it("keeps both transport failure causes when buffered recovery exhausts the same budget", async () => {
+    const streams: boolean[] = [];
+    upstream = createServer(async (request, response) => {
+      let raw = "";
+      for await (const chunk of request) raw += chunk.toString();
+      const body = JSON.parse(raw) as { stream: boolean };
+      streams.push(body.stream);
+      response.writeHead(200, { "content-type": body.stream ? "text/event-stream" : "application/json" });
+      response.flushHeaders();
+    });
+    const address = await listen(upstream);
+    proxy = await startProtocolProxy({ sourceProtocol: "responses", targetProtocol: "chat-completions",
+      gatewayUrl: `http://127.0.0.1:${address.port}/v1`, force: true, timeoutMs: 1_200 });
+    const response = await fetch(`${proxy.baseUrl}/responses`, { method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${proxy.token}` },
+      body: JSON.stringify(sourceBody("responses", true)), signal: AbortSignal.timeout(3_000) });
+    const text = await response.text();
+    expect(streams).toEqual([true, false]);
+    expect(text).toContain("first-output deadline");
+    expect(text).toContain("shared request budget");
+    expect(proxy.getFailure?.()?.message).toContain("first-output deadline");
+  });
+
+  it("does not replay a stream after model output has already reached the native Harness", async () => {
+    let requests = 0;
+    upstream = createServer(async (request, response) => {
+      for await (const _chunk of request) { /* Drain the request. */ }
+      requests += 1;
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "visible partial output" }, finish_reason: null }] })}\n\n`);
+      setTimeout(() => response.destroy(), 30);
+    });
+    const address = await listen(upstream);
+    proxy = await startProtocolProxy({ sourceProtocol: "responses", targetProtocol: "chat-completions",
+      gatewayUrl: `http://127.0.0.1:${address.port}/v1`, force: true, timeoutMs: 1_200 });
+    const response = await fetch(`${proxy.baseUrl}/responses`, { method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${proxy.token}` },
+      body: JSON.stringify(sourceBody("responses", true)) });
+    expect(await response.text()).toContain("visible partial output");
+    expect(requests).toBe(1);
+  });
+
+  it("honors caller cancellation before output without starting buffered recovery", async () => {
+    let requests = 0;
+    upstream = createServer(async (request, response) => {
+      for await (const _chunk of request) { /* Drain the request. */ }
+      requests += 1;
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.flushHeaders();
+    });
+    const address = await listen(upstream);
+    proxy = await startProtocolProxy({ sourceProtocol: "responses", targetProtocol: "chat-completions",
+      gatewayUrl: `http://127.0.0.1:${address.port}/v1`, force: true, timeoutMs: 1_200 });
+    const controller = new AbortController();
+    const pending = fetch(`${proxy.baseUrl}/responses`, { method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${proxy.token}` },
+      body: JSON.stringify(sourceBody("responses", true)), signal: controller.signal });
+    const cancelled = expect(pending).rejects.toThrow();
+    await vi.waitFor(() => expect(requests).toBe(1));
+    controller.abort();
+    await cancelled;
+    await delay(500);
+    expect(requests).toBe(1);
+  });
+
   it.each(protocols)("retains the actual outgoing tool schemas once per changed set (%s)", async targetProtocol => {
     const forwarded: Array<Record<string, unknown>> = [];
     const traces: Array<{ message: string; data?: Record<string, unknown> }> = [];
@@ -481,7 +581,7 @@ describe("protocol proxy loopback integration", () => {
     expect(failed.status).toBe(502);
     expect(proxy.getFailure?.()).toMatchObject({
       code: "MODEL_PROVIDER_FAILED",
-      message: "Gateway request failed before a response was received",
+      message: "Gateway request failed: fetch failed",
       sourceProtocol: "chat-completions",
       targetProtocol: "chat-completions"
     });
@@ -1113,7 +1213,7 @@ describe("protocol proxy loopback integration", () => {
     expect(body).toContain("event: message_start");
     expect(body).toContain("缓冲回答");
     expect(body).toContain("event: message_stop");
-    expect(body).toContain("\u200b");
+    expect(body).not.toContain("\u200b");
     expect(upstreamBody?.stream).toBe(false);
     expect(upstreamBody).not.toHaveProperty("chat_template_kwargs");
     expect(onActivity).toHaveBeenCalledTimes(1);
@@ -1132,7 +1232,7 @@ describe("protocol proxy loopback integration", () => {
     });
   });
 
-  it("semantically reuses a buffered Main response after a fresh Claude client disconnects", async () => {
+  it("semantically reuses a buffered Main response after a fresh native client disconnects", async () => {
     let upstreamRequests = 0;
     const usage: GatewayTokenUsage[] = [];
     const terminalTool = "mcp__scienceevolve-orchestration-control__route_to_agent";
@@ -1172,7 +1272,7 @@ describe("protocol proxy loopback integration", () => {
       model: "model-neutral-a",
       max_tokens: 128,
       stream: true,
-      system: `ephemeral Claude session ${sessionMarker}`,
+      system: `ephemeral native session ${sessionMarker}`,
       messages: [{ role: "user", content: "recover this turn" }],
       tools: [{
         name: terminalTool,
@@ -1217,7 +1317,7 @@ describe("protocol proxy loopback integration", () => {
     const retry = await fetch(`${proxy.baseUrl}/messages`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": proxy.token },
-      // A fresh Claude session changes private prompt material, but the
+      // A fresh native session changes private prompt material, but the
       // invocation still recovers the same undelivered response stage.
       body: requestBody("second")
     });
@@ -1234,7 +1334,7 @@ describe("protocol proxy loopback integration", () => {
     expect(bufferedResponseCache.size).toBe(0);
   });
 
-  it("semantically reuses a buffered initial Worker tool response across fresh Claude prompts", async () => {
+  it("semantically reuses a buffered initial Worker tool response across fresh native prompts", async () => {
     let upstreamRequests = 0;
     const appendTool = "mcp__scienceevolve-workspace__scienceevolve_append_file";
     upstream = createServer(async (_request, response) => {
@@ -1332,7 +1432,7 @@ describe("protocol proxy loopback integration", () => {
     expect(bufferedResponseCache.size).toBe(0);
   });
 
-  it("replays an undelivered later Worker turn to a fresh Claude process", async () => {
+  it("replays an undelivered later Worker turn to a fresh native process", async () => {
     let upstreamRequests = 0;
     const readTool = "Read";
     const appendTool = "mcp__scienceevolve-workspace__scienceevolve_append_file";
@@ -1397,7 +1497,7 @@ describe("protocol proxy loopback integration", () => {
         model: "model-neutral-a",
         max_tokens: 128,
         stream: true,
-        system: "first Claude process",
+        system: "first native process",
         messages: [{ role: "user", content: "read, then write" }],
         tools
       })
@@ -1414,7 +1514,7 @@ describe("protocol proxy loopback integration", () => {
         model: "model-neutral-a",
         max_tokens: 128,
         stream: true,
-        system: "first Claude process",
+        system: "first native process",
         messages: [
           { role: "user", content: "read, then write" },
           { role: "assistant", content: [{ type: "tool_use", id: "call_read_evidence", name: readTool, input: { file_path: "evidence.md" } }] },
@@ -1704,14 +1804,15 @@ describe("protocol proxy loopback integration", () => {
     expect(proxy.getFailure?.()).toBeUndefined();
   });
 
-  it("allows clean native retries after malformed provider arguments and still rejects poisoned history", async () => {
+  it("lets the native Harness correct malformed arguments through its original tool result", async () => {
     const malformedArguments = '{"path":"report.md","content":"draft"}\n,\n"description":"extra"';
     let upstreamRequests = 0;
+    const forwarded: string[] = [];
     upstream = createServer(async (request, response) => {
       upstreamRequests += 1;
-      for await (const _chunk of request) {
-        // Drain the request before responding.
-      }
+      let raw = "";
+      for await (const chunk of request) raw += chunk.toString();
+      forwarded.push(raw);
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify({
         id: "neutral-malformed-tool",
@@ -1757,14 +1858,16 @@ describe("protocol proxy loopback integration", () => {
       })
     });
     const firstBody = await first.text();
-    expect(firstBody).toContain("invalid JSON tool arguments");
-    expect(firstBody).not.toContain(malformedArguments);
-    expect(proxy.getFailure?.()).toMatchObject({
-      code: "PROTOCOL_TOOL_ARGUMENTS_INVALID",
-      toolName: "scienceevolve_append_file",
-      sourceProtocol: "chat-completions",
-      targetProtocol: "chat-completions"
+    const firstFrames = firstBody.split("\n\n").flatMap(frame => {
+      const data = frame.split("\n").find(line => line.startsWith("data: "))?.slice(6);
+      return data && data !== "[DONE]" ? [JSON.parse(data)] : [];
     });
+    const call = firstFrames.flatMap(frame => frame.choices ?? []).flatMap(choice => choice.delta?.tool_calls ?? [])
+      .find(tool => tool.function?.name === "scienceevolve_append_file");
+    expect(call?.id).toBe("append-malformed");
+    expect(call?.function.arguments).toBe(malformedArguments);
+    expect(firstFrames.some(frame => frame.error)).toBe(false);
+    expect(proxy.getFailure?.()).toBeUndefined();
     expect(upstreamRequests).toBe(1);
 
     const retried = await fetch(`${proxy.baseUrl}/chat/completions`, {
@@ -1773,7 +1876,11 @@ describe("protocol proxy loopback integration", () => {
       body: JSON.stringify({
         model: "model-neutral-a",
         stream: false,
-        messages: [{ role: "user", content: "retry the original clean input" }]
+        messages: [
+          { role: "user", content: "write a report" },
+          { role: "assistant", content: null, tool_calls: [call] },
+          { role: "tool", tool_call_id: "append-malformed", content: "Invalid JSON tool arguments; correct this call." }
+        ]
       })
     });
     expect(retried.status).toBe(200);
@@ -1798,16 +1905,29 @@ describe("protocol proxy loopback integration", () => {
         }]
       })
     });
-    expect(second.status).toBe(502);
-    expect(JSON.stringify(await second.json())).toContain("invalid JSON tool arguments");
+    expect(second.status).toBe(200);
+    await second.json();
+    expect(forwarded[2]).toContain("Execution outcome is unknown");
+    expect(upstreamRequests).toBe(3);
+    expect(proxy.getFailure?.()).toBeUndefined();
+
+    const ambiguous = await fetch(`${proxy.baseUrl}/chat/completions`, {
+      method: "POST", headers,
+      body: JSON.stringify({ model: "model-neutral-a", stream: false,
+        messages: [{ role: "assistant", content: null, tool_calls: [0, 1].map(() => ({
+          id: "duplicated-call", type: "function", function: { name: "scienceevolve_append_file", arguments: malformedArguments }
+        })) }] })
+    });
+    expect(ambiguous.status).toBe(502);
+    expect(JSON.stringify(await ambiguous.json())).toContain("invalid JSON tool arguments");
     expect(proxy.getFailure?.()).toMatchObject({
       code: "PROTOCOL_TOOL_ARGUMENTS_INVALID",
       toolName: "scienceevolve_append_file"
     });
-    expect(upstreamRequests).toBe(2);
+    expect(upstreamRequests).toBe(3);
   });
 
-  it("does not expose malformed streamed tool frames to a Responses-native Harness", async () => {
+  it("delivers malformed streamed arguments unchanged to a Responses-native Harness for correction", async () => {
     upstream = createServer(async (request, response) => {
       for await (const _chunk of request) {
         // Drain the request before responding.
@@ -1882,16 +2002,16 @@ describe("protocol proxy loopback integration", () => {
     });
     const body = await response.text();
 
-    expect(body).toContain('"type":"error"');
-    expect(body).toContain("invalid JSON tool arguments");
-    expect(body).not.toContain("response.function_call_arguments");
-    expect(body).not.toContain("report.md");
-    expect(proxy.getFailure?.()).toMatchObject({
-      code: "PROTOCOL_TOOL_ARGUMENTS_INVALID",
-      toolName: "scienceevolve_append_file",
-      sourceProtocol: "responses",
-      targetProtocol: "chat-completions"
+    const frames = body.split("\n\n").flatMap(frame => {
+      const data = frame.split("\n").find(line => line.startsWith("data: "))?.slice(6);
+      return data ? [JSON.parse(data)] : [];
     });
+    const call = frames.find(frame => frame.type === "response.output_item.done" && frame.item?.type === "function_call")?.item;
+    expect(call).toMatchObject({ call_id: "call-malformed-stream", name: "scienceevolve_append_file",
+      arguments: '{"path":"report.md","content":"draft"}\n,\n"description":"extra"' });
+    expect(frames.some(frame => frame.type === "error")).toBe(false);
+    expect(frames.some(frame => frame.type === "response.completed")).toBe(true);
+    expect(proxy.getFailure?.()).toBeUndefined();
   });
 
   it("retries a rejected sole required Chat tool with a named choice", async () => {

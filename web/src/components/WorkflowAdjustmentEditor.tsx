@@ -75,6 +75,7 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
   const refreshInFlight = useRef<Promise<void>>();
   const refreshQueued = useRef(false);
   const mounted = useRef(true);
+  const observedEventRevision = useRef(eventRevision);
   const persist = useCallback((next: WorkflowAdjustmentDraft) => {
     draftRef.current = next; setDraft(next);
     try { saveWorkflowAdjustmentDraft(localStorage, next); setStorageError(""); }
@@ -155,7 +156,12 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
       detailController.current?.abort(); detailRefreshController.current?.abort(); window.clearInterval(timer); window.removeEventListener("focus", wake); window.removeEventListener("online", wake);
       window.removeEventListener("openfars:workflow-adjusted", adjusted); };
   }, [refresh]);
-  useEffect(() => { const timer = window.setTimeout(() => void refresh(), 200); return () => window.clearTimeout(timer); }, [eventRevision, refresh]);
+  useEffect(() => {
+    if (observedEventRevision.current === eventRevision) return;
+    observedEventRevision.current = eventRevision;
+    const timer = window.setTimeout(() => void refresh(), 200);
+    return () => window.clearTimeout(timer);
+  }, [eventRevision, refresh]);
   const close = () => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); onClose(); };
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {

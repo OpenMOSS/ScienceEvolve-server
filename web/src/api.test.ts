@@ -1,4 +1,29 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+describe("Workflow replay read contracts", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it("keeps the supplied history boundary and cancellation signal", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ events: [{ seq: 3, type: "agent.started", ts: "2026-10-01T00:00:00Z", message: "started" }], hasMore: false, throughSeq: 10 }),
+      { status: 200, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const controller = new AbortController();
+    const result = await getWorkflowReplayEventPage("project/one", { before: 5, through: 10 }, controller.signal);
+    expect(result.events[0]!.seq).toBe(3);
+    expect(fetchMock).toHaveBeenCalledWith("./api/projects/project%2Fone/workflow/replay/events?limit=500&before=5&through=10",
+      expect.objectContaining({ signal: controller.signal }));
+  });
+
+  it("rejects events with missing timestamps instead of inventing a playback time", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ events: [{ seq: 1, type: "agent.started" }], hasMore: false, throughSeq: 1 }),
+      { status: 200, headers: { "content-type": "application/json" } })));
+    await expect(getWorkflowReplayEventPage("project")).rejects.toThrow("时间");
+  });
+
+  it("reports a missing revision response explicitly", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200, headers: { "content-type": "application/json" } })));
+    await expect(getWorkflowReplayConfigurationHistory("project")).rejects.toThrow("历史配置响应不完整");
+  });
+});
 import {
   addProjectUserInput,
   archiveProjects,
@@ -32,6 +57,8 @@ import {
   getRecommendationExplainerConfig,
   getProjectEventBootstrap,
   getProjectEventHistory,
+  getWorkflowReplayConfigurationHistory,
+  getWorkflowReplayEventPage,
   getProjects,
   projectAction,
   getQueue,
@@ -713,16 +740,16 @@ describe("frontend API contract", () => {
 
   it("keeps an unselectable built-in Harness in Catalog metadata without making it the default", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
-      skills: [], models: [], defaultHarnessId: "claude-code",
-      harnesses: ["codex", "dsh", "pi", "claude-code"].map((id) => ({
+      skills: [], models: [], defaultHarnessId: "fixture-anthropic",
+      harnesses: ["codex", "dsh", "pi", "fixture-anthropic"].map((id) => ({
         id, label: id, nativeProtocol: "responses",
-        ...(id === "claude-code" ? { userSelectable: false } : {}),
+        ...(id === "fixture-anthropic" ? { userSelectable: false } : {}),
         purposes: ["workflow", "probe"], capabilities: {}, available: true
       }))
     })));
     const catalog = await getCatalog();
-    expect(catalog.harnesses?.map((item) => item.id)).toEqual(["codex", "dsh", "pi", "claude-code"]);
-    expect(catalog.harnesses?.at(-1)).toMatchObject({ id: "claude-code", selectable: false });
+    expect(catalog.harnesses?.map((item) => item.id)).toEqual(["codex", "dsh", "pi", "fixture-anthropic"]);
+    expect(catalog.harnesses?.at(-1)).toMatchObject({ id: "fixture-anthropic", selectable: false });
     expect(catalog.defaultHarnessId).toBeUndefined();
   });
 
@@ -1110,12 +1137,13 @@ describe("frontend API contract", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       includeArchived ? "./api/projects?view=summary&includeArchived=true" : "./api/projects?view=summary",
       expect.objectContaining({
+        cache: "no-store",
         headers: expect.objectContaining({ Accept: "application/json" })
       })
     );
   });
 
-  it("uses the shared-workspace artifact content query", async () => {
+  it("uses an explicit shared-workspace artifact source path", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValue(
@@ -1130,11 +1158,12 @@ describe("frontend API contract", () => {
       path: "paper/main.tex",
       name: "main.tex",
       kind: "latex",
+      agent: "shared",
     });
 
     expect(result.content).toBe("\\\\section{Method}");
     expect(fetchMock).toHaveBeenCalledWith(
-      "./api/projects/prj_123/artifacts/content?path=paper%2Fmain.tex&origin=workspace",
+      "./api/projects/prj_123/artifacts/content/agent/shared/live/paper/main.tex",
       expect.objectContaining({
         headers: { Accept: "text/plain, application/json" }
       })
@@ -1155,10 +1184,10 @@ describe("frontend API contract", () => {
     const content = await getArtifact("prj_123", directory.entries[0]);
     expect(content.content).toBe("# Live report");
     const url = new URL(String(fetchMock.mock.calls[1][0]), "https://fixture.test");
-    expect(url.searchParams.get("workspaceId")).toBe("repository");
+    expect(url.pathname).toBe("/api/projects/prj_123/artifacts/content/workspace/repository/live/report.md");
     expect(url.searchParams.has("artifactId")).toBe(false);
     const download = new URL(getArtifactDownloadUrl("prj_123", directory.entries[0]), "https://fixture.test");
-    expect(download.searchParams.get("workspaceId")).toBe("repository");
+    expect(download.pathname).toBe(url.pathname);
     expect(download.searchParams.get("download")).toBe("1");
     expect(download.searchParams.has("artifactId")).toBe(false);
   });
@@ -1270,7 +1299,7 @@ describe("frontend API contract", () => {
       "./api/projects/prj_123/artifacts?view=summary",
       "./api/projects/prj_123/artifacts?view=directory&agent=idea&offset=0&limit=50",
       "./api/projects/prj_123/artifacts?agent=idea&offset=0&limit=100",
-      "./api/projects/prj_123/artifacts/content?path=proposal.md&origin=workspace&agent=idea&artifactId=art_idea"
+      "./api/projects/prj_123/artifacts/content/agent/idea/live/proposal.md?artifactId=art_idea"
     ]);
   });
 
@@ -1295,11 +1324,33 @@ describe("frontend API contract", () => {
       content: "# accepted version"
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      `./api/projects/prj_123/artifacts/content?path=results%2Freport.md&origin=workspace&agent=idea&artifactId=artifact_accepted&commitSha=${"a".repeat(40)}`,
+      `./api/projects/prj_123/artifacts/content/agent/idea/${"a".repeat(40)}/results/report.md?artifactId=artifact_accepted`,
       expect.objectContaining({
         headers: { Accept: "text/plain, application/json" }
       })
     );
+  });
+
+  it("keeps Unicode source names and file paths outside a Notebook proxy's re-encoded query", async () => {
+    const fetchMock = vi.fn(async (input: string) => {
+      const url = new URL(input, "https://notebook.test/proxy/4310/");
+      for (const [key, value] of [...url.searchParams]) url.searchParams.set(key, encodeURIComponent(value));
+      if (decodeURIComponent(url.pathname).includes(`/artifacts/content/agent/研究总编/${"a".repeat(40)}/reports/最终 结果.md`) &&
+          url.searchParams.get("artifactId") === "artifact_unicode") return new Response("# accepted Unicode report");
+      return new Response('{"error":"Workspace artifact agent is required"}', { status: 400 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(getDisplayedFile("prj_123", { agent: "研究总编", path: "reports/最终 结果.md", title: "最终结果", artifactId: "artifact_unicode", commitSha: "a".repeat(40) }))
+      .resolves.toMatchObject({ content: "# accepted Unicode report", agent: "研究总编" });
+  });
+
+  it("rejects missing or mixed artifact sources before sending a request", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const artifact = { path: "report.md", name: "report.md", kind: "text" as const };
+    await expect(getArtifact("prj_123", artifact)).rejects.toThrow("requires an Agent or workspace source");
+    await expect(getArtifact("prj_123", { ...artifact, workspaceId: "repository", commitSha: "a".repeat(40) })).rejects.toThrow("cannot use a publication commit");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("builds a scoped streaming-download URL for a shared workspace file", () => {
@@ -1312,7 +1363,7 @@ describe("frontend API contract", () => {
         origin: "workspace"
       })
     ).toBe(
-      "./api/projects/prj_123/artifacts/content?path=results%2Fmodel+final.bin&download=1&origin=workspace&agent=execution"
+      "./api/projects/prj_123/artifacts/content/agent/execution/live/results/model%20final.bin?download=1"
     );
   });
 

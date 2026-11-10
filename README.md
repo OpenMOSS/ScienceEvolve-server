@@ -46,7 +46,7 @@ ScienceEvolve is the autonomous version of the research framework presented in [
 
 > “Here is a Poisson solver. Explore two improvements, validate convergence, compare the errors, and write a report.”
 
-Connect planning, parallel exploration, implementation, and review on the canvas. Main coordinates the work and confirms completion; Workers handle research, experiments, coding, and review. Each Agent can select **Codex, Claude Code, DSH, or pi**, with its own model, prompt, Skills, and MCP tools.
+Connect planning, parallel exploration, implementation, and review on the canvas. Main coordinates the work and confirms completion; Workers handle research, experiments, coding, and review. Each Agent can select **Codex, DSH, or pi**, with its own model, prompt, Skills, and MCP tools.
 
 <div align="center">
 
@@ -355,7 +355,7 @@ This means **up to three iterations per batch, then return to Main**. Main check
 
 Configure **“GitHub 账号” (GitHub account)**, enable **“并行协作模式” (parallel collaboration)**, and create a group. Choose an existing Agent as Leader and reference other Agents as business nodes. Click the group to edit its internal Workflow; use breadcrumbs or **“返回父图” (return to parent)** to navigate back. Only edges from the group entry create parallel paths. Internal workflows can use strong/weak edges, Loops, and nested groups.
 
-References to the same Agent share configuration, session, and directory, with calls serialized in a queue; different Agents can run concurrently. Completing a group waits for required paths and Git integration. PR merging and local synchronization at each level must finish before successors run. See [Git account configuration](docs/configuration.md#github-accounts-and-git-collaboration) and [scoped collaboration workflows](docs/openfars-collaboration/scoped-workflow-v3-en.md).
+References to the same Agent share configuration, session, and directory, with calls serialized in a queue; different Agents can run concurrently. Completing a group waits for required paths and Git integration. PR merging and local synchronization at each level must finish before successors run. See [Git account configuration](docs/configuration.md#github-accounts-and-git-collaboration) and [scoped collaboration workflows](docs/scienceevolve-collaboration/scoped-workflow-v3-en.md).
 
 ### Save, adjust, and recover
 
@@ -468,7 +468,7 @@ The CCFA and Nature copies do not record import commits; their repository attrib
 <tr><td align="left">Connect models, select protocols, and test combinations</td><td align="left"><a href="docs/configuration.md#global-gateways">Global gateways</a></td></tr>
 <tr><td align="left">Install another Harness or tune an Agent</td><td align="left"><a href="docs/configuration.md#harness">Harness</a> · <a href="docs/configuration.md#agent">Agent settings</a> · <a href="harness/README_en.md">Runtime guide</a></td></tr>
 <tr><td align="left">Connect tools and add project resources</td><td align="left"><a href="docs/configuration.md#skills-and-mcp">Skills and MCP</a> · <a href="docs/inspire-async-experiments-en.md">Inspire/SII experiments</a></td></tr>
-<tr><td align="left">Configure GitHub OAuth and nested parallel workflows</td><td align="left"><a href="docs/configuration.md#github-accounts-and-git-collaboration">Git accounts</a> · <a href="docs/openfars-collaboration/scoped-workflow-v3-en.md">Collaboration workflows</a></td></tr>
+<tr><td align="left">Configure GitHub OAuth and nested parallel workflows</td><td align="left"><a href="docs/configuration.md#github-accounts-and-git-collaboration">Git accounts</a> · <a href="docs/scienceevolve-collaboration/scoped-workflow-v3-en.md">Collaboration workflows</a></td></tr>
 <tr><td align="left">Understand orchestration, permissions, recovery, and host differences</td><td align="left"><a href="docs/configuration.md#workflow">Workflow</a> · <a href="docs/architecture.md">Architecture</a> · <a href="docs/main-sdk-parity.md">Web / SDK boundaries</a></td></tr>
 </tbody></table>
 

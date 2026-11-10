@@ -4,7 +4,7 @@ const record = (value: unknown): Record<string, unknown> => value && typeof valu
 
 /** Adapt accepted Git turn results to the same read model as serial handoffs. */
 export function acceptedGitHandoff(source: {
-  git?: unknown; taskCompletions?: unknown; scopedAgentReports?: unknown; scopedExecutions?: unknown;
+  git?: unknown; taskCompletions?: unknown; scopedAgentReports?: unknown; scopedExecutions?: unknown; executions?: unknown;
 }): HandoffRecord | undefined {
   if (record(source.git).enabled !== true) return;
   const candidates: HandoffRecord[] = [];
@@ -16,6 +16,10 @@ export function acceptedGitHandoff(source: {
   for (const value of Object.values(record(source.taskCompletions))) {
     const completion = record(value);
     if (completion.status === "accepted") add(completion.agent, completion.invocationId, completion.summary, completion.acceptedAt);
+  }
+  for (const value of Array.isArray(source.executions) ? source.executions : []) {
+    const execution = record(value);
+    if (execution.status === "succeeded") add(execution.agentId, execution.invocationId, execution.output, execution.completedAt);
   }
   const executions = Array.isArray(source.scopedExecutions) ? source.scopedExecutions.map(record) : [];
   for (const value of Array.isArray(source.scopedAgentReports) ? source.scopedAgentReports : []) {

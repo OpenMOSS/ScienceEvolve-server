@@ -29,6 +29,30 @@ function weakEdge(id: string, target: string, fixed = false): CanvasEdge {
 }
 
 describe("CanvasInspector", () => {
+  it("persists HTML with other formats and clears it through the existing no-deliverable choice", () => {
+    const onChange = vi.fn();
+    let orchestration = normalizeAgentOrchestration(undefined);
+    const view = render(<CanvasInspector orchestration={orchestration} onOrchestrationChange={onChange} />);
+    expect(screen.getByRole("checkbox", { name: "HTML 文件" })).not.toBeChecked();
+    fireEvent.click(screen.getByRole("checkbox", { name: "HTML 文件" }));
+    orchestration = onChange.mock.lastCall![0];
+    view.rerender(<CanvasInspector orchestration={orchestration} onOrchestrationChange={onChange} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Markdown 文件" }));
+    orchestration = onChange.mock.lastCall![0];
+    expect(orchestration.resultFormat?.presets).toEqual(["HTML 文件", "Markdown 文件"]);
+    view.rerender(<CanvasInspector orchestration={JSON.parse(JSON.stringify(orchestration))} onOrchestrationChange={onChange} />);
+    expect(screen.getByRole("checkbox", { name: "HTML 文件" })).toBeChecked();
+    fireEvent.click(screen.getByRole("checkbox", { name: "无需额外成果" }));
+    orchestration = onChange.mock.lastCall![0];
+    expect(orchestration.resultFormat).toEqual({ presets: [], custom: "", none: true });
+    view.rerender(<CanvasInspector orchestration={orchestration} onOrchestrationChange={onChange} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "HTML 文件" }));
+    orchestration = onChange.mock.lastCall![0];
+    expect(orchestration.resultFormat).toEqual({ presets: ["HTML 文件"], custom: "", none: undefined });
+    view.rerender(<CanvasInspector orchestration={orchestration} onOrchestrationChange={onChange} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "HTML 文件" }));
+    expect(onChange.mock.lastCall![0].resultFormat.presets).toEqual([]);
+  });
   it("edits only the explicit experiment choice and honors locked canvas nodes", () => {
     const onAgentPatch = vi.fn();
     const agent = { ...DEFAULT_AGENTS.idea, permission: "workspace" as const, experimentMcp: true };

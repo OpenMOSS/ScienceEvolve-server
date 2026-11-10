@@ -64,7 +64,7 @@ it.each([
   f.input.envelope.callId = `merge-${"a".repeat(120)}`;
   const legacy = `agent-git-${f.input.execution.id}-epoch-1-${f.input.envelope.callId}-merge`;
   expect(legacy.length).toBeGreaterThan(160);
-  const bounded = agentGitOperationId(f.input, "merge");
+  const bounded = await agentGitOperationId(f.input, "merge");
   expect(bounded.length).toBeLessThanOrEqual(160);
   f.input.operation.id = identity === "bounded" ? bounded : legacy;
   const input = { ...f.input, inputId: `scoped:${f.input.arrivalRequestId}:epoch:1` };

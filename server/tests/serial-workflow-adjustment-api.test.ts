@@ -75,7 +75,7 @@ describe("Non Git workflow adjustments through the actual HTTP and backend path"
     const page = await request(f.app).get(`${f.url}/history`).expect(200);
     expect(page.body.records).toEqual([]);
     expect(f.calls).toHaveLength(1);
-    const projection = f.coordinator.database().projectState(f.project.id);
+    const projection = await f.coordinator.database().projectState(f.project.id);
     expect(projection.nodeRuns).toEqual([]); expect(projection.groupRuns).toEqual([]); expect(projection.executions).toEqual([]);
   });
 
@@ -165,13 +165,13 @@ describe("Non Git workflow adjustments through the actual HTTP and backend path"
     runtimes.push(restarted); await restarted.initialize();
     const recovered = await storage.loadState(f.project.id);
     expect(recovered.status).toBe("paused"); expect(recovered.activeAgentExecution!.id).toBe(taskId); expect(f.calls).toHaveLength(1);
-    expect(coordinator.getWorkflowAdjustmentDetail(recovered, input.requestId).record).toEqual(original);
+    expect((await coordinator.getWorkflowAdjustmentDetail(recovered, input.requestId)).record).toEqual(original);
     expect(recovered.agentSessions!.idea).toEqual(f.session); expect(recovered.executionCounts).toEqual(paused.executionCounts);
     await restarted.resume(f.project.id); await restarted.waitForIdle(f.project.id);
     const state = await storage.loadState(f.project.id);
     expect(state.status).toBe("completed"); expect(state.workflowRevision).toBe(2); expect(f.calls).toHaveLength(2);
     expect(f.calls[1].activeAgentExecution!.id).toBe(taskId); expect(state.agentSessions!.idea).toEqual(f.session);
     expect(state.executionCounts!.idea).toBe(1); expect(state.runCounts.idea).toBe(1);
-    expect(coordinator.getWorkflowAdjustmentDetail(state, input.requestId).record.status).toBe("applied");
+    expect((await coordinator.getWorkflowAdjustmentDetail(state, input.requestId)).record.status).toBe("applied");
   });
 });

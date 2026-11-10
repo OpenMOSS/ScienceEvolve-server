@@ -38,7 +38,7 @@ describe("shared project runtime badges", () => {
     expect(scopedNodeDisplayState(project, "inner", "node-a")).toBe("running");
   });
 
-  it.each([["paused", "paused"], ["interrupted", "interrupted"], ["cancelling", "stopping"], ["cancelled", "stopped"]] as const)(
+  it.each([["paused", "paused"], ["retrying", "retrying"], ["interrupted", "interrupted"], ["cancelling", "stopping"], ["cancelled", "stopped"]] as const)(
     "applies %s to every active nested member", (status, expected) => {
       const project = fixture();
       project.runtime!.status = status;

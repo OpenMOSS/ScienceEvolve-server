@@ -84,7 +84,9 @@ async function main(): Promise<void> {
     dshTurnIdleTimeoutMs: config.dshTurnIdleTimeoutMs,
     residentModelInactivityTimeoutMs: config.residentModelInactivityTimeoutMs,
     residentToolInactivityTimeoutMs: config.residentToolInactivityTimeoutMs,
-    protocolProxyTimeoutMs: config.protocolProxyTimeoutMs,
+    // Let transport recovery settle before either outer model watchdog expires.
+    protocolProxyTimeoutMs: Math.floor(Math.min(config.protocolProxyTimeoutMs,
+      config.agentActivityIdleWindowMs, config.residentModelInactivityTimeoutMs) * 0.9),
     // Backward-compatible configuration is normalized into the same generic
     // executable map consumed by every Adapter.
     harnessExecutables: { [DEFAULT_HARNESS_ID]: config.codexBin }
@@ -161,6 +163,7 @@ async function main(): Promise<void> {
     githubAccounts,
     harnessCatalog: () => runner.harnessCatalog(),
     config,
+    runtimeHealth: () => collaborationRuntime.writerLeaseHealth(),
     harnessVersion
   });
   const server = app.listen(config.port, config.host, () => {

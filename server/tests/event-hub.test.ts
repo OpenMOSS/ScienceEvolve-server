@@ -18,6 +18,58 @@ afterEach(() => {
 });
 
 describe("EventHub live Assistant snapshots", () => {
+  it("streams visible summaries separately, coalesces activity, and retires exact durable content", () => {
+    const hub = new EventHub();
+    const summary = (seq: number, message: string): HarnessEvent => ({ schemaVersion: 1, eventId: `summary-${seq}`, seq,
+      timestamp: "2026-11-09T00:00:00Z", invocationId: stream.invocationId, harnessId: stream.harnessId,
+      kind: "reasoning.summary", phase: "delta", attempt: 0, itemId: "summary-1", message });
+    const first = summary(1, "Read ");
+    const second = summary(2, "the evidence.");
+    hub.publishHarnessEvent(stream.projectId, stream.agent, first);
+    hub.publishHarnessEvent(stream.projectId, stream.agent, first);
+    hub.publish(persisted(first));
+    hub.publishHarnessEvent(stream.projectId, stream.agent, second);
+    expect(hub.liveSnapshot(stream.projectId).events).toMatchObject([{ message: "Read the evidence." }]);
+    hub.publish(persisted(first));
+    expect(hub.liveSnapshot(stream.projectId).events).toHaveLength(1);
+    hub.publish(persisted(second));
+    hub.publishHarnessEvent(stream.projectId, stream.agent, second);
+    expect(hub.liveSnapshot(stream.projectId).events).toEqual([]);
+    hub.publishHarnessEvent(stream.projectId, stream.agent, { ...summary(3, " "), itemId: "empty-summary" });
+    expect(hub.liveSnapshot(stream.projectId).events).toEqual([]);
+    for (let seq = 4; seq < 24; seq++) hub.publishHarnessEvent(stream.projectId, stream.agent,
+      { ...summary(seq, ""), kind: "activity", itemId: undefined });
+    expect(hub.liveSnapshot(stream.projectId).events).toHaveLength(1);
+    expect(hub.liveSnapshot(stream.projectId).events[0]?.message).toBe("");
+    hub.clearInvocation(stream.projectId, stream.invocationId);
+    expect(hub.liveSnapshot(stream.projectId).events).toEqual([]);
+    hub.publishHarnessEvent(stream.projectId, stream.agent, summary(24, "Fresh summary"));
+    expect(hub.liveSnapshot(stream.projectId).events).toMatchObject([{ message: "Fresh summary" }]);
+  });
+
+  it("redacts secrets split across visible-summary chunks", () => {
+    const hub = new EventHub();
+    for (const [index, message] of ["credential sk-fixture", "-secret-value and answer"].entries()) {
+      hub.publishHarnessEvent(stream.projectId, stream.agent, { ...tool(index), kind: "reasoning.summary", phase: "delta",
+        itemId: "summary", message });
+      expect(JSON.stringify(hub.liveSnapshot(stream.projectId))).not.toContain("sk-fixture");
+    }
+    expect(hub.liveSnapshot(stream.projectId).events[0]?.message).toContain("[REDACTED]");
+  });
+
+  it("keeps summary, tool, activity and assistant identities distinct", () => {
+    const hub = new EventHub();
+    hub.publishHarnessEvent(stream.projectId, stream.agent, { ...tool(0), kind: "reasoning.summary", phase: "delta",
+      itemId: "summary", message: "Visible summary" });
+    hub.publishHarnessEvent(stream.projectId, stream.agent, { ...tool(1), eventId: "summary:summary" });
+    const activity: HarnessEvent = { ...tool(2), kind: "activity", phase: "delta", eventId: "activity" };
+    hub.appendAssistantDelta({ ...stream, itemId: "activity" }, "Assistant text");
+    hub.publishHarnessEvent(stream.projectId, stream.agent, activity);
+    expect(hub.liveSnapshot(stream.projectId).events).toHaveLength(3);
+    hub.publish(persisted(activity));
+    hub.appendAssistantDelta({ ...stream, itemId: "activity" }, " continues");
+    expect(hub.liveSnapshot(stream.projectId).streams[0]?.content).toBe("Assistant text continues");
+  });
   function tool(index: number): HarnessEvent {
     return {
       schemaVersion: 1, eventId: `tool-${index}`, seq: index,

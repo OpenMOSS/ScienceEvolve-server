@@ -1,6 +1,6 @@
 研究方向：请填写。可选RESEARCH_BRIEF.md和参考论文/base repo：请填写。
 Task数据/环境/真实评测入口/可用算力与总预算：请填写。
-模型：默认作者claude-opus-5（claude-code）、reviewer gpt-6-astra（codex），须配置两套可用profile；允许替换同等能力但必须不同已知模型家族。
+模型：默认作者claude-opus-5（pi）、reviewer gpt-6-astra（codex），须配置两套可用profile；允许替换同等能力但必须不同已知模型家族。
 执行完整research-pipeline，AUTO_PROCEED=true、CODE_REVIEW=true、REVIEWER_DIFFICULTY=medium、RESUMABLE=true；AUTO_WRITE=true时填写VENUE与写作资源。若只要研究阶段，显式设AUTO_WRITE=false（上游默认），不是删掉写作能力。
 文献/实验/写作所需外部服务均按实际环境填写。不可用时说明阻断，不能省略必需能力。不得启动上游ARIS CLI全管线代替SCIENCEEVOLVE编排。
 投稿assurance：使用随附Anti-Autoresearch固定版本及其eval gate、逐维度只读审计、确定性裁决；准备原生Codex profile的gpt-5.6-sol/xhigh及proof-checker所需ultra或原允许fallback。

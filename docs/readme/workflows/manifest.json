@@ -59,11 +59,11 @@
   {
     "id": "aris",
     "source": "example/aris/workflow.json",
-    "sourceSha256": "f730dde2dd7d2379ce82698056b1146bd532ebf2ea7263740e814b51ef058e64",
+    "sourceSha256": "00f7b55a81449222ee5b4ebbc1447333625f3a6649c7f98cd9ec2422b34d3fd8",
     "screenshot": "aris.jpg",
     "capture": "Existing generic Web JSON import parser and actual read-only WorkflowPresetPreview / WorkflowCanvasEditor; isolated frontend, no backend or model execution",
-    "frontendCommit": "16ad6521247174752ae3038acaaebff455c45bcc",
-    "captureDate": "2026-11-03",
+    "frontendCommit": "fa26585f02fe3a631397d22d86f7bb03b2029ce4",
+    "captureDate": "2026-11-10",
     "viewport": {
       "width": 1800,
       "height": 1100,
@@ -73,7 +73,7 @@
       "width": 2700,
       "height": 1650
     },
-    "screenshotSha256": "87bcc3579b1e7fd68a062a39ebe161a48f5f21bf34baffca20d88c8b79dec907"
+    "screenshotSha256": "e2e7ee2b7308904efef39f935540bac92bb350d1c0a00eae54c1a42089636ccc"
   },
   {
     "id": "metaharness",

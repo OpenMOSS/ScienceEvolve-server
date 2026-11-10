@@ -77,7 +77,11 @@ export INSPIRE_SKIP_UPDATE_CHECK=1
 export HOST PORT
 
 cd "$BASE"
-nohup "$NODE" "$SERVER_ENTRY" >> "$LOG_FILE" 2>&1 < /dev/null &
+service_command=("$NODE" "$SERVER_ENTRY")
+if [[ -n "${OPENFARS_SERVICE_CGROUP:-}" ]]; then
+  service_command=(bash "$BASE/scripts/run-in-cpu-group.sh" "$OPENFARS_SERVICE_CGROUP" "${service_command[@]}")
+fi
+nohup "${service_command[@]}" >> "$LOG_FILE" 2>&1 < /dev/null &
 started_pid=$!
 printf "%s\n" "$started_pid" > "$PID_FILE"
 

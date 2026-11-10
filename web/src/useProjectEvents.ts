@@ -17,8 +17,8 @@ import type {
   ProjectLiveSnapshot
 } from "./types";
 
-const INITIAL_EVENT_LIMIT = 1_000;
-const HISTORY_PAGE_LIMIT = 1_000;
+const INITIAL_EVENT_LIMIT = 200;
+const HISTORY_PAGE_LIMIT = 200;
 const LIVE_BATCH_MS = 120;
 
 const NAMED_EVENTS = [
@@ -196,8 +196,12 @@ export function useProjectEvents(
   hasOlder: boolean;
   historyLoading: boolean;
   historyError: string;
+  timelineHasOlder: boolean;
+  timelineHistoryLoading: boolean;
+  timelineHistoryError: string;
   live: ProjectLiveSnapshot;
   loadOlder: () => Promise<void>;
+  loadOlderTimeline: () => Promise<void>;
   reset: () => void;
 } {
   const [events, setEvents] = useState<AgentEvent[]>([]);
@@ -207,6 +211,10 @@ export function useProjectEvents(
   const [hasOlder, setHasOlder] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
+  const [timelineHasOlder, setTimelineHasOlder] = useState(false);
+  const [timelineHistoryLoading, setTimelineHistoryLoading] = useState(false);
+  const [timelineHistoryError, setTimelineHistoryError] = useState("");
+  const timelineCursor = useRef<number>();
   const [live, setLive] = useState<ProjectLiveSnapshot>({
     projectId: projectId ?? "",
     streams: [],
@@ -231,6 +239,10 @@ export function useProjectEvents(
     setHasOlder(false);
     setHistoryLoading(false);
     setHistoryError("");
+    setTimelineHasOlder(false);
+    setTimelineHistoryLoading(false);
+    setTimelineHistoryError("");
+    timelineCursor.current = undefined;
     setLive({ projectId, streams: [], events: [] });
 
     let source: EventSource | undefined;
@@ -378,6 +390,8 @@ export function useProjectEvents(
           if (event.eventId) bootstrapEventIds.add(event.eventId);
         }
         const recentTimeline = bootstrap.events.filter(isAgentTimelineEvent);
+        timelineCursor.current = bootstrap.timelineEvents[0]?.seq;
+        setTimelineHasOlder(bootstrap.timelineHasMore === true);
         setEvents(bootstrap.events);
         setTimelineEvents(
           collapseBusinessAssignments(mergeEvents(bootstrap.timelineEvents, recentTimeline))
@@ -426,6 +440,7 @@ export function useProjectEvents(
       );
       if (activeProjectId.current !== requestedProjectId) return;
       setEvents((current) => mergeEvents(current, page.events));
+      setTimelineEvents(current => collapseBusinessAssignments(mergeEvents(current, page.events.filter(isAgentTimelineEvent))));
       setHasOlder(page.hasMore);
     } catch (reason) {
       if (activeProjectId.current !== requestedProjectId) return;
@@ -438,6 +453,24 @@ export function useProjectEvents(
       }
     }
   }, [enabled, events, hasOlder, historyLoading, projectId]);
+
+  const loadOlderTimeline = useCallback(async () => {
+    const requestedProjectId = projectId, before = timelineCursor.current;
+    if (!requestedProjectId || !enabled || !timelineHasOlder || timelineHistoryLoading || before === undefined) return;
+    setTimelineHistoryLoading(true);
+    setTimelineHistoryError("");
+    try {
+      const page = await getProjectEventHistory(requestedProjectId, before, HISTORY_PAGE_LIMIT, "timeline");
+      if (activeProjectId.current !== requestedProjectId) return;
+      setTimelineEvents(current => collapseBusinessAssignments(mergeEvents(current, page.events)));
+      timelineCursor.current = page.events[0]?.seq ?? before;
+      setTimelineHasOlder(page.hasMore);
+    } catch (reason) {
+      if (activeProjectId.current === requestedProjectId) setTimelineHistoryError(reason instanceof Error ? reason.message : "更早调用加载失败");
+    } finally {
+      if (activeProjectId.current === requestedProjectId) setTimelineHistoryLoading(false);
+    }
+  }, [enabled, projectId, timelineHasOlder, timelineHistoryLoading]);
 
   const reset = () => {
     latestSeq.current = 0;
@@ -456,8 +489,12 @@ export function useProjectEvents(
     hasOlder,
     historyLoading,
     historyError,
+    timelineHasOlder,
+    timelineHistoryLoading,
+    timelineHistoryError,
     live,
     loadOlder,
+    loadOlderTimeline,
     reset
   };
 }

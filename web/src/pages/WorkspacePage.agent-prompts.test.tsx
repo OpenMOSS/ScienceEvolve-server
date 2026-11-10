@@ -39,7 +39,7 @@ it("shows project Agent prompt sources for the latest unsaved model without incl
   expect(within(main).getByLabelText("System Prompt")).toHaveAttribute("readonly");
   expect(getCatalog).not.toHaveBeenCalled();
   const idea = screen.getByRole("region", { name: "idea 提示词来源" });
-  expect(within(idea).getByLabelText("System Prompt")).toHaveProperty("value", expect.stringContaining("OpenFARS permission mode:"));
+  expect(within(idea).getByLabelText("System Prompt")).toHaveProperty("value", expect.stringContaining("ScienceEvolve permission mode:"));
   await waitFor(() => expect(within(idea).getByLabelText("Harness Prompt")).toHaveValue("NATIVE_native-a"));
   expect(within(idea).getByLabelText("Harness Prompt")).toBeVisible();
 

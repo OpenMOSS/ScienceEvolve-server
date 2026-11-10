@@ -521,7 +521,7 @@ export type ProjectMcpDefinitions = Record<string, ProjectMcpDefinition>;
 export interface AgentProgress {
   state: AgentProgressState;
   runs: number;
-  /** Business executions; retries and session resumes do not increment it. */
+  /** Main counts native invocations; other Agents count business executions. */
   executions?: number;
   queuePosition?: number;
 }
@@ -883,7 +883,9 @@ export interface ProjectRuntimeProjection {
   status: ProjectStatus;
   phase: string;
   waiting?: {
-    kind: "recovery" | "management" | "workflow-adjustment" | "configuration" | "authorization" | "user-input" | "backoff";
+    kind: "recovery" | "management" | "workflow-adjustment" | "configuration" | "authorization" | "user-input" | "backoff" | "service";
+    failedAt?: string;
+    errorCode?: string;
     reason: string;
     agentId?: AgentName;
     groupRunId?: string;
@@ -950,6 +952,7 @@ export interface FailureAttemptOperationSummary {
 }
 
 export interface FailureAttemptSummary {
+  /** Historical follow-up evidence; current blockers are recorded in runtime.waiting. */
   currentStatus: "healthy" | "failed";
   totalAttempts: number;
   failedAttempts: number;
@@ -1276,6 +1279,12 @@ export interface FormalProjectState {
   experiments: { version: string; revision: number; ledger: { experiments: Array<{
     id: string; agent: string; taskId: string; runId: string; status: string; required: boolean; observedAt?: string; resultReceived?: boolean;
   }> } };
+}
+
+export interface ProjectFolder {
+  id: string;
+  name: string;
+  projectIds: string[];
 }
 
 export interface Project {

@@ -34,7 +34,7 @@ import {
 } from "./workflow-canvas/core/workflow-nodes";
 
 const NEW_TEMPLATE = "__new_template__";
-const RESULT_FORMAT_PRESETS = ["论文", "代码", "Markdown 文件", "图片", "表格", "其他"] as const;
+const RESULT_FORMAT_PRESETS = ["论文", "代码", "Markdown 文件", "HTML 文件", "图片", "表格", "其他"] as const;
 
 function routeEdgesFor(
   template: AgentOrchestrationTemplate,

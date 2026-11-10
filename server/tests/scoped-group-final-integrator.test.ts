@@ -253,7 +253,7 @@ describe("scoped canonical group final integration", () => {
       action: { tool: "complete_group" as const, groupRunId: "run-G", coordinatorEpoch: second.coordinatorEpoch, output: "Final merge verified" } };
     // The integration round's finish cannot substitute for this completion
     // round even though both management calls use the same Agent and group.
-    expect(() => database.revalidateScopedLeaderAction({ ...currentAuthority, envelope: currentComplete })).toThrow(/finished task/);
+    expect(() => database.revalidateScopedLeaderAction({ ...currentAuthority, envelope: currentComplete })).toThrow(/returned task/);
     database.recordScopedLeaderTaskCompletion({ projectId: "project-1", groupRunId: "run-G", agentId: "main", invocationId: "leader-complete",
       coordinatorEpoch: second.coordinatorEpoch, envelope: finish("finish-complete", "leader-complete", second.coordinatorEpoch) });
     expect(() => database.completeScopedGroupAfterLeaderDecision({ ...currentAuthority, output: "Final merge verified" }))

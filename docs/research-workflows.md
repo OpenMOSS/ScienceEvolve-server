@@ -14,9 +14,9 @@ This guide explains Main / Worker roles, dual loops, Web / SDK boundaries, and o
 
 Every project contains exactly one required `main` Agent. It interprets requirements, schedules work, handles user input and recovery, and verifies delivery under the termination protocol. Workers perform research, experiments, writing, review, and custom tasks. A method may authorize a terminal Worker to verify completion directly. An edge to finish alone is insufficient.
 
-Each Agent can select Codex, Claude Code, DSH, or pi, with its own model, prompt, Skills, MCP services, reasoning options, and execution permissions. Gateways support OpenAI Responses, OpenAI Chat Completions, and Anthropic Messages. See [gateways](configuration.md#global-gateways) and [Agent settings](configuration.md#agent).
+Each Agent can select Codex, DSH, or pi, with its own model, prompt, Skills, MCP services, reasoning options, and execution permissions. Gateways support OpenAI Responses, OpenAI Chat Completions, and Anthropic Messages. See [gateways](configuration.md#global-gateways) and [Agent settings](configuration.md#agent).
 
-Git collaboration organizes parallel paths through internal workflows and nested groups. References to the same Agent share configuration and sessions. Leaders coordinate within group scope, with PR integration at each level. See [scoped collaboration workflows (v3)](openfars-collaboration/scoped-workflow-v3-en.md).
+Git collaboration organizes parallel paths through internal workflows and nested groups. References to the same Agent share configuration and sessions. Leaders coordinate within group scope, with PR integration at each level. See [scoped collaboration workflows (v3)](scienceevolve-collaboration/scoped-workflow-v3-en.md).
 
 ## Dual loops
 

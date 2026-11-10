@@ -974,9 +974,9 @@ function downgradeCollaborationSchemaToV1(databasePath: string): void {
   }
 }
 
-async function waitFor(predicate: () => boolean): Promise<void> {
+async function waitFor(predicate: () => boolean | Promise<boolean>): Promise<void> {
   const deadline = Date.now() + 10_000;
-  while (!predicate()) {
+  while (!await predicate()) {
     if (Date.now() > deadline) throw new Error("Timed out waiting for legacy migration recovery");
     await new Promise((resolve) => setTimeout(resolve, 5));
   }

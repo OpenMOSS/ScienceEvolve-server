@@ -14,7 +14,7 @@ import type { ArtifactRecord, ProjectState } from "../src/types.js";
 const exec = promisify(execFile);
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); await Promise.all(roots.splice(0).map(root => fs.rm(root, { recursive: true, force: true }))); });
-async function fixture(schemaVersion = 3) {
+async function fixture(schemaVersion = 3, agent = "writer") {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "scienceevolve-git-artifact-read-")); roots.push(root);
   const storage = new ProjectStorage(root, new EventHub());
   const id = `prj_${"a".repeat(32)}`;
@@ -24,20 +24,22 @@ async function fixture(schemaVersion = 3) {
   const git = async (...args: string[]) => (await exec("git", args, { cwd: repository })).stdout.trim();
   await git("init", "-b", "main");
   await git("config", "user.name", "Fixture"); await git("config", "user.email", "fixture@example.test");
-  const state = { id, agents: { writer: {} }, orchestration: { schemaVersion },
+  const state = { id, agents: { [agent]: {} }, orchestration: { schemaVersion },
     git: { enabled: true, repository: { localPath: repository } }, artifacts: [], executions: [], pullRequests: [] } as unknown as ProjectState;
   vi.spyOn(storage, "loadState").mockResolvedValue(state);
-  const publish = async (content: string, version: number) => {
-    await fs.writeFile(path.join(repository, "report.md"), content);
-    await git("add", "report.md"); await git("commit", "-m", `Publication ${version}`);
+  const publish = async (content: string, version: number, filename = "report.md") => {
+    await fs.mkdir(path.dirname(path.join(repository, filename)), { recursive: true });
+    await fs.writeFile(path.join(repository, filename), content);
+    await git("add", filename); await git("commit", "-m", `Publication ${version}`);
     const commitSha = await git("rev-parse", "HEAD");
     const executionId = `execution-${version}`, pullRequestId = `pr-${version}`;
-    const worktreePath = schemaVersion === 3 ? path.join(projectRoot, "git-worktrees", "agents", "writer") : path.join(projectRoot, "git-worktrees", executionId);
+    const worktreePath = schemaVersion === 3 ? path.join(projectRoot, "git-worktrees", "agents", agent) : path.join(projectRoot, "git-worktrees", executionId);
     await fs.mkdir(worktreePath, { recursive: true });
-    await fs.writeFile(path.join(worktreePath, "report.md"), "unaccepted mutable bytes");
-    state.executions!.push({ id: executionId, agentId: "writer", ownershipEpoch: version, status: "succeeded", worktreePath } as never);
+    await fs.mkdir(path.dirname(path.join(worktreePath, filename)), { recursive: true });
+    await fs.writeFile(path.join(worktreePath, filename), "unaccepted mutable bytes");
+    state.executions!.push({ id: executionId, agentId: agent, ownershipEpoch: version, status: "succeeded", worktreePath } as never);
     state.pullRequests!.push({ id: pullRequestId, ownerExecutionId: executionId, status: "merged", headSha: commitSha, base: "main" } as never);
-    const artifact: ArtifactRecord = { id: `artifact-${version}`, agent: "writer", path: "report.md", title: "Research report", kind: "markdown", description: "Accepted output",
+    const artifact: ArtifactRecord = { id: `artifact-${version}`, agent, path: filename, title: "Research report", kind: "markdown", description: "Accepted output",
       size: Buffer.byteLength(content), sha256: createHash("sha256").update(content).digest("hex"), updatedAt: `2026-10-13T12:00:0${version}.000Z`,
       gitSource: { executionId, ownershipEpoch: version, worktreePath, commitSha, pullRequestId, acceptedBase: "main" } };
     state.artifacts!.push(artifact);
@@ -49,6 +51,92 @@ async function fixture(schemaVersion = 3) {
 }
 
 describe("accepted Git artifact reads", () => {
+  it("reads a published Unicode source by path when a Notebook proxy re-encodes query parameters", async () => {
+    const agent = "研究总编";
+    const f = await fixture(3, agent);
+    const accepted = await f.publish("# Exact accepted source\n", 1, "reports/最终 结果.md");
+    await f.storage.resolveWorkspaceArtifact(f.state.id, agent, accepted.path, { artifactId: accepted.id, commitSha: accepted.gitSource!.commitSha });
+    const query = new URLSearchParams({ agent, path: accepted.path, artifactId: accepted.id, commitSha: accepted.gitSource!.commitSha });
+    const proxyQuery = [...query].map(([key, value]) => `${key}=${encodeURIComponent(encodeURIComponent(value))}`).join("&");
+    await request(f.app).get(`/api/projects/${f.state.id}/artifacts/content?${proxyQuery}`).expect(400);
+    const file = accepted.path.split("/").map(encodeURIComponent).join("/");
+    const prefix = `/api/projects/${f.state.id}/artifacts/content/agent/${encodeURIComponent(agent)}/${accepted.gitSource!.commitSha}/`;
+    const result = await request(f.app).get(prefix + file).query({ artifactId: accepted.id }).expect(200);
+    expect(result.text).toBe("# Exact accepted source\n");
+    expect(result.headers["content-security-policy"]).toContain("script-src 'self';");
+    expect(result.headers["content-security-policy"]).not.toContain("sandbox allow-scripts");
+    const download = await request(f.app).get(prefix + file).query({ artifactId: accepted.id, download: "1" }).expect(200);
+    expect(download.text).toBe(result.text);
+    expect(download.headers["content-disposition"]).toContain("attachment");
+    await request(f.app).get(prefix + file).query({ agent }).expect(400);
+    await request(f.app).get(prefix + file).query({ artifactId: "wrong-publication" }).expect(404);
+    await request(f.app).get(prefix + "Memory.md").expect(400);
+    await request(f.app).get(prefix + "reports%2F..%2F..%2Fprivate.txt").expect(400);
+    await request(f.app).get(prefix.replace("/content/", "/unknown/") + file).expect(404);
+  });
+
+  it("serves original interactive HTML and relative dependencies without applying the application content policy", async () => {
+    const f = await fixture();
+    const figure = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"></svg>';
+    await fs.mkdir(path.join(f.repository, "figures"));
+    await fs.writeFile(path.join(f.repository, "figures/result.svg"), figure);
+    await f.git("add", "figures/result.svg");
+    const html = '<!doctype html><img src="../figures/result.svg"><p id="result"></p><script>document.querySelector("#result").textContent="ready"</script>';
+    const accepted = await f.publish(html, 1, "reports/index.html");
+    f.state.artifacts!.push({ ...accepted, id: "figure-1", path: "figures/result.svg", size: Buffer.byteLength(figure),
+      sha256: createHash("sha256").update(figure).digest("hex") });
+    await f.publish('<p>Newer result</p>', 2, "reports/index.html");
+    const prefix = `/api/projects/${f.state.id}/artifacts/preview/agent/writer/${accepted.gitSource!.commitSha}/`;
+    const preview = await request(f.app).get(prefix + accepted.path).query({ artifactId: accepted.id }).expect(200);
+    expect(preview.text).toBe(html);
+    expect(preview.headers["content-type"]).toContain("text/html");
+    expect(preview.headers["content-security-policy"]).toBeUndefined();
+    expect(preview.headers["cache-control"]).toBe("no-store");
+    const dependency = new URL("../figures/result.svg", "http://localhost" + prefix + accepted.path);
+    const image = await request(f.app).get(dependency.pathname).expect(200);
+    expect(image.headers["content-type"]).toContain("image/svg+xml");
+    expect(image.body.toString()).toBe(figure);
+    expect(image.headers["content-security-policy"]).toBeUndefined();
+    await request(f.app).get(prefix + "reports/unpublished.html").expect(404);
+    const raw = await request(f.app).get(`/api/projects/${f.state.id}/artifacts/content`).query({
+      agent: "writer", path: accepted.path, artifactId: accepted.id, commitSha: accepted.gitSource!.commitSha }).expect(200);
+    expect(raw.text).toBe(html);
+    expect(raw.headers["content-security-policy"]).toContain("script-src 'self';");
+    expect(raw.headers["content-security-policy"]).not.toContain("sandbox allow-scripts");
+  });
+
+  it("rejects missing or conflicting preview source bindings and hidden paths", async () => {
+    const f = await fixture(), accepted = await f.publish("<p>Accepted</p>", 1, "reports/index.html");
+    const root = `/api/projects/${f.state.id}/artifacts/preview/`;
+    const prefix = root + `agent/writer/${accepted.gitSource!.commitSha}/`;
+    await request(f.app).get(root + "agent/writer/live/reports/index.html").expect(400);
+    await request(f.app).get(root + "workspace/repository/" + accepted.gitSource!.commitSha + "/reports/index.html").expect(400);
+    await request(f.app).get(root + "unknown/writer/live/reports/index.html").expect(400);
+    await request(f.app).get(prefix + accepted.path).query({ commitSha: "b".repeat(40) }).expect(400);
+    await request(f.app).get(prefix + accepted.path).query({ artifactId: "not-this-publication" }).expect(404);
+    const hidden = await request(f.app).get(prefix + ".git/config");
+    expect([400, 404]).toContain(hidden.status);
+    await request(f.app).get(prefix + "Memory.md").expect(400);
+    await request(f.app).get(prefix + "reports%2F..%2F..%2Fprivate.txt").expect(400);
+  });
+
+  it("reads and previews an explicitly selected live workspace with the corresponding content policy", async () => {
+    const f = await fixture(); f.state.git!.enabled = false;
+    await fs.mkdir(path.join(f.projectRoot, "workspaces/reports"), { recursive: true });
+    await fs.writeFile(path.join(f.projectRoot, "workspaces/reports/index.html"), '<script>document.title="live"</script>');
+    for (const mode of ["content", "preview"]) {
+      const root = `/api/projects/${f.state.id}/artifacts/${mode}/`;
+      for (const source of ["workspace/shared", "agent/shared"]) {
+        const response = await request(f.app).get(root + source + "/live/reports/index.html").expect(200);
+        expect(response.text).toContain('document.title="live"');
+        if (mode === "preview") expect(response.headers["content-security-policy"]).toBeUndefined();
+        else expect(response.headers["content-security-policy"]).not.toContain("sandbox allow-scripts");
+      }
+      await request(f.app).get(root + "workspace/shared/live/reports/index.html").query({ artifactId: "immutable" }).expect(400);
+      await request(f.app).get(root + "workspace/shared/" + "a".repeat(40) + "/reports/index.html").expect(400);
+    }
+  });
+
   it("browses unpublished Git workspace files in one directory while preserving exact publication reads", async () => {
     const f = await fixture(), accepted = await f.publish("# Accepted result\n", 1);
     const worktree = accepted.gitSource!.worktreePath;

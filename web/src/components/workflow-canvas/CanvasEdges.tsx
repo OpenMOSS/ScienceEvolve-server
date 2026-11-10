@@ -91,6 +91,13 @@ export const CanvasEdges = memo(function CanvasEdges({
       }] as const;
     }));
   }, [edges, prefix]);
+  const focusedLoopIds = useMemo(() => new Set(edges.flatMap(edge =>
+    focusedNodeId && edge.loop && edge.loop.role !== "exit" &&
+    (edge.source === focusedNodeId || edge.target === focusedNodeId) ? [edge.loop.id] : []
+  )), [edges, focusedNodeId]);
+  const relatedToFocus = (edge: CanvasEdgeGeometry) => Boolean(focusedNodeId &&
+    (relatedEdgeIds?.has(edge.id) || edge.source === focusedNodeId || edge.target === focusedNodeId ||
+      edge.loop && focusedLoopIds.has(edge.loop.id)));
   const dispatchEdges = useMemo(() => edges.filter((edge) => edge.kind === "main-dispatch" && !edge.transitionGhost), [edges]);
   const dispatchBadge = useMemo(() => {
     if (!dispatchEdges.length) return undefined;
@@ -110,7 +117,7 @@ export const CanvasEdges = memo(function CanvasEdges({
   const selectionRef = useRef(onSelectEdge);
   selectionRef.current = onSelectEdge;
   const select = useCallback((edge: CanvasEdgeGeometry) => {
-    if (!edge.fixed) selectionRef.current?.(edge);
+    if (!edge.fixed || edge.loop) selectionRef.current?.(edge);
   }, []);
   const dense = edges.length >= 40;
 
@@ -165,20 +172,20 @@ export const CanvasEdges = memo(function CanvasEdges({
         {orderedEdges.map((edge) => <CanvasEdgeView
           key={edge.id} edge={edge} prefix={prefix}
           selected={selectedEdgeId === edge.id || Boolean(selectedEdgeIds?.has(edge.id)) || Boolean(selectedLoopId && edge.loop?.id === selectedLoopId)}
-          related={relatedEdgeIds?.has(edge.id) ?? false} muted={mutedEdgeIds?.has(edge.id) ?? false}
-          focusedNodeId={focusedNodeId} focusMode={focusMode} interactive={interactive} select={select}
+          related={relatedToFocus(edge)} muted={!relatedToFocus(edge) && (mutedEdgeIds?.has(edge.id) ?? false)}
+          focusedNodeId={focusedNodeId} focusMode={focusMode} interactive={interactive || Boolean(onSelectEdge && edge.loop)} select={select}
           loopStyle={edge.loop && edge.loop.role !== "exit" ? loopStyles.get(edge.loop.id) : undefined}
         />)}
       </g>
       <g className="flow-particle-layer" aria-hidden="true">
         {(!moving ? edges : []).map((edge) => {
-          const relatedToNode = Boolean(focusedNodeId && relatedEdgeIds?.has(edge.id));
+          const relatedToNode = relatedToFocus(edge);
           const selectedLoopEdge = Boolean(selectedLoopId && edge.loop?.id === selectedLoopId);
-          const selectedLoopExit = selectedLoopEdge && edge.loop?.role === "exit";
+          const selectedLoopExit = (selectedLoopEdge || relatedToNode) && edge.loop?.role === "exit";
           const selectedEdge = selectedEdgeId === edge.id || Boolean(selectedEdgeIds?.has(edge.id));
-          if (dense && selectedEdgeId !== edge.id) return null;
-          if ((!relatedToNode && !selectedLoopEdge && !selectedEdge) || (edge.fixed && !selectedLoopExit && !flowFixedEdges) || edge.transitionGhost) return null;
-          const pathId = `${prefix}-path-${sanitizeId(edge.id)}`;
+          if (dense && selectedEdgeId !== edge.id && !selectedLoopEdge && !(edge.loop && focusedLoopIds.has(edge.loop.id))) return null;
+          if ((!relatedToNode && !selectedLoopEdge && !selectedEdge) || (edge.fixed && !selectedLoopEdge && !selectedLoopExit && !flowFixedEdges) || edge.transitionGhost) return null;
+          const pathId = `${prefix}-path-${encodePathId(edge.id)}`;
           const direction = relatedToNode && edge.target === focusedNodeId ? "incoming" : "outgoing";
           const loopStyle = edge.loop && edge.loop.role !== "exit" ? loopStyles.get(edge.loop.id) : undefined;
           return <FlowParticle key={edge.id} routeId={edge.id} pathId={pathId} kind={edge.kind} direction={direction} loopColor={selectedLoopExit ? "#247b8a" : loopStyle?.color} loopGlow={selectedLoopExit ? "rgba(36,123,138,.58)" : loopStyle?.glow} />;
@@ -234,7 +241,7 @@ const CanvasEdgeView = memo(function CanvasEdgeView({
     : edge.loop?.role === "exit"
       ? "loop-exit"
       : edge.kind;
-  const pathId = `${prefix}-path-${sanitizeId(edge.id)}`;
+  const pathId = `${prefix}-path-${encodePathId(edge.id)}`;
   const classes = [
     "workflow-edge-group",
     `is-${edge.kind}`,
@@ -265,15 +272,15 @@ const CanvasEdgeView = memo(function CanvasEdgeView({
         ...(edge.visualOpacity === undefined ? {} : { opacity: edge.visualOpacity }),
         ...(loopStyle ? { "--loop-color": loopStyle.color, "--loop-glow": loopStyle.glow } : {})
       } as CSSProperties}
-      role={interactive && !edge.fixed && !edge.transitionGhost ? "button" : undefined}
-      tabIndex={interactive && !edge.fixed && !edge.transitionGhost ? 0 : undefined}
+      role={interactive && (!edge.fixed || edge.loop) && !edge.transitionGhost ? "button" : undefined}
+      tabIndex={interactive && (!edge.fixed || edge.loop) && !edge.transitionGhost ? 0 : undefined}
       aria-label={`${edge.loop && edge.loop.role !== "exit" ? `Loop ${edge.loop.id}：${edge.source} → ${edge.target}` : edge.label ?? edgeKindLabel(edge.kind)}${edge.loop?.role === "exit" ? "，只读批次退出边" : edge.fixed ? "，系统固定连线" : ""}`}
       onClick={(event: ReactMouseEvent<SVGGElement>) => { if (!interactive) return; event.stopPropagation(); select(edge); }}
       onKeyDown={(event) => { if (interactive && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); select(edge); } }}
     >
       <path className={`workflow-edge-halo ${edge.kind} ${visualKind} ${focusStateClasses}`} d={edge.path} />
       <path id={pathId} className={`workflow-edge ${edge.kind} ${visualKind} ${focusStateClasses}`} d={edge.path} markerEnd={`url(#${markerId})`} />
-      {interactive && !edge.fixed && !edge.transitionGhost && <path className="edge-hit" d={edge.path} />}
+      {interactive && (!edge.fixed || edge.loop) && !edge.transitionGhost && <path className="edge-hit" d={edge.path} />}
       {edgeLabel && !edge.transitionGhost && (
         <g className={`edge-label ${edge.kind} ${visualKind} ${focusStateClasses}`} transform={`translate(${edge.midpoint.x} ${edge.midpoint.y})`}>
           <rect x={-Math.max(19, edgeLabel.length * 4.8)} y={-9} width={Math.max(38, edgeLabel.length * 9.6)} height={18} rx={5} />
@@ -393,7 +400,10 @@ function controlCurvePath(start: { x: number; y: number }, end: { x: number; y: 
 }
 
 function round(value: number): number { return Math.round(value * 10) / 10; }
-function sanitizeId(value: string): string { return value.replace(/[^a-zA-Z0-9_-]/g, "_"); }
+function encodePathId(value: string): string {
+  // Preserve every UTF-16 unit so distinct route IDs always identify distinct paths.
+  return value.split("").map(character => character.charCodeAt(0).toString(16)).join("-");
+}
 
 function EdgeMarker({ id, color, size = 14 }: { id: string; color: string; size?: number }) {
   return (

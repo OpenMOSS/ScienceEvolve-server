@@ -5,9 +5,11 @@ import type { AgentEvent } from "./types";
 interface CanonicalTraceEvent {
   schemaVersion: 1;
   eventId: string;
+  seq?: number;
   invocationId: string;
   harnessId: string;
   kind: string;
+  phase?: string;
   sourceType?: string;
   attempt?: number;
   itemId?: string;
@@ -63,9 +65,11 @@ export function canonicalTraceEvent(event: AgentEvent): CanonicalTraceEvent | un
   return {
     schemaVersion: 1,
     eventId: record.eventId,
+    ...(typeof record.seq === "number" ? { seq: record.seq } : {}),
     invocationId: record.invocationId,
     harnessId: record.harnessId,
     kind: record.kind,
+    ...(typeof record.phase === "string" ? { phase: record.phase } : {}),
     ...(typeof record.sourceType === "string" ? { sourceType: record.sourceType } : {}),
     ...(typeof record.attempt === "number" ? { attempt: record.attempt } : {}),
     ...(typeof record.itemId === "string" ? { itemId: record.itemId } : {}),
@@ -84,6 +88,7 @@ export function canonicalTraceEvent(event: AgentEvent): CanonicalTraceEvent | un
 export function isDiagnosticTraceEvent(event: AgentEvent): boolean {
   const canonical = canonicalTraceEvent(event);
   if (canonical?.kind === "diagnostic" || event.data?.diagnostic === true) return true;
+  if (["workflow.node.started", "workflow.node.completed", "session.started", "iteration.started"].includes(event.type)) return true;
   const source = traceDataString(event, "diagnosticSource").toLowerCase();
   if (source === "proxy" || source === "cli" || source === "adapter") return true;
   const legacyKind = traceDataString(event, "kind").toLowerCase();
@@ -99,6 +104,7 @@ export interface AgentActivityEntry {
   id: string;
   event: AgentEvent;
   thought?: AgentEvent;
+  contentKind?: "summary";
   tools: AgentEvent[];
   displayState?: "streaming" | "process" | "final" | "incomplete";
 }
@@ -109,7 +115,34 @@ interface PlainTraceEntry {
   event: AgentEvent;
 }
 
-export type TraceEntry = AgentActivityEntry | PlainTraceEntry;
+export interface AgentExecutionEntry {
+  kind: "execution";
+  id: string;
+  event: AgentEvent;
+  updates: AgentEvent[];
+  state: "waiting" | "processing" | "completed" | "failed" | "interrupted" | "incomplete";
+  updatedAt: string;
+}
+
+export type TraceEntry = AgentActivityEntry | PlainTraceEntry | AgentExecutionEntry;
+
+function eventAgent(event: AgentEvent): string {
+  return event.agent ?? event.agentId ?? (traceDataString(event, "agentId") || "system");
+}
+
+function eventInvocation(event: AgentEvent): string {
+  return canonicalTraceEvent(event)?.invocationId ?? event.invocationId ?? traceDataString(event, "invocationId");
+}
+
+const EXECUTION_START_TYPES = new Set([
+  "invocation.started", "agent.started", "agent.execution.started", "collaboration.execution.started"
+]);
+const EXECUTION_END_TYPES = new Map<string, AgentExecutionEntry["state"]>([
+  ["invocation.completed", "completed"], ["agent.completed", "completed"],
+  ["collaboration.execution.completed", "completed"], ["agent.execution.ended", "completed"],
+  ["invocation.failed", "failed"], ["agent.failed", "failed"], ["collaboration.execution.failed", "failed"],
+  ["agent.interrupted", "interrupted"]
+]);
 
 export function traceDataString(event: AgentEvent, key: string): string {
   const value = event.data?.[key];
@@ -136,7 +169,7 @@ export function isThoughtEvent(event: AgentEvent): boolean {
 }
 
 export function isHiddenReasoningTraceEvent(event: AgentEvent): boolean {
-  if (canonicalTraceEvent(event)?.kind === "activity") return true;
+  if (canonicalTraceEvent(event)?.kind === "reasoning.summary" || canonicalTraceEvent(event)?.kind === "activity") return false;
   if (event.type !== "agent.trace") return false;
   const kind = traceDataString(event, "kind").toLowerCase();
   const itemType = traceDataString(event, "itemType").toLowerCase();
@@ -218,9 +251,9 @@ export function toolStatus(event: AgentEvent): { label: string; tone: string } {
 
 export function toolOutput(event: AgentEvent): { text: string; truncated: boolean } | undefined {
   const tool = canonicalTraceEvent(event)?.tool;
-  if (tool?.outputPreview === undefined) return undefined;
+  if (!tool?.outputPreview?.trim()) return undefined;
   return {
-    text: tool.outputPreview === "" ? "（空结果）" : tool.outputPreview,
+    text: tool.outputPreview,
     truncated: tool.truncated === true
   };
 }
@@ -269,13 +302,12 @@ function mergeCanonicalToolEvents(previous: AgentEvent, next: AgentEvent): Agent
 
 function activityStreamKey(event: AgentEvent): string {
   const canonical = canonicalTraceEvent(event);
-  const invocationId = canonical?.invocationId
-    ?? traceDataString(event, "invocationId")
-    ?? "legacy";
+  const invocationId = eventInvocation(event);
   const itemId = canonical?.kind.startsWith("tool.")
     ? canonical.parentItemId
     : canonical?.itemId;
-  return `${event.agent ?? "system"}:${invocationId || "legacy"}:${itemId || "legacy"}`;
+  return JSON.stringify([eventAgent(event), invocationId || "legacy", canonical?.attempt ?? 0,
+    canonical?.kind === "reasoning.summary" ? "summary" : "message", itemId || (canonical?.kind === "reasoning.summary" ? canonical.eventId : "legacy")]);
 }
 
 function appendAssistantDelta(previous: AgentEvent | undefined, next: AgentEvent): AgentEvent {
@@ -297,36 +329,69 @@ function appendAssistantDelta(previous: AgentEvent | undefined, next: AgentEvent
 export function buildTraceEntries(events: AgentEvent[]): TraceEntry[] {
   const entries: TraceEntry[] = [];
   const activeGroups = new Map<string, AgentActivityEntry>();
-  const activeTools = new Map<
-    string,
-    { entry: AgentActivityEntry; index: number }
-  >();
+  const activeTools = new Map<string, { entry: AgentActivityEntry; index: number }>();
   const groupsByInvocation = new Map<string, AgentActivityEntry[]>();
   const completedInvocations = new Set<string>();
-
-  const createActivity = (
-    event: AgentEvent,
-    thought?: AgentEvent
-  ): AgentActivityEntry => {
+  const executions = new Map<string, AgentExecutionEntry>();
+  const seenEvents = new Set<string>();
+  const invocationAliases = new Map<string, Set<string>>();
+  const identity = (event: AgentEvent, value: string) => JSON.stringify([eventAgent(event), value]);
+  for (const event of events) {
+    const executionId = event.executionId ?? traceDataString(event, "executionId");
+    const invocationId = eventInvocation(event);
+    if (!executionId || !invocationId) continue;
+    const alias = identity(event, executionId);
+    const invocations = invocationAliases.get(alias) ?? new Set<string>();
+    invocations.add(invocationId);
+    invocationAliases.set(alias, invocations);
+  }
+  const executionKey = (event: AgentEvent): string | undefined => {
+    const invocationId = eventInvocation(event);
+    if (invocationId) return identity(event, invocationId);
+    const executionId = event.executionId ?? traceDataString(event, "executionId");
+    if (!executionId) return undefined;
+    const invocations = invocationAliases.get(identity(event, executionId));
+    // An execution can contain multiple real invocations. Only an unambiguous
+    // identity relation can associate its outer lifecycle with one wake-up.
+    if (invocations?.size === 1) return identity(event, [...invocations][0]!);
+    if (invocations && invocations.size > 1) return undefined;
+    return identity(event, `execution:${executionId}`);
+  };
+  const updateExecution = (event: AgentEvent, state: AgentExecutionEntry["state"], create: boolean) => {
+    const key = executionKey(event);
+    if (!key) return false;
+    let entry = executions.get(key);
+    if (!entry && create) {
+      entry = { kind: "execution", id: `execution-${key}`, event, updates: [], state, updatedAt: event.ts };
+      executions.set(key, entry);
+      entries.push(entry);
+    }
+    if (!entry) return false;
     const canonical = canonicalTraceEvent(event);
-    const itemKey = canonical?.kind.startsWith("tool.") ? canonical.tool?.callId : canonical?.itemId;
+    if (!canonical) entry.updates.push(event);
+    if (Date.parse(event.ts) >= Date.parse(entry.updatedAt)) entry.updatedAt = event.ts;
+    if ((!["failed", "interrupted", "completed", "incomplete"].includes(entry.state) &&
+      !(entry.state === "processing" && state === "waiting")) || state === "failed" || state === "interrupted") entry.state = state;
+    return true;
+  };
+  const createActivity = (event: AgentEvent, thought?: AgentEvent): AgentActivityEntry => {
+    const canonical = canonicalTraceEvent(event);
+    const itemKey = canonical?.kind.startsWith("tool.") ? canonical.tool?.callId
+      : canonical?.itemId ?? (canonical?.kind === "reasoning.summary" ? canonical.eventId : undefined);
     const entry: AgentActivityEntry = {
       kind: "activity",
-      // Durable rows replace ephemeral rows with a different timeline seq.
-      // Keep the card mounted so an expanded tool result stays expanded.
       id: canonical && itemKey
-        ? `activity-${JSON.stringify([event.agent, canonical.invocationId, canonical.attempt ?? 0,
-            canonical.kind.startsWith("tool.") ? "tool" : "message", itemKey])}`
+        ? `activity-${JSON.stringify([eventAgent(event), canonical.invocationId, canonical.attempt ?? 0,
+            canonical.kind.startsWith("tool.") ? "tool" : canonical.kind === "reasoning.summary" ? "summary" : "message", itemKey])}`
         : `activity-${event.seq}`,
-      event,
-      thought,
-      tools: []
+      event, thought, tools: [],
+      ...(canonical?.kind === "reasoning.summary" ? { contentKind: "summary" as const } : {})
     };
     entries.push(entry);
     activeGroups.set(activityStreamKey(event), entry);
-    const invocationId = canonical?.invocationId ?? traceDataString(event, "invocationId");
-    if (invocationId) {
-      const key = `${event.agent ?? "system"}:${invocationId}`;
+    const invocationId = eventInvocation(event);
+    if (invocationId && entry.contentKind !== "summary") {
+      const key = identity(event, invocationId);
       const groups = groupsByInvocation.get(key) ?? [];
       groups.push(entry);
       groupsByInvocation.set(key, groups);
@@ -335,87 +400,97 @@ export function buildTraceEntries(events: AgentEvent[]): TraceEntry[] {
   };
 
   for (const event of events) {
-    // Canonical activity and historical reasoning rows are heartbeats, not
-    // display content. In particular, never fall through to EventCard where
-    // a legacy raw reasoning message would become visible again.
     if (isHiddenReasoningTraceEvent(event)) continue;
-    const streamKey = activityStreamKey(event);
-    if (isAssistantDeltaEvent(event)) {
-      const group = activeGroups.get(streamKey) ?? createActivity(event);
-      group.thought = appendAssistantDelta(group.thought, event);
+    const canonical = canonicalTraceEvent(event);
+    if (canonical) {
+      const key = JSON.stringify([eventAgent(event), canonical.invocationId, canonical.attempt ?? 0, canonical.eventId]);
+      if (seenEvents.has(key)) continue;
+      seenEvents.add(key);
+    }
+    const performance = event.data?.performance as { status?: string } | undefined;
+    const endState = EXECUTION_END_TYPES.get(event.type) ?? (event.type === "invocation.performance"
+      ? performance?.status === "completed" ? "completed" : performance?.status === "incomplete" ? "incomplete" : undefined
+      : undefined);
+    if (EXECUTION_START_TYPES.has(event.type) || endState) {
+      if (!eventInvocation(event)) {
+        for (const [key, group] of activeGroups) {
+          if (!eventInvocation(group.event) && eventAgent(group.event) === eventAgent(event)) activeGroups.delete(key);
+        }
+      }
+      if (endState === "completed" && eventInvocation(event)) {
+        completedInvocations.add(identity(event, eventInvocation(event)));
+      }
+      if (updateExecution(event, endState ?? "waiting", true)) continue;
+    }
+    if (canonical?.kind === "activity") {
+      updateExecution(event, "processing", true);
       continue;
     }
-    if (isThoughtEvent(event)) {
-      const group = activeGroups.get(streamKey);
-      if (group) {
-        group.thought = event;
-        continue;
-      }
-      createActivity(event, event);
+    if (canonical?.kind === "reasoning.summary") {
+      const streamKey = activityStreamKey(event);
+      const previous = activeGroups.get(streamKey);
+      if (!event.message.trim() && !(canonical.phase === "delta" && previous?.thought && event.message.length)) continue;
+      updateExecution(event, "processing", false);
+      const group = previous ?? createActivity(event);
+      group.thought = canonical.phase === "delta" && event.data?.liveEphemeral !== true
+        ? appendAssistantDelta(group.thought, event) : event;
+      continue;
+    }
+    const streamKey = activityStreamKey(event);
+    if (isAssistantDeltaEvent(event) || isThoughtEvent(event)) {
+      if (!event.message.trim() && !(isAssistantDeltaEvent(event) && activeGroups.has(streamKey) && event.message.length)) continue;
+      updateExecution(event, "processing", false);
+      const group = activeGroups.get(streamKey) ?? createActivity(event);
+      group.thought = isAssistantDeltaEvent(event) && event.data?.livePhase === undefined
+        ? appendAssistantDelta(group.thought, event) : event;
       continue;
     }
     if (isToolEvent(event)) {
-      const canonical = canonicalTraceEvent(event);
+      updateExecution(event, "processing", false);
       const itemId = canonical?.tool?.callId ?? traceDataString(event, "itemId");
       const status = canonical?.tool?.status ?? traceDataString(event, "status").toLowerCase();
-      const legacyIdentity = `${streamKey}:${traceDataString(event, "itemType")}:${toolCommand(event)}`;
-      const toolIdentity = itemId ? `${streamKey}:${itemId}` : legacyIdentity;
+      const toolIdentity = canonical && itemId
+        ? JSON.stringify([eventAgent(event), canonical.invocationId, canonical.attempt ?? 0, itemId])
+        : `${streamKey}:${itemId || `${traceDataString(event, "itemType")}:${toolCommand(event)}`}`;
       const activeTool = activeTools.get(toolIdentity);
       if (activeTool) {
-        activeTool.entry.tools[activeTool.index] = mergeCanonicalToolEvents(
-          activeTool.entry.tools[activeTool.index]!,
-          event
-        );
-        if (status === "completed" || status === "failed") {
-          activeTools.delete(toolIdentity);
-        }
+        activeTool.entry.tools[activeTool.index] = mergeCanonicalToolEvents(activeTool.entry.tools[activeTool.index]!, event);
+        if (!canonical && (status === "completed" || status === "failed")) activeTools.delete(toolIdentity);
         continue;
       }
       let group = activeGroups.get(streamKey);
-      if (!group || (!canonical?.parentItemId && group.tools.length >= 4)) {
-        group = createActivity(event);
-      }
+      if (!group || (!canonical?.parentItemId && group.tools.length >= 4)) group = createActivity(event);
       const index = group.tools.push(event) - 1;
-      if (status !== "completed" && status !== "failed") {
-        activeTools.set(toolIdentity, { entry: group, index });
-      }
+      if (canonical || (status !== "completed" && status !== "failed")) activeTools.set(toolIdentity, { entry: group, index });
       continue;
     }
-
     entries.push({ kind: "event", id: `event-${event.seq}`, event });
-    if (event.type === "invocation.completed" || event.type === "agent.completed") {
-      const invocationId = traceDataString(event, "invocationId");
-      if (invocationId) completedInvocations.add(`${event.agent ?? "system"}:${invocationId}`);
-    }
-    if (
-      event.type === "agent.started" ||
-      event.type === "agent.completed" ||
-      event.type === "agent.failed"
-    ) {
-      activeGroups.delete(streamKey);
-    }
   }
   for (const [invocationKey, groups] of groupsByInvocation) {
+    const lastAttempt = Math.max(...groups.map(group => canonicalTraceEvent(group.event)?.attempt ?? 0));
     for (const group of groups) {
       const data = (group.thought ?? group.event).data ?? {};
       const canonical = canonicalTraceEvent(group.thought ?? group.event);
-      if (data.incompleteOutput === true || canonical?.sourceType === "assistant.incomplete") {
+      if ((canonical?.attempt ?? 0) < lastAttempt || data.incompleteOutput === true || data.livePhase === "incomplete" || canonical?.sourceType === "assistant.incomplete") {
         group.displayState = "incomplete";
-      } else if (data.liveRole === "process" || group.tools.length > 0) {
-        group.displayState = "process";
-      } else if (data.livePhase === "streaming") {
-        group.displayState = "streaming";
       } else if (data.liveRole === "final") {
         group.displayState = "final";
+      } else if (data.livePhase === "streaming" || canonical?.kind === "assistant.delta") {
+        group.displayState = "streaming";
+      } else {
+        group.displayState = "process";
       }
     }
     if (completedInvocations.has(invocationKey)) {
-      const finalGroup = [...groups].reverse().find((group) =>
-        Boolean(group.thought) && group.displayState !== "incomplete"
-      );
-      if (finalGroup && finalGroup.displayState !== "process") {
-        finalGroup.displayState = "final";
+      const finalGroup = [...groups].reverse().find(group => Boolean(group.thought?.message.trim()) && group.displayState !== "incomplete");
+      const response = finalGroup?.thought;
+      if (finalGroup && response && response.data?.liveRole !== "process" && !isAssistantDeltaEvent(response)) {
+        const responseSeq = canonicalTraceEvent(response)?.seq ?? response.seq;
+        const toolsFollowResponse = groups.some(group => group.tools.some(tool =>
+          (canonicalTraceEvent(tool)?.seq ?? tool.seq) > responseSeq));
+        if (!toolsFollowResponse || finalGroup.displayState === "final") finalGroup.displayState = "final";
       }
+      for (const group of groups) if (group.displayState === "streaming") group.displayState = "process";
     }
   }
   return entries;

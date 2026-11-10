@@ -38,6 +38,7 @@ import {
 } from "../types";
 import { NewProjectPage } from "./NewProjectPage";
 import { cacheResource } from "../resource-cache";
+import { DEFAULT_RESEARCH_WORKFLOW, defaultResearchAgents } from "../default-research-preset";
 
 const agentPrompts = {
   main: "Built-in Main prompt",
@@ -170,13 +171,13 @@ const runtimeHarnesses: HarnessCatalogEntry[] = [
     available: true
   },
   {
-    id: "claude-code",
-    label: "Claude Code",
+    id: "fixture-anthropic",
+    label: "Fixture Harness",
     adapterVersion: "1",
     nativeProtocol: "anthropic-messages",
     purposes: ["workflow", "explainer", "probe"],
     mode: "workflow",
-    notes: "Embedded Claude Code",
+    notes: "Embedded Fixture Harness",
     capabilities: {
       structuredEvents: true, toolResults: true, durableSession: true,
       permissionPrompts: ["workspace", "compute", "yolo"], workspaceInputs: true, autoSkills: true,
@@ -308,7 +309,7 @@ describe("NewProjectPage agent configuration", () => {
     expect(within(main).getByLabelText("System Prompt")).toHaveValue("FIXED_MAIN_SYSTEM");
     expect(within(main).getByLabelText("System Prompt")).toHaveAttribute("readonly");
     const idea = screen.getByRole("region", { name: "idea 提示词来源" });
-    expect(within(idea).getByLabelText("System Prompt")).toHaveProperty("value", expect.stringContaining("OpenFARS permission mode:"));
+    expect(within(idea).getByLabelText("System Prompt")).toHaveProperty("value", expect.stringContaining("ScienceEvolve permission mode:"));
     await user.selectOptions(screen.getByLabelText("构思智能体模型"), "route-model");
     await waitFor(() => expect(within(idea).getByLabelText("Harness Prompt")).toHaveValue("NATIVE_codex_route-model"));
     expect(within(idea).getByLabelText("Harness Prompt")).toBeVisible();
@@ -339,6 +340,81 @@ describe("NewProjectPage agent configuration", () => {
     finish({ ...task, title: "服务器稍后返回的标题" });
     await screen.findByText("已保留你在后台刷新期间的草稿编辑。");
     expect(screen.getByLabelText("项目名称")).toHaveValue("后台刷新期间的手动标题");
+  });
+
+  it("refreshes a cached workflow even when the title or default Git account changes during loading", async () => {
+    const task: SavedResearchTask = { schemaVersion: 2, kind: "scienceevolve-saved-research-task",
+      id: `task_${"b".repeat(32)}`, title: "旧版缓存", requirement: "服务器保存了更新后的证据研究流程。",
+      agents: structuredClone(defaultPresetAgents), orchestration: structuredClone(DEFAULT_AGENT_ORCHESTRATION),
+      git: { enabled: false }, createdAt: "2026-10-28T08:00:00Z", updatedAt: "2026-10-28T08:00:00Z" };
+    cacheResource(`saved-task:${task.id}`, task);
+    let finish!: (task: SavedResearchTask) => void;
+    vi.mocked(getSavedResearchTask).mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    const view = render(<NewProjectPage savedTaskId={task.id} onBack={vi.fn()} onCreated={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("项目名称"), { target: { value: "保留手动标题" } });
+    await waitFor(() => expect(getGitHubAccounts).toHaveBeenCalled());
+    await act(async () => finish({ ...task, orchestration: structuredClone(DEFAULT_RESEARCH_WORKFLOW), agents: defaultResearchAgents() }));
+    await waitFor(() => expect(view.container.querySelector('[data-node-id="文献研究员"]')).toBeInTheDocument());
+    expect(view.container.querySelector('[data-node-id="idea"]')).toBeNull();
+    expect(screen.getByLabelText("项目名称")).toHaveValue("保留手动标题");
+  });
+
+  it("does not report a cached draft's gateway missing while the runtime catalog is loading", async () => {
+    const catalog = await getCatalog();
+    let resolveCatalog!: (value: typeof catalog) => void;
+    vi.mocked(getCatalog).mockReturnValue(new Promise(resolve => { resolveCatalog = resolve; }));
+    const task: SavedResearchTask = { schemaVersion: 2, kind: "scienceevolve-saved-research-task",
+      id: `task_${"e".repeat(32)}`, title: "等待运行目录的草稿", requirement: "等待真实运行目录返回后再检查此草稿的网关。",
+      agents: Object.fromEntries(Object.entries(defaultPresetAgents).map(([name, config]) => [name,
+        { ...config, harness: "codex", gatewayId: RUNTIME_GATEWAY_ID }])),
+      orchestration: structuredClone(DEFAULT_AGENT_ORCHESTRATION), git: { enabled: false },
+      createdAt: "2026-11-06T00:00:00Z", updatedAt: "2026-11-06T00:00:00Z" };
+    cacheResource(`saved-task:${task.id}`, task);
+    vi.mocked(getSavedResearchTask).mockResolvedValue(task);
+    renderExpanded(<NewProjectPage savedTaskId={task.id} onBack={vi.fn()} onCreated={vi.fn()} />);
+    expect(screen.queryByText(/所选全局网关不存在|启动前配置检查未通过/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/运行目录仍在加载/)).not.toBeInTheDocument();
+    await act(async () => resolveCatalog({ ...catalog, gateways: [] }));
+    expect(screen.queryByText("main：所选全局网关不存在")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "创建并启动研究" }));
+    expect(screen.getByText("启动前提示").closest('[role="status"]')).toHaveClass("launch-advisory");
+    expect(screen.getByText("main：所选全局网关不存在")).toBeVisible();
+  });
+
+  it("waits for an uncached draft instead of displaying an editable default workflow", async () => {
+    let finish!: (task: SavedResearchTask) => void;
+    vi.mocked(getSavedResearchTask).mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    const view = render(<NewProjectPage savedTaskId={`task_${"a".repeat(32)}`} onBack={vi.fn()} onCreated={vi.fn()} />);
+    expect(screen.getByText("正在读取草稿 Workflow…")).toBeVisible();
+    expect(view.container.querySelector("[data-node-id]")).toBeNull();
+    await act(async () => finish({ schemaVersion: 2, kind: "scienceevolve-saved-research-task", id: `task_${"a".repeat(32)}`,
+      title: "真实草稿", requirement: "已保存的研究流程应当原样恢复。", agents: defaultResearchAgents(),
+      orchestration: structuredClone(DEFAULT_RESEARCH_WORKFLOW), git: { enabled: false },
+      createdAt: "2026-11-06T00:00:00Z", updatedAt: "2026-11-06T00:00:00Z" }));
+    expect(view.container.querySelector('[data-node-id="因果裁判"]')).toBeInTheDocument();
+  });
+
+  it("opens the built-in six-Agent evidence workflow and keeps its weak choice when saving", async () => {
+    vi.mocked(getAgentConfigPresets).mockResolvedValue([{ ...defaultPreset,
+      agents: defaultResearchAgents(), orchestration: structuredClone(DEFAULT_RESEARCH_WORKFLOW) }]);
+    vi.mocked(createSavedResearchTask).mockImplementation(async input => ({
+      schemaVersion: 2, kind: "scienceevolve-saved-research-task", id: `task_${"d".repeat(32)}`,
+      ...input, agents: input.agents!, orchestration: input.orchestration!,
+      createdAt: "2026-11-06T00:00:00Z", updatedAt: "2026-11-06T00:00:00Z"
+    }));
+    const view = render(<NewProjectPage onBack={vi.fn()} onCreated={vi.fn()} />);
+    expect(view.container.querySelector('[data-node-id="因果裁判"]')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText(/运行目录仍在加载/)).not.toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("项目名称"), { target: { value: "默认研究流程" } });
+    fireEvent.change(screen.getByLabelText("课题方向与具体要求"), { target: { value: "按证据检索、裁判、两轮补证及写作完成研究。" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存课题" }));
+    await waitFor(() => expect(createSavedResearchTask).toHaveBeenCalledOnce());
+    const input = vi.mocked(createSavedResearchTask).mock.calls[0]![0];
+    expect(input.orchestration?.agents).toHaveLength(6);
+    expect(input.orchestration?.loops?.[0]?.maxIterations).toBe(2);
+    expect(input.agents?.因果裁判?.decisionBy).toBe("agent");
+    expect(input.orchestration?.routes.文献研究员).toEqual([{ target: "因果裁判", kind: "strong" }]);
+    expect(await screen.findByText("研究任务副本已保存到主页。后续修改可继续保存到该副本。")).toBeVisible();
   });
 
   it("keeps launch clickable, reports all missing fields, and starts only a valid draft with intervention disabled", async () => {
@@ -407,7 +483,7 @@ describe("NewProjectPage agent configuration", () => {
       git: { enabled: false }, createdAt: "2026-10-18T00:00:00Z", updatedAt: "2026-10-18T00:00:00Z" };
     vi.mocked(getSavedResearchTask).mockResolvedValue(task);
     render(<NewProjectPage savedTaskId={task.id} onBack={vi.fn()} onCreated={vi.fn()} />);
-    const title = screen.getByRole("textbox", { name: "项目名称" });
+    const title = await screen.findByRole("textbox", { name: "项目名称" });
     await waitFor(() => expect(title).toHaveValue(task.title));
     fireEvent.change(title, { target: { value: "载入期间的手动修改" } });
     releasePresets([defaultPreset]);
@@ -424,7 +500,7 @@ describe("NewProjectPage agent configuration", () => {
     vi.mocked(getSavedResearchTask).mockResolvedValue(task);
     vi.mocked(createSavedResearchTask).mockResolvedValue({ ...task, id: `task_${"d".repeat(32)}` });
     render(<NewProjectPage savedTaskId={task.id} onBack={vi.fn()} onCreated={vi.fn()} />);
-    const title = screen.getByRole("textbox", { name: "项目名称" });
+    const title = await screen.findByRole("textbox", { name: "项目名称" });
     await waitFor(() => expect(title).toHaveValue(task.title));
     fireEvent.change(title, { target: { value: "删除期间的手动编辑" } });
     act(() => window.dispatchEvent(new CustomEvent("openfars:saved-tasks-changed", { detail: { deletedTaskIds: [task.id] } })));
@@ -491,10 +567,12 @@ describe("NewProjectPage agent configuration", () => {
     vi.mocked(getSavedResearchTask).mockResolvedValue(savedTask);
     vi.mocked(updateSavedResearchTask).mockResolvedValue({ ...savedTask, title: "修改后的课题" });
     const user = userEvent.setup();
-    renderExpanded(<NewProjectPage savedTaskId={savedTask.id} onBack={vi.fn()} onCreated={vi.fn()} />);
+    render(<NewProjectPage savedTaskId={savedTask.id} onBack={vi.fn()} onCreated={vi.fn()} />);
 
     const title = await screen.findByRole("textbox", { name: "项目名称" });
     await waitFor(() => expect(title).toHaveValue(savedTask.title));
+    fireEvent.click(screen.getByRole("button", { name: "展开文字版 Workflow 编排" }));
+    fireEvent.click(screen.getByRole("button", { name: "展开智能体编队" }));
     expect(screen.getByRole("switch", { name: "启用 Git 机制" })).toBeChecked();
     expect(screen.getByLabelText("GitHub 仓库名称")).toHaveValue("saved-research-repository");
     expect(screen.getByLabelText("Public 仓库")).toBeChecked();
@@ -614,14 +692,14 @@ describe("NewProjectPage agent configuration", () => {
     expect(getCatalog).toHaveBeenCalledTimes(catalogReadsBeforeReturn + 1);
   });
 
-  it("fails closed on Catalog load failure while keeping explicit draft save available", async () => {
+  it("shows Catalog load failure only on launch while keeping explicit draft save available", async () => {
     vi.mocked(getCatalog).mockRejectedValue(new Error("运行目录服务超时"));
     const savedTask: SavedResearchTask = {
       schemaVersion: 2,
       kind: "scienceevolve-saved-research-task",
       id: "task_catalog_failure_draft_000000000001",
       title: "Catalog 故障期间的草稿",
-      requirement: "Catalog 暂时不可用时只保存完整研究任务，不应启动任何 Agent。",
+      requirement: "Catalog 暂时不可用时仍可保存完整研究任务。",
       createdAt: "2026-09-16T00:00:00.000Z",
       updatedAt: "2026-09-16T00:00:00.000Z",
       agents: defaultPresetAgents,
@@ -634,10 +712,11 @@ describe("NewProjectPage agent configuration", () => {
 
     await user.type(screen.getByLabelText("项目名称"), savedTask.title);
     await user.type(screen.getByLabelText("课题方向与具体要求"), savedTask.requirement);
-    expect(await screen.findByText(/运行目录加载失败，暂不能启动项目：运行目录服务超时/))
-      .toHaveAttribute("role", "alert");
+    expect(screen.queryByText("运行目录加载失败：运行目录服务超时")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "创建并启动研究" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "创建并启动研究" }));
+    expect(screen.getByText("运行目录加载失败：运行目录服务超时").closest('[role="status"]')).toHaveClass("launch-advisory");
+    expect(screen.getByRole("button", { name: "强制启动" })).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "保存" }));
     await user.click(screen.getByRole("menuitem", { name: /仅本次项目使用/ }));
@@ -646,7 +725,7 @@ describe("NewProjectPage agent configuration", () => {
     expect(createProject).not.toHaveBeenCalled();
   });
 
-  it("reports an empty loaded Catalog separately from a load failure", async () => {
+  it("reports an empty loaded Catalog only on launch, separately from a load failure", async () => {
     vi.mocked(getCatalog).mockResolvedValue({
       skills: [],
       models: [],
@@ -657,15 +736,17 @@ describe("NewProjectPage agent configuration", () => {
 
     renderExpanded(<NewProjectPage onBack={vi.fn()} onCreated={vi.fn()} />);
 
-    expect((await screen.findAllByText(/服务端没有可用的 Workflow Harness/)).length)
-      .toBeGreaterThan(0);
-    expect(screen.queryByText(/运行目录加载失败，暂不能启动项目/))
-      .not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("项目名称"), { target: { value: "空运行目录" } });
+    fireEvent.change(screen.getByLabelText("课题方向与具体要求"), { target: { value: "目录为空时可以核对提示并显式尝试提交。" } });
+    await act(async () => {});
+    expect(screen.queryByText(/运行目录已加载，但服务端没有可用的 Workflow Harness。/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "创建并启动研究" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "创建并启动研究" }));
+    expect(screen.getByText(/运行目录已加载，但服务端没有可用的 Workflow Harness。/).closest('[role="status"]')).toHaveClass("launch-advisory");
+    expect(screen.queryByText(/运行目录加载失败：/)).not.toBeInTheDocument();
   });
 
-  it("keeps project launch disabled when the loaded Catalog has no global Gateway", async () => {
+  it("allows forced project submission when the loaded Catalog has no global Gateway", async () => {
     vi.mocked(getCatalog).mockResolvedValue({
       skills: [],
       models: ["nex-agi/Nex-N2-Pro"],
@@ -677,11 +758,18 @@ describe("NewProjectPage agent configuration", () => {
 
     renderExpanded(<NewProjectPage onBack={vi.fn()} onCreated={vi.fn()} />);
 
-    expect(await screen.findByText(/运行目录已加载，但服务端没有可用的全局网关。/))
-      .toHaveAttribute("role", "alert");
+    fireEvent.change(screen.getByLabelText("项目名称"), { target: { value: "缺少网关时尝试启动" } });
+    fireEvent.change(screen.getByLabelText("课题方向与具体要求"), { target: { value: "强制提交当前配置，显示服务端真实启动结果。" } });
+    await act(async () => {});
+    expect(screen.queryByText(/服务端没有可用的全局网关/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "创建并启动研究" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "创建并启动研究" }));
+    expect(screen.getByText(/服务端没有可用的全局网关/).closest('[role="status"]')).toHaveClass("launch-advisory");
     expect(createProject).not.toHaveBeenCalled();
+    vi.mocked(createProject).mockRejectedValue(new Error("服务端：缺少可用网关"));
+    fireEvent.click(screen.getByRole("button", { name: "强制启动" }));
+    await waitFor(() => expect(createProject).toHaveBeenCalledOnce());
+    expect(await screen.findByRole("alert")).toHaveTextContent("服务端：缺少可用网关");
   });
 
   it("saves the configured research brief and all Agent settings without starting", async () => {
@@ -1319,6 +1407,7 @@ describe("NewProjectPage agent configuration", () => {
     renderExpanded(<NewProjectPage onBack={vi.fn()} onCreated={vi.fn()} />);
 
     await user.click(screen.getByLabelText("结果形式：表格"));
+    await user.click(screen.getByLabelText("结果形式：HTML 文件"));
     await user.type(
       screen.getByLabelText("结果形式补充说明"),
       "整理成便于审阅和继续编辑的关系分析，包含比较表和证据边界。"
@@ -1333,7 +1422,7 @@ describe("NewProjectPage agent configuration", () => {
     await waitFor(() => expect(createProject).toHaveBeenCalledTimes(1));
     expect(vi.mocked(createProject).mock.calls[0][0].orchestration).toMatchObject({
       resultFormat: {
-        presets: ["论文", "表格"],
+        presets: ["论文", "表格", "HTML 文件"],
         custom: "整理成便于审阅和继续编辑的关系分析，包含比较表和证据边界。"
       }
     });
@@ -1616,7 +1705,7 @@ describe("NewProjectPage agent configuration", () => {
     await user.keyboard("{Enter}");
     let canvasDialog = await screen.findByRole("dialog", { name: "编辑 Workflow 画布" });
     await user.click(canvasDialog.querySelector('[data-node-id="idea"]')!);
-    await user.selectOptions(within(canvasDialog).getByLabelText("idea Harness"), "claude-code");
+    await user.selectOptions(within(canvasDialog).getByLabelText("idea Harness"), "fixture-anthropic");
     await user.selectOptions(
       within(canvasDialog).getByLabelText("idea全局网关"),
       canvasGateway.id
@@ -1627,7 +1716,7 @@ describe("NewProjectPage agent configuration", () => {
     expect(within(canvasDialog).getByText("已启用自动路由：Anthropic Messages → OpenAI Responses")).toBeVisible();
     await user.click(within(canvasDialog).getAllByRole("button", { name: "关闭 Workflow 编辑器" })[0]!);
 
-    expect(screen.getByLabelText("构思智能体 Harness")).toHaveValue("claude-code");
+    expect(screen.getByLabelText("构思智能体 Harness")).toHaveValue("fixture-anthropic");
     expect(screen.getByLabelText("构思智能体全局网关")).toHaveValue(canvasGateway.id);
     expect(screen.getByLabelText("构思智能体模型")).toHaveValue("route-model");
 
@@ -1637,7 +1726,7 @@ describe("NewProjectPage agent configuration", () => {
     canvasDialog = await screen.findByRole("dialog", { name: "编辑 Workflow 画布" });
     await user.click(canvasDialog.querySelector('[data-node-id="idea"]')!);
     expect(within(canvasDialog).getByLabelText("idea Harness")).toHaveValue("pi");
-    await user.selectOptions(within(canvasDialog).getByLabelText("idea Harness"), "claude-code");
+    await user.selectOptions(within(canvasDialog).getByLabelText("idea Harness"), "fixture-anthropic");
     await user.click(within(canvasDialog).getAllByRole("button", { name: "关闭 Workflow 编辑器" })[0]!);
 
     await user.click(screen.getByRole("button", { name: "保存" }));
@@ -1663,7 +1752,7 @@ describe("NewProjectPage agent configuration", () => {
       vi.mocked(createSavedResearchTask).mock.calls[0]![0]
     ]) {
       expect(input.agents.idea).toMatchObject({
-        harness: "claude-code",
+        harness: "fixture-anthropic",
         gatewayId: canvasGateway.id,
         model: "route-model"
       });
@@ -1672,23 +1761,25 @@ describe("NewProjectPage agent configuration", () => {
 
     view.unmount();
     vi.mocked(getSavedResearchTask).mockResolvedValue(savedCopy!);
-    renderExpanded(
+    render(
       <NewProjectPage
         onBack={vi.fn()}
         onCreated={vi.fn()}
         savedTaskId={savedCopy!.id}
       />
     );
+    fireEvent.click(await screen.findByRole("button", { name: "展开文字版 Workflow 编排" }));
+    fireEvent.click(screen.getByRole("button", { name: "展开智能体编队" }));
     (await screen.findByRole("button", { name: "打开 Workflow 画布编辑器" })).focus();
     await user.keyboard("{Enter}");
     canvasDialog = await screen.findByRole("dialog", { name: "编辑 Workflow 画布" });
     await user.click(canvasDialog.querySelector('[data-node-id="idea"]')!);
-    expect(within(canvasDialog).getByLabelText("idea Harness")).toHaveValue("claude-code");
+    expect(within(canvasDialog).getByLabelText("idea Harness")).toHaveValue("fixture-anthropic");
     expect(within(canvasDialog).getByLabelText("idea全局网关")).toHaveValue(canvasGateway.id);
     expect(within(canvasDialog).getByLabelText("idea model")).toHaveValue("route-model");
   });
 
-  it("shows the server reason for an unavailable Harness and blocks project submission", async () => {
+  it("shows an unavailable Harness reason on launch and allows forced project submission", async () => {
     const unavailableAgents = structuredClone(defaultPresetAgents);
     unavailableAgents.main.harness = "dsh";
     vi.mocked(getAgentConfigPresets).mockResolvedValue([{
@@ -1698,6 +1789,7 @@ describe("NewProjectPage agent configuration", () => {
     vi.mocked(getCatalog).mockResolvedValue({
       skills: [],
       models: ["nex-agi/Nex-N2-Pro"],
+      gateways: [runtimeGateway],
       agentPrompts,
       harnesses: runtimeHarnesses.map((item) => item.id === "dsh"
         ? { ...item, available: false, availabilityReason: "项目内置 dsh 入口不可执行" }
@@ -1709,16 +1801,20 @@ describe("NewProjectPage agent configuration", () => {
     await user.type(screen.getByLabelText("项目名称"), "不可用 Harness 校验");
     await user.type(
       screen.getByLabelText("课题方向与具体要求"),
-      "验证服务端目录不可用原因会出现在字段旁并阻止项目提交。"
+      "验证不可用原因在启动时显示，并允许强制提交真实配置。"
     );
     const mainCard = (await screen.findAllByRole("heading", { name: "Main Agent" }))[0]!.closest("article")!;
     const harnessSelect = within(mainCard).getByLabelText("Main Agent Harness");
     expect(within(harnessSelect).getByRole("option", { name: "dsh · 不可用" })).toBeDisabled();
-    expect(within(mainCard).getByText("项目内置 dsh 入口不可执行")).toHaveAttribute("role", "alert");
+    expect(within(mainCard).queryByText("项目内置 dsh 入口不可执行")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "创建并启动研究" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "创建并启动研究" }));
-    expect(screen.getByText(/启动前检查未通过：.*main：dsh 当前不可用/)).toBeVisible();
+    expect(screen.getByText(/main：dsh 当前不可用.*项目内置 dsh 入口不可执行/).closest('[role="status"]')).toHaveClass("launch-advisory");
     expect(createProject).not.toHaveBeenCalled();
+    vi.mocked(createProject).mockResolvedValue({ id: "prj_forced_unavailable_harness" } as Project);
+    fireEvent.click(screen.getByRole("button", { name: "强制启动" }));
+    await waitFor(() => expect(createProject).toHaveBeenCalledOnce());
+    expect(vi.mocked(createProject).mock.calls[0]![0].agents.main.harness).toBe("dsh");
   });
 
   it("shows and selects a newly cataloged fixture Harness without page-specific code", async () => {
@@ -1886,22 +1982,24 @@ describe("NewProjectPage agent configuration", () => {
     renderExpanded(<NewProjectPage onBack={vi.fn()} onCreated={onCreated} />);
 
     const mainCard = (await screen.findAllByRole("heading", { name: "Main Agent" }))[0]!.closest("article")!;
-    expect(within(mainCard).getByText(
+    expect(within(mainCard).queryByText(
       "当前 Harness / 网关 / model 组合验证失败：上游返回 HTTP 429；仍可启动，但运行可能失败。"
-    )).toHaveAttribute("role", "alert");
+    )).not.toBeInTheDocument();
     expect(within(within(mainCard).getByLabelText("Main Agent模型")).getByRole("option", {
       name: "route-model · 验证失败"
     })).not.toBeDisabled();
     expect(within(within(mainCard).getByLabelText("Main Agent全局网关")).getByRole("option", {
       name: "Responses 验收网关 · 连接验证失败"
     })).not.toBeDisabled();
-    expect(within(mainCard).getByText(/以下 model 验证失败，仍可选择并启动：route-model.*HTTP 429/)).toBeVisible();
-    expect(screen.getByText("网关连接验证未通过，允许启动")).toBeVisible();
+    expect(screen.queryByText("启动前提示")).not.toBeInTheDocument();
     await user.type(screen.getByRole("textbox", { name: "项目名称" }), "连接验证失败也可启动");
     await user.type(screen.getByRole("textbox", { name: "课题方向与具体要求" }), "允许尝试启动，让实际运行结果决定后续处理。");
     const start = screen.getByRole("button", { name: "创建并启动研究" });
     expect(start).not.toBeDisabled();
     await user.click(start);
+    expect(screen.getByText(/main：网关尚未通过.*HTTP 429/).closest('[role="status"]')).toHaveClass("launch-advisory");
+    expect(createProject).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "强制启动" }));
     await waitFor(() => expect(createProject).toHaveBeenCalledTimes(1));
     expect(onCreated).toHaveBeenCalledWith("prj_failed_probe_allowed");
   });
@@ -1960,9 +2058,9 @@ describe("NewProjectPage agent configuration", () => {
     renderExpanded(<NewProjectPage onBack={vi.fn()} onCreated={vi.fn()} />);
 
     const mainCard = (await screen.findAllByRole("heading", { name: "Main Agent" }))[0]!.closest("article")!;
-    expect(within(mainCard).getByText(
+    expect(within(mainCard).queryByText(
       "当前 Harness / 网关 / model 组合尚未验证；仍可启动，但运行可能失败。"
-    )).toHaveAttribute("role", "alert");
+    )).not.toBeInTheDocument();
 
     const testButton = within(mainCard).getByRole("button", { name: "测试Main Agent连通性" });
     expect(testButton.closest(".agent-config-head")).not.toBeNull();

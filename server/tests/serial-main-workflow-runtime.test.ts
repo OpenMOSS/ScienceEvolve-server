@@ -85,7 +85,7 @@ describe("Main workflow proposals on the actual serial backend path", () => {
     expect(state.agentSessions!.main).toEqual(f.session);
     expect(f.calls).toHaveLength(2);
     expect(state.runCounts.main).toBe(2);
-    expect(f.coordinator.getWorkflowAdjustments(state).records).toHaveLength(1);
+    expect((await f.coordinator.getWorkflowAdjustments(state)).records).toHaveLength(1);
     expect(publicationAttempts).toBe(3);
     const events = await f.storage.readEvents(project.id, 0, 1000);
     expect(events.filter(event => event.message.includes("publication recovery will retry automatically"))).toHaveLength(2);
@@ -145,7 +145,7 @@ describe("Main workflow proposals on the actual serial backend path", () => {
       const current = JSON.parse(await readFile(join(run.workspacePath, MAIN_AGENT_ORCHESTRATION_CURRENT_FILE), "utf8"));
       expect(current.agents.main.instructions).toBe("Exact Main instructions accepted at the live tool boundary");
       expect(current.baseHash).not.toBe(JSON.parse(original!.toString("utf8")).baseHash);
-      expect(current.baseVersion).toEqual(f.coordinator.getWorkflowAdjustments(run.project).current.version);
+      expect(current.baseVersion).toEqual((await f.coordinator.getWorkflowAdjustments(run.project)).current.version);
       expect(current.baseVersion.revision).toBe(2); expect(JSON.parse(original!.toString("utf8")).baseVersion.revision).toBe(1);
       await expect(service.stageWithResult(run.control!.capability, "stale-original-main-draft", { tool: "apply_workflow", path: "workflow.json", rationale: "Attempt to apply the retained old base" })).rejects.toThrow("workflow.json is stale");
       staleRejected = true;
@@ -155,7 +155,7 @@ describe("Main workflow proposals on the actual serial backend path", () => {
     const project = await create(f); await f.orchestrator.waitForIdle(project.id);
     const state = await f.storage.loadState(project.id);
     expect(staleRejected).toBe(true); expect(f.calls).toHaveLength(2); expect(state.status).toBe("completed");
-    expect(f.coordinator.getWorkflowAdjustments(state).records).toHaveLength(1);
+    expect((await f.coordinator.getWorkflowAdjustments(state)).records).toHaveLength(1);
     expect(state.agentSessions!.main).toEqual(f.session); expect(state.runCounts.main).toBe(2);
   });
 
@@ -200,7 +200,7 @@ describe("Main workflow proposals on the actual serial backend path", () => {
     expect(state.agents.main.instructions).toBe("Exact Main instructions accepted at the live tool boundary");
     expect(state.agentSessions!.main).toEqual(f.session); expect(state.runCounts.main).toBe(2); expect(state.executionCounts!.main).toBe(2);
     expect(state.workflowRevision).toBe(2);
-    const context = f.coordinator.getWorkflowAdjustments(state);
+    const context = await f.coordinator.getWorkflowAdjustments(state);
     expect(context.records).toHaveLength(1); expect(context.records[0]).toMatchObject({ status: "applied", explanation: "Original Main public explanation",
       source: { kind: "main", invocationId: f.calls[0].activeInvocationId, callId: "original-main-workflow-call", scope: { kind: "serial" } },
       proposal: { agents: { main: { instructions: "Exact Main instructions accepted at the live tool boundary" } } } });
@@ -212,7 +212,7 @@ describe("Main workflow proposals on the actual serial backend path", () => {
     const commit = f.storage.commitInvocationCommit.bind(f.storage);
     vi.spyOn(f.storage, "commitInvocationCommit").mockImplementation(async (...args) => {
       if (!committed) {
-        const context = f.coordinator.getWorkflowAdjustments(args[0]);
+        const context = await f.coordinator.getWorkflowAdjustments(args[0]);
         expect(context.records[0].status).toBe("pending"); expect(context.current.version.revision).toBe(1);
       }
       await commit(...args); committed = true;
@@ -224,7 +224,7 @@ describe("Main workflow proposals on the actual serial backend path", () => {
       return publish(...args);
     });
     f.hooks.afterAccepted = async request => {
-      const context = f.coordinator.getWorkflowAdjustments(request.project);
+      const context = await f.coordinator.getWorkflowAdjustments(request.project);
       expect(context.records[0]).toMatchObject({ status: "pending", explanation: "Original Main public explanation" });
       expect(context.current.version.revision).toBe(1);
       expect(request.project.agents.main.instructions).toBe("Original configured Main instructions");
@@ -240,7 +240,7 @@ describe("Main workflow proposals on the actual serial backend path", () => {
       const replay = await authority.stageWithResult(request.control!.capability, "equivalent-new-native-call",
         { tool: "apply_workflow", path: "workflow.json", rationale: "Original Main public explanation" });
       expect(replay.envelope).toEqual(original);
-      expect(f.coordinator.getWorkflowAdjustments(request.project).records).toHaveLength(1); replayed = true;
+      expect((await f.coordinator.getWorkflowAdjustments(request.project)).records).toHaveLength(1); replayed = true;
     };
     const project = await create(f); await f.orchestrator.waitForIdle(project.id);
     expect(replayed).toBe(true);
@@ -250,13 +250,13 @@ describe("Main workflow proposals on the actual serial backend path", () => {
   it("preserves the accepted request and original Main continuation while paused, then publishes after explicit resume", async () => {
     const f = await fixture(); f.hooks.afterAccepted = async request => { await f.orchestrator.pause(request.project.id); };
     const project = await create(f); await f.orchestrator.waitForIdle(project.id);
-    const paused = await f.storage.loadState(project.id), before = f.coordinator.getWorkflowAdjustments(paused);
+    const paused = await f.storage.loadState(project.id), before = await f.coordinator.getWorkflowAdjustments(paused);
     expect(paused.status).toBe("paused"); expect(paused.workflowRevision).toBe(1); expect(f.calls).toHaveLength(1);
     expect(before.records[0]).toMatchObject({ status: "pending", waitingReason: expect.stringContaining("暂停") });
     expect(paused.agentSessions!.main).toEqual(f.session); expect(paused.executionCounts!.main).toBe(1);
     const continuation = paused.activeAgentExecution!.id, requestId = before.records[0].requestId;
     await f.orchestrator.resume(project.id); await f.orchestrator.waitForIdle(project.id);
-    const state = await f.storage.loadState(project.id), after = f.coordinator.getWorkflowAdjustments(state);
+    const state = await f.storage.loadState(project.id), after = await f.coordinator.getWorkflowAdjustments(state);
     expect(state.status).toBe("completed"); expect(state.workflowRevision).toBe(2); expect(f.calls).toHaveLength(2);
     expect(f.calls[1].activeAgentExecution!.id).toBe(continuation);
     expect(after.records[0]).toMatchObject({ requestId, status: "applied" }); expect(state.agentSessions!.main).toEqual(f.session);
@@ -270,7 +270,7 @@ describe("Main workflow proposals on the actual serial backend path", () => {
       return commit(...args);
     });
     const project = await create(f); await f.orchestrator.waitForIdle(project.id);
-    const state = await f.storage.loadState(project.id), context = f.coordinator.getWorkflowAdjustments(state);
+    const state = await f.storage.loadState(project.id), context = await f.coordinator.getWorkflowAdjustments(state);
     expect(failed).toBe(true); expect(state.workflowRevision).toBe(1);
     expect(state.agents.main.instructions).toBe("Original configured Main instructions");
     expect(context.records).toHaveLength(1);
@@ -282,7 +282,7 @@ describe("Main workflow proposals on the actual serial backend path", () => {
     const f = await fixture(); vi.spyOn(f.coordinator, "recordSerialMainWorkflowBoundary").mockImplementation(() => {});
     vi.spyOn(f.coordinator, "recoverSerialMainWorkflowBoundaries").mockImplementation(async () => {});
     const project = await create(f); await f.orchestrator.waitForIdle(project.id);
-    const before = await f.storage.loadState(project.id), original = f.coordinator.getWorkflowAdjustments(before).records[0];
+    const before = await f.storage.loadState(project.id), original = (await f.coordinator.getWorkflowAdjustments(before)).records[0];
     expect(before.status).toBe("completed"); expect(before.workflowRevision).toBe(1); expect(original.status).toBe("pending");
     await f.orchestrator.shutdown();
     const storage = new ProjectStorage(f.root, new EventHub()); let restarted!: Orchestrator;
@@ -296,7 +296,7 @@ describe("Main workflow proposals on the actual serial backend path", () => {
     const state = await storage.loadState(project.id);
     expect(run).not.toHaveBeenCalled(); expect(state.agentSessions).toEqual(before.agentSessions);
     expect(state.runCounts).toEqual(before.runCounts); expect(state.executionCounts).toEqual(before.executionCounts);
-    expect(coordinator.getWorkflowAdjustments(state).records[0]).toEqual(original);
+    expect((await coordinator.getWorkflowAdjustments(state)).records[0]).toEqual(original);
     const observed = vi.fn(() => "Original project remains completed");
     const retained = await coordinator.publishSerialMainWorkflowAdjustment(state, original.requestId, { sessions: state, waitingReason: observed });
     expect(observed).toHaveBeenCalledOnce(); expect(retained.status).toBe("pending"); expect(state.workflowRevision).toBe(1);
@@ -314,7 +314,7 @@ describe("Main workflow proposals on the actual serial backend path", () => {
       return refresh(...args);
     });
     const project = await create(f); await f.orchestrator.waitForIdle(project.id);
-    const state = await f.storage.loadState(project.id), context = f.coordinator.getWorkflowAdjustments(state);
+    const state = await f.storage.loadState(project.id), context = await f.coordinator.getWorkflowAdjustments(state);
     expect(failed).toBe(true);
     expect(context.records[0].status).toBe("applied"); expect(context.current.version.revision).toBe(2);
     expect(state.status).toBe("completed"); expect(state.workflowRevision).toBe(2); expect(state.runCounts.main).toBe(2);
@@ -329,14 +329,14 @@ describe("Main workflow proposals on the actual serial backend path", () => {
   it("automatically recovers a failed boundary write from the original committed event without retrying the successful Main", async () => {
     const f = await fixture();
     let continuation = "", requestId = "";
-    vi.spyOn(f.coordinator, "recordSerialMainWorkflowBoundary").mockImplementationOnce((state, originalRequestId) => {
+    vi.spyOn(f.coordinator, "recordSerialMainWorkflowBoundary").mockImplementationOnce(async (state, originalRequestId) => {
       continuation = state.activeAgentExecution!.id; requestId = originalRequestId;
       expect(state.runCounts.main).toBe(1);
-      expect(f.coordinator.getWorkflowAdjustments(state).records[0].status).toBe("pending");
+      expect((await f.coordinator.getWorkflowAdjustments(state)).records[0].status).toBe("pending");
       throw new Error("Original boundary journal write failed");
     });
     const project = await create(f); await f.orchestrator.waitForIdle(project.id);
-    const state = await f.storage.loadState(project.id), record = f.coordinator.getWorkflowAdjustments(state).records[0];
+    const state = await f.storage.loadState(project.id), record = (await f.coordinator.getWorkflowAdjustments(state)).records[0];
     expect(state.status).toBe("completed"); expect(record).toMatchObject({ requestId, status: "applied" });
     expect(state.workflowRevision).toBe(2); expect(state.runCounts.main).toBe(2); expect(state.executionCounts!.main).toBe(2);
     expect(f.calls).toHaveLength(2); expect(f.calls[1].activeAgentExecution!.id).toBe(continuation);
@@ -348,14 +348,14 @@ describe("Main workflow proposals on the actual serial backend path", () => {
     const app = createApp({ orchestrator: f.orchestrator, storage: f.storage, eventHub: f.storage.hub,
       skills: new SkillCatalog([]), config: { modelSuggestions: ["test-model"], maxEventHistory: 10 } });
     f.hooks.afterAccepted = async run => {
-      const original = f.coordinator.getWorkflowAdjustments(run.project).records[0]; requestId = original.requestId;
+      const original = (await f.coordinator.getWorkflowAdjustments(run.project)).records[0]; requestId = original.requestId;
       const result = await request(app).post(`/api/projects/${run.project.id}/workflow/adjustments/${encodeURIComponent(requestId)}/withdraw`)
         .send({ operationId: "original-main-proposal-withdrawal", note: "User withdraws the exact accepted Main proposal" }).expect(200);
       expect(result.body).toMatchObject({ withdrawn: true, record: { requestId, status: "withdrawn", proposal: original.proposal } });
       expect(f.calls).toHaveLength(1); withdrawn = true;
     };
     const project = await create(f); await f.orchestrator.waitForIdle(project.id);
-    const state = await f.storage.loadState(project.id), record = f.coordinator.getWorkflowAdjustments(state).records[0];
+    const state = await f.storage.loadState(project.id), record = (await f.coordinator.getWorkflowAdjustments(state)).records[0];
     expect(withdrawn).toBe(true); expect(state.status).toBe("completed"); expect(state.workflowRevision).toBe(1);
     expect(state.agents.main.instructions).toBe("Original configured Main instructions"); expect(record).toMatchObject({ requestId, status: "withdrawn" });
     expect(f.calls).toHaveLength(2); expect(f.calls[1].pendingMainDecision).toMatchObject({ reason: "workflow-reconfiguration-rejected", diagnostic: expect.stringContaining("withdrawn") });

@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { promises as fs, readFileSync } from "node:fs";
+import fsSync, { promises as fs, readFileSync } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +12,8 @@ import {
 import type { LaunchPlan } from "../src/harness-runtime/contracts.js";
 import { InvocationRecoveryController } from "../src/harness-runtime/invocation-recovery.js";
 import { agentEnvironment } from "../src/harness-runtime/runtime-support.js";
+import { NATIVE_PROCESS_SCOPE_ENV, NATIVE_PROCESS_SUPPORT_ENV, nativeProcessScope, pendingNativeProcesses, recoverNativeProcesses, type NativeProcessRecord } from "../src/harness-runtime/native-processes.js";
+import { requestNativeBackgroundJob } from "../src/harness-runtime/background-jobs.js";
 import {
   PUBLISHED_ARTIFACT_MANIFEST_ENV,
   PUBLISHED_ARTIFACT_MANIFEST_FILENAME
@@ -25,7 +28,8 @@ afterEach(async () => {
   })));
 });
 
-async function createBoundFixture(maxAttempts = 4) {
+async function createBoundFixture(maxAttempts = 4, trackProcesses = false,
+  onProcesses?: (records: readonly NativeProcessRecord[]) => Promise<void>) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-process-host-"));
   temporaryRoots.push(root);
   const workspacePath = path.join(root, "workspace");
@@ -37,12 +41,14 @@ async function createBoundFixture(maxAttempts = 4) {
   const invocationId = "inv_process_host_fixture";
   const harnessId = "fixture";
   const budget = new InvocationRecoveryController(maxAttempts);
+  const processRecords: NativeProcessRecord[] = [];
   const plan: LaunchPlan = {
     command: process.execPath,
     args: ["-e", "process.exit(0)"],
     cwd: workspacePath,
     env: buildInvocationEnvironment({
       common: {
+        ...(trackProcesses ? { SCIENCEEVOLVE_PROJECT_ID: "prj_process_fixture", SCIENCEEVOLVE_AGENT_NAME: "coder" } : {}),
         SCIENCEEVOLVE_INVOCATION_ID: invocationId,
         SCIENCEEVOLVE_AGENT_HARNESS: harnessId,
         SCIENCEEVOLVE_ROLE_WORKSPACE: workspacePath,
@@ -66,6 +72,8 @@ async function createBoundFixture(maxAttempts = 4) {
     recoveryEvidence: { kind: "adapter-dispatch" }
   };
   const processHost = new CommonProcessHost().forInvocation({
+    ...(trackProcesses ? { nativeProcesses: { projectId: "prj_process_fixture", projectPath: root, agentId: "coder", invocationId,
+      onChanges: async (records: readonly NativeProcessRecord[]) => { processRecords.push(...records); await onProcesses?.(records); } } } : {}),
     invocationId,
     harnessId,
     runtimePath,
@@ -73,7 +81,8 @@ async function createBoundFixture(maxAttempts = 4) {
     signal: new AbortController().signal,
     recoveryBudget: budget,
     session: () => plan.session,
-    commonEnvironment: plan.env
+    commonEnvironment: plan.env,
+    ...(trackProcesses ? { authorityEnvironment: plan.env } : {})
   });
   return {
     root,
@@ -81,6 +90,8 @@ async function createBoundFixture(maxAttempts = 4) {
     invocationId,
     budget,
     processHost,
+    processRecords,
+    workspacePath,
     plan
   };
 }
@@ -638,9 +649,9 @@ describe("CommonProcessHost", () => {
     }
   });
 
-  it.each(["secret-value", "0", "1000001", "1e6"])("rejects a non-budget native context setting: %s", async (value) => {
+  it.each(["secret-value", "0", "1000001", "1e6"])("rejects an Adapter-declared credential value: %s", async (value) => {
     const fixture = await createBoundFixture();
-    const key = "CLAUDE_CODE_MAX_CONTEXT_TOKENS";
+    const key = "ADAPTER_ACCESS_TOKEN";
     expect(() => fixture.processHost.start({
       ...fixture.plan, env: { ...fixture.plan.env, [key]: value }, adapterEnvironmentKeys: [key]
     }, {})).toThrow(/unsafe Adapter environment key|unapproved credential/);
@@ -1493,6 +1504,340 @@ describe("CommonProcessHost", () => {
     },
     15_000
   );
+});
+
+describe.runIf(process.platform === "linux")("automatic native process ownership", () => {
+  function denyNamespace(procPid: number) {
+    const original = fsSync.readlinkSync;
+    let attempts = 0;
+    const failure = Object.assign(new Error(`EACCES: permission denied, readlink '/proc/${procPid}/ns/pid'`), { code: "EACCES" });
+    const mock = vi.spyOn(fsSync, "readlinkSync").mockImplementation((...args) => {
+      if (String(args[0]) === `/proc/${procPid}/ns/pid`) { attempts += 1; throw failure; }
+      return Reflect.apply(original, fsSync, args);
+    });
+    syncBuiltinESMExports();
+    return { failure, attempts: () => attempts, restore: () => { mock.mockRestore(); syncBuiltinESMExports(); } };
+  }
+
+  it.each(["readable", "exited", "unreadable"] as const)("rechecks an owned process after a polling permission error (%s)", async outcome => {
+    const fixture = await nativeChild();
+    const scope = nativeProcessScope(fixture.raw.child)!;
+    await scope.flushAudit();
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const recovered = vi.spyOn(console, "info").mockImplementation(() => {});
+    const denied = denyNamespace(await procPidForNamespacePid(fixture.pid));
+    try {
+      await vi.waitFor(() => expect(denied.attempts()).toBeGreaterThanOrEqual(2), { timeout: 3_000 });
+      expect(() => pendingNativeProcesses(fixture.raw.child.pid!)).toThrow(denied.failure);
+      expect(fixture.processRecords).not.toContainEqual(expect.objectContaining({ pid: fixture.pid, state: "exited" }));
+      if (outcome === "unreadable") {
+        expect(() => pendingNativeProcesses(fixture.raw.child.pid!)).toThrow(denied.failure);
+        expect(recovered).not.toHaveBeenCalled();
+      } else {
+        if (outcome === "exited") { process.kill(fixture.pid, "SIGKILL"); await waitForNamespaceProcessExit(fixture.pid); }
+        else denied.restore();
+        const pending = pendingNativeProcesses(fixture.raw.child.pid!);
+        expect(pending.map(record => record.pid)).toEqual(outcome === "exited" ? [] : [fixture.pid]);
+        await scope.flushAudit();
+        expect(recovered).toHaveBeenCalledWith("Native process observation recovered", expect.objectContaining({ scopeId: scope.scopeId }));
+        if (outcome === "exited") expect(fixture.processRecords).toContainEqual(expect.objectContaining({ pid: fixture.pid, state: "exited" }));
+      }
+      expect(warning).toHaveBeenCalledTimes(1);
+    } finally {
+      denied.restore();
+      fixture.raw.forceTerminate(); await fixture.raw.waitForQuiescence(); await fixture.raw.completed.catch(() => {});
+      warning.mockRestore(); recovered.mockRestore();
+    }
+  });
+
+  it("audits an earlier exit after another owned identity temporarily becomes unreadable", async () => {
+    const fixture = await nativeChild(false, undefined, 2);
+    const scope = nativeProcessScope(fixture.raw.child)!;
+    await scope.flushAudit();
+    const denied = denyNamespace(await procPidForNamespacePid(fixture.pids[1]!));
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const recovered = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      process.kill(fixture.pid, "SIGKILL"); await waitForNamespaceProcessExit(fixture.pid);
+      expect(() => pendingNativeProcesses(fixture.raw.child.pid!)).toThrow(denied.failure);
+      denied.restore();
+      await scope.flushAudit();
+      expect(fixture.processRecords).toContainEqual(expect.objectContaining({ pid: fixture.pid, state: "exited" }));
+      expect(pendingNativeProcesses(fixture.raw.child.pid!).map(record => record.pid)).toEqual([fixture.pids[1]]);
+    } finally {
+      denied.restore(); warning.mockRestore(); recovered.mockRestore();
+      fixture.raw.forceTerminate(); await fixture.raw.waitForQuiescence(); await fixture.raw.completed.catch(() => {});
+    }
+  });
+
+  it("keeps an inventory write failure fatal after the filesystem becomes writable", async () => {
+    const fixture = await nativeChild();
+    const scope = nativeProcessScope(fixture.raw.child)!;
+    await scope.flushAudit();
+    const inventory = path.join(fixture.runtimePath, `native-processes-${scope.scopeId}.json`);
+    const failure = Object.assign(new Error("Native inventory publication failed"), { code: "EIO" });
+    const original = fsSync.renameSync;
+    const rename = vi.spyOn(fsSync, "renameSync").mockImplementation((...args) => {
+      if (String(args[1]) === inventory) throw failure;
+      return Reflect.apply(original, fsSync, args);
+    });
+    syncBuiltinESMExports();
+    const completion = fixture.raw.completed.catch(error => error);
+    try {
+      process.kill(fixture.pid, "SIGKILL"); await waitForNamespaceProcessExit(fixture.pid);
+      expect(() => pendingNativeProcesses(fixture.raw.child.pid!)).toThrow(failure);
+      expect((await fs.readdir(fixture.runtimePath)).filter(file => file.startsWith(`native-processes-${scope.scopeId}.json.`))).toEqual([]);
+      rename.mockRestore(); syncBuiltinESMExports();
+      expect(() => pendingNativeProcesses(fixture.raw.child.pid!)).toThrow(failure);
+      await expect(scope.flushAudit()).rejects.toBe(failure);
+      fixture.raw.forceTerminate();
+      await expect(fixture.raw.waitForQuiescence()).rejects.toBe(failure);
+      expect(await completion).toBe(failure);
+    } finally {
+      rename.mockRestore(); syncBuiltinESMExports();
+      fixture.raw.forceTerminate(); await fixture.raw.waitForQuiescence().catch(() => {}); await completion;
+    }
+  });
+
+  it("does not adopt a descendant assigned to a different Agent launch", async () => {
+    const fixture = await createBoundFixture(4, true);
+    const pidFile = path.join(fixture.root, "separate-agent.pid");
+    const source = `const child=require('node:child_process').spawn(process.execPath,['-e','setInterval(()=>{},1000)'],` +
+      `{detached:true,stdio:'ignore',env:{...process.env,${JSON.stringify(NATIVE_PROCESS_SCOPE_ENV)}:'00000000-0000-4000-8000-000000000002'}});` +
+      `require('node:fs').writeFileSync(${JSON.stringify(pidFile)},String(child.pid));setInterval(()=>{},1000)`;
+    const raw = fixture.processHost.startRaw({ ...fixture.plan, args: ["-e", source] });
+    let pid: number | undefined;
+    try {
+      await waitForPath(pidFile); pid = Number(await fs.readFile(pidFile, "utf8"));
+      expect(pendingNativeProcesses(raw.child.pid!)).toEqual([]);
+      await nativeProcessScope(raw.child)!.flushAudit();
+      expect(fixture.processRecords.some(record => record.pid === pid)).toBe(false);
+      raw.forceTerminate(); await raw.waitForQuiescence(); await raw.completed;
+      expect(await namespaceProcessAlive(pid)).toBe(true);
+    } finally {
+      raw.forceTerminate(); await raw.waitForQuiescence(); await raw.completed.catch(() => {});
+      if (pid) { try { process.kill(pid, "SIGKILL"); } catch {} await waitForNamespaceProcessExit(pid); }
+    }
+  });
+
+  it.each([false, true])("does not adopt a process born before the current launch even if its scope assignment matches (recovery=%s)", async recovering => {
+    const older = await nativeChild();
+    const current = await nativeChild();
+    let restore: (() => void) | undefined;
+    try {
+      pendingNativeProcesses(older.raw.child.pid!);
+      const scope = nativeProcessScope(current.raw.child)!;
+      const olderRecord = older.processRecords.find(record => record.pid === older.pid)!;
+      if (recovering) {
+        const original = fsSync.readFileSync;
+        const read = vi.spyOn(fsSync, "readFileSync").mockImplementation((...args) => {
+          if (String(args[0]) === `/proc/${olderRecord.procPid}/environ`) return `${NATIVE_PROCESS_SCOPE_ENV}=${scope.scopeId}\0`;
+          return Reflect.apply(original, fsSync, args);
+        });
+        syncBuiltinESMExports(); restore = () => { read.mockRestore(); syncBuiltinESMExports(); };
+        await recoverNativeProcesses(current.runtimePath); await current.raw.completed;
+      } else {
+        scope.observe([{ ...olderRecord, scopeId: scope.scopeId }]);
+        const inventory = JSON.parse(await fs.readFile(path.join(current.runtimePath, `native-processes-${scope.scopeId}.json`), "utf8"));
+        expect(inventory.records.some((record: NativeProcessRecord) => record.pid === older.pid)).toBe(false);
+        current.raw.forceTerminate(); await current.raw.waitForQuiescence(); await current.raw.completed;
+      }
+      expect(await namespaceProcessAlive(older.pid)).toBe(true);
+    } finally {
+      restore?.();
+      for (const fixture of [current, older]) {
+        fixture.raw.forceTerminate(); await fixture.raw.waitForQuiescence(); await fixture.raw.completed.catch(() => {});
+      }
+    }
+  });
+
+  it("does not block another Agent launch when one owned process is unreadable", async () => {
+    const first = await nativeChild(), second = await nativeChild();
+    await nativeProcessScope(first.raw.child)!.flushAudit();
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const recovered = vi.spyOn(console, "info").mockImplementation(() => {});
+    const denied = denyNamespace(await procPidForNamespacePid(first.pid));
+    try {
+      await vi.waitFor(() => expect(denied.attempts()).toBeGreaterThanOrEqual(2), { timeout: 3_000 });
+      expect(pendingNativeProcesses(second.raw.child.pid!).map(record => record.pid)).toEqual([second.pid]);
+      second.raw.forceTerminate(); await second.raw.waitForQuiescence(); await second.raw.completed;
+      expect(await namespaceProcessAlive(first.pid)).toBe(true);
+    } finally {
+      denied.restore();
+      for (const fixture of [first, second]) {
+        fixture.raw.forceTerminate(); await fixture.raw.waitForQuiescence(); await fixture.raw.completed.catch(() => {});
+      }
+      warning.mockRestore(); recovered.mockRestore();
+    }
+  });
+
+  it("does not let an explicitly handed-off job's observation block its original Agent", async () => {
+    const fixture = await nativeChild();
+    const scope = { projectId: "prj_process_fixture", projectPath: fixture.root, agentId: "coder",
+      invocationId: fixture.invocationId, workspacePath: fixture.workspacePath };
+    const call = (operation: "register" | "stop") => requestNativeBackgroundJob(scope,
+      { operation, jobId: "independent-monitor", ...(operation === "register" ? { pid: fixture.pid } : {}) }, async () => {});
+    let restore: (() => void) | undefined;
+    try {
+      await call("register");
+      expect(pendingNativeProcesses(fixture.raw.child.pid!)).toEqual([]);
+      restore = denyNamespace(await procPidForNamespacePid(fixture.pid)).restore;
+      expect(pendingNativeProcesses(fixture.raw.child.pid!)).toEqual([]);
+      fixture.raw.forceTerminate(); await fixture.raw.waitForQuiescence(); await fixture.raw.completed;
+      expect(await namespaceProcessAlive(fixture.pid)).toBe(true);
+    } finally {
+      restore?.(); await call("stop");
+      fixture.raw.forceTerminate(); await fixture.raw.waitForQuiescence(); await fixture.raw.completed.catch(() => {});
+    }
+  });
+
+  it("checks only this task's business processes while supervising MCP helpers through Harness shutdown", async () => {
+    const fixture = await createBoundFixture(4, true);
+    const other = await nativeChild();
+    const supportFile = path.join(fixture.root, "support.pid");
+    const helperFile = path.join(fixture.root, "support-helper.pid");
+    const businessFile = path.join(fixture.root, "business.pid");
+    const launch = (source: string, target: string, support: boolean) =>
+      `const child=require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(source)}],` +
+      `{detached:true,stdio:'ignore',env:{...process.env,${JSON.stringify(NATIVE_PROCESS_SUPPORT_ENV)}:${JSON.stringify(support ? "1" : "0")}}});` +
+      `require('node:fs').writeFileSync(${JSON.stringify(target)},String(child.pid));`;
+    const helper = launch("setInterval(()=>{},1000)", helperFile, true) + "setInterval(()=>{},1000)";
+    const source = "{" + launch(helper, supportFile, true) + "}{" +
+      launch("setInterval(()=>{},1000)", businessFile, false) + "}setInterval(()=>{},1000)";
+    const raw = fixture.processHost.startRaw({ ...fixture.plan, args: ["-e", source] });
+    const pids: number[] = [];
+    try {
+      for (const file of [supportFile, helperFile, businessFile]) {
+        await waitForPath(file); pids.push(Number(await fs.readFile(file, "utf8")));
+      }
+      const [supportPid, helperPid, businessPid] = pids;
+      const pending = pendingNativeProcesses(raw.child.pid!);
+      expect(pending.map(record => record.pid)).toEqual([businessPid]);
+      await vi.waitFor(() => {
+        for (const pid of pids) expect(fixture.processRecords).toContainEqual(expect.objectContaining({ pid, state: "running" }));
+      });
+      raw.forceTerminate(); await raw.waitForQuiescence(); await raw.completed;
+      for (const pid of [supportPid!, helperPid!, businessPid!]) await waitForNamespaceProcessExit(pid);
+      expect(await namespaceProcessAlive(other.pid)).toBe(true);
+      expect(other.raw.child.exitCode).toBeNull();
+    } finally {
+      raw.forceTerminate(); await raw.waitForQuiescence(); await raw.completed.catch(() => {});
+      other.raw.forceTerminate(); await other.raw.waitForQuiescence(); await other.raw.completed.catch(() => {});
+      for (const pid of pids) try { process.kill(pid, "SIGKILL"); } catch {}
+    }
+  });
+
+  async function nativeChild(orphanShell = false, onProcesses?: (records: readonly NativeProcessRecord[]) => Promise<void>, count = 1) {
+    const fixture = await createBoundFixture(4, true, onProcesses);
+    const pidFile = path.join(fixture.root, "native-child.pid");
+    const ready = path.join(fixture.root, "native-child.ready");
+    const pidsFile = path.join(fixture.root, "native-children.json");
+    const worker = `require('node:fs').writeFileSync(${JSON.stringify(ready)},'ready');setInterval(()=>{},1000)`;
+    const launch = `const pids=[];for(let i=0;i<${count};i++){const c=require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(worker)}],{detached:true,stdio:'ignore'});pids.push(c.pid);}` +
+      `require('node:fs').writeFileSync(${JSON.stringify(pidsFile)},JSON.stringify(pids));require('node:fs').writeFileSync(${JSON.stringify(pidFile)},String(pids[0]));`;
+    const source = orphanShell
+      ? `require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(launch + "process.exit(0)")}],{stdio:'ignore'});setInterval(()=>{},1000)`
+      : launch + "setInterval(()=>{},1000)";
+    const raw = fixture.processHost.startRaw({ ...fixture.plan, args: ["-e", source] });
+    await waitForPath(pidFile); await waitForPath(ready);
+    const pid = Number(await fs.readFile(pidFile, "utf8"));
+    const pids = JSON.parse(await fs.readFile(pidsFile, "utf8")) as number[];
+    return { ...fixture, raw, pid, pids };
+  }
+
+  it.each([false, true])("records and stops detached native work after shell reparenting=%s", async orphanShell => {
+    const fixture = await nativeChild(orphanShell);
+    try {
+      expect(pendingNativeProcesses(fixture.raw.child.pid!)).toContainEqual(expect.objectContaining({ pid: fixture.pid, state: "running", agentId: "coder" }));
+      await vi.waitFor(() => expect(fixture.processRecords).toContainEqual(expect.objectContaining({ pid: fixture.pid, state: "running" })));
+      fixture.raw.forceTerminate();
+      await fixture.raw.waitForQuiescence();
+      await fixture.raw.completed;
+      await waitForNamespaceProcessExit(fixture.pid);
+      expect(fixture.processRecords).toContainEqual(expect.objectContaining({ pid: fixture.pid, state: "exited" }));
+    } finally {
+      fixture.raw.forceTerminate(); await fixture.raw.waitForQuiescence();
+      await fixture.raw.completed.catch(() => {});
+      try { process.kill(fixture.pid, "SIGKILL"); } catch {}
+    }
+  });
+
+  it.each([false, true])("preserves an explicitly registered handoff across native completion with restart reconciliation=%s", async recovering => {
+    const fixture = await nativeChild();
+    const scope = { projectId: "prj_process_fixture", projectPath: fixture.root, agentId: "coder", invocationId: fixture.invocationId, workspacePath: fixture.workspacePath };
+    const call = (operation: "register" | "stop" | "status") => requestNativeBackgroundJob(scope,
+      { operation, jobId: "retained", ...(operation === "register" ? { pid: fixture.pid } : {}) }, async () => {});
+    try {
+      expect(pendingNativeProcesses(fixture.raw.child.pid!)).toHaveLength(1);
+      await call("register");
+      if (recovering) await recoverNativeProcesses(fixture.runtimePath);
+      else {
+        expect(pendingNativeProcesses(fixture.raw.child.pid!)).toEqual([]);
+        fixture.raw.forceTerminate(); await fixture.raw.waitForQuiescence();
+      }
+      await fixture.raw.completed;
+      expect(await call("status")).toMatchObject({ state: "running" });
+      expect(fixture.processRecords).toContainEqual(expect.objectContaining({ pid: fixture.pid, state: "handed_off", jobId: "retained" }));
+    } finally {
+      await call("stop");
+      fixture.raw.forceTerminate(); await fixture.raw.waitForQuiescence();
+      await fixture.raw.completed.catch(() => {});
+    }
+  });
+
+  it("still stops owned work when audit delivery fails and never acknowledges successful completion", async () => {
+    const failure = new Error("Native process audit delivery failed");
+    const fixture = await nativeChild(false, async () => { throw failure; });
+    const completion = fixture.raw.completed.catch(error => error);
+    try {
+      fixture.raw.forceTerminate();
+      await expect(fixture.raw.waitForQuiescence()).rejects.toBe(failure);
+      expect(await completion).toBe(failure);
+      await waitForNamespaceProcessExit(fixture.pid);
+    } finally {
+      fixture.raw.forceTerminate(); await fixture.raw.waitForQuiescence().catch(() => {});
+      await completion;
+      try { process.kill(fixture.pid, "SIGKILL"); } catch {}
+    }
+  });
+
+  it("reconciles a retained process inventory without touching another execution", async () => {
+    const fixture = await nativeChild(), other = await nativeChild();
+    try {
+      pendingNativeProcesses(fixture.raw.child.pid!);
+      await recoverNativeProcesses(fixture.runtimePath);
+      await fixture.raw.completed;
+      await waitForNamespaceProcessExit(fixture.pid);
+      expect(await namespaceProcessAlive(other.pid)).toBe(true);
+      expect(other.raw.child.exitCode).toBeNull();
+    } finally {
+      for (const current of [fixture, other]) {
+        current.raw.forceTerminate(); await current.raw.waitForQuiescence();
+        await current.raw.completed.catch(() => {});
+      }
+    }
+  });
+
+  it("does not signal a replacement whose retained start identity disagrees", async () => {
+    const fixture = await nativeChild();
+    try {
+      pendingNativeProcesses(fixture.raw.child.pid!);
+      const name = (await fs.readdir(fixture.runtimePath)).find(name => /^native-processes-.*\.json$/.test(name))!;
+      const file = path.join(fixture.runtimePath, name), inventory = JSON.parse(await fs.readFile(file, "utf8"));
+      inventory.scopeId = "00000000-0000-4000-8000-000000000001";
+      inventory.records = inventory.records.filter((record: NativeProcessRecord) => record.pid === fixture.pid)
+        .map((record: NativeProcessRecord) => ({ ...record, scopeId: inventory.scopeId, startTicks: "0" }));
+      const retained = path.join(fixture.runtimePath, `native-processes-${inventory.scopeId}.json`);
+      await fs.rename(file, retained);
+      await fs.writeFile(retained, JSON.stringify(inventory));
+      await recoverNativeProcesses(fixture.runtimePath);
+      expect(await namespaceProcessAlive(fixture.pid)).toBe(true);
+      expect(fixture.raw.child.exitCode).toBeNull();
+    } finally {
+      fixture.raw.forceTerminate(); await fixture.raw.waitForQuiescence();
+      await fixture.raw.completed.catch(() => {});
+    }
+  });
 });
 
 function processAlive(pid: number): boolean {

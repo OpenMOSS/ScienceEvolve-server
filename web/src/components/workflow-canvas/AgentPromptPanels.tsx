@@ -7,13 +7,15 @@ import { PERMISSION_PROMPTS } from "../../../../server/src/internal/shared/agent
 import { Button } from "../Common";
 import "./agent-prompt-panels.css";
 
-function ReadOnlyPrompt({ title, text, note, open = false }: { title: string; text?: string; note: string; open?: boolean }) {
+function ReadOnlyPrompt({ title, text, note, open = false, error = false }: {
+  title: string; text?: string; note: string; open?: boolean; error?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
   useEffect(() => { setCopied(false); setCopyError(false); }, [text]);
   return <details className="canvas-prompt-panel" open={open}>
     <summary>{title}<small>只读</small></summary>
-    <p className="runtime-help">{note}</p>
+    <p className={error ? "runtime-help canvas-prompt-error" : "runtime-help"} role={error ? "alert" : undefined}>{note}</p>
     {text !== undefined && <>
       <div className="canvas-prompt-tools">
         <Button type="button" variant="ghost" icon={copied ? <Check size={13} /> : <Copy size={13} />}
@@ -57,7 +59,7 @@ export function AgentPromptPanels({ agentId, agent, mainSystemPrompt }: {
     const controller = new AbortController();
     const cached = readCachedResource<HarnessPromptResult>(`prompt:${key}`);
     setHarness({ key, result: cached, loading: true });
-    if (!selectedHarness) { setHarness({ key, loading: false, error: "正在读取默认 Harness，或尚未选择 Harness。" }); return; }
+    if (!selectedHarness) { setHarness({ key, loading: false }); return; }
     if (!agent.model.trim()) { setHarness({ key, loading: false, error: "尚未选择模型，选择后可查询 Harness Prompt。" }); return; }
     getHarnessPrompt({ ...agent, harness: selectedHarness }, controller.signal, retry > 0).then(result => {
       if (!controller.signal.aborted) {
@@ -79,15 +81,22 @@ export function AgentPromptPanels({ agentId, agent, mainSystemPrompt }: {
   const result = current?.result;
   const needsCatalog = (agentId === "main" && !mainSystemPrompt?.trim()) || !agent.harness;
   const loading = Boolean(current?.loading || (needsCatalog && system.loading));
+  const queryError = !selectedHarness && system.error ? `无法读取默认 Harness：${system.error}` : current?.error;
   const source = result?.status === "available"
-    ? `${result.harness} ${result.installedVersion} · ${result.resolvedModel} · 基础默认文本（非实际会话完整输入）\n${result.scopeNote ? `${result.scopeNote}\n` : ""}来源：${result.source}\n采集时间：${result.collectedAt}`
-    : result?.reason ?? current?.error ?? "正在查询当前 Harness、版本与模型…";
+    ? `${result.harness} ${result.installedVersion} · 模型：${result.model} · 基础默认文本（非实际会话完整输入）\nPrompt 模板：${result.resolvedModel}\n${result.scopeNote ? `${result.scopeNote}\n` : ""}来源：${result.source}\n采集时间：${result.collectedAt}`
+    : result ? `${result.harness}${result.installedVersion ? ` ${result.installedVersion}` : ""} · 模型：${result.model}\n无法显示 Harness Prompt：${result.reason ?? "服务未返回提示词缺失原因，请刷新重试。"}`
+      : queryError ?? (!selectedHarness
+        ? system.loading ? "正在读取默认 Harness…" : "未找到默认 Harness，请先选择 Harness。"
+        : "正在查询当前 Harness、版本与模型…");
+  const unavailable = Boolean(result ? result.status !== "available"
+    : queryError || (!selectedHarness && !system.loading));
   return <section className="form-section canvas-prompt-panels" aria-label={`${agentId} 提示词来源`} aria-busy={loading}>
     <ReadOnlyPrompt title="System Prompt" text={systemText} open
       note={agentId === "main" ? (!mainSystemPrompt?.trim() ? system.error : undefined)
-        ?? (systemText ? "OpenFARS 固定系统规则。" : "正在读取固定系统规则…")
-        : "OpenFARS 根据当前文件权限注入的固定规则；角色职责由下方用户 Prompt 配置。"} />
-    <ReadOnlyPrompt title="Harness Prompt" text={result?.status === "available" ? result.text : undefined} note={source} open />
+        ?? (systemText ? "ScienceEvolve 固定系统规则。" : "正在读取固定系统规则…")
+        : "ScienceEvolve 根据当前文件权限注入的固定规则；角色职责由下方用户 Prompt 配置。"} />
+    <ReadOnlyPrompt title="Harness Prompt" text={result?.status === "available" ? result.text : undefined} note={source}
+      error={unavailable} open />
     {current?.error && result && <p className="canvas-prompt-error" role="alert">刷新失败：{current.error}</p>}
     <div className="canvas-prompt-actions">
       <Button type="button" icon={<RefreshCw size={14} />} loading={loading}

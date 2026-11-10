@@ -41,6 +41,15 @@ describe.runIf(process.platform === "linux" || process.platform === "win32")("fi
       const rg = await call("rg", project, "A=27");
       expect(rg.structuredContent).toMatchObject({ command: "rg", exitCode: 0 });
       expect(rg.structuredContent.stdout).toContain("Exact samples: A=27 B=31");
+      const noMatches = await call("rg", project, "no-such-sample");
+      expect(noMatches.structuredContent.exitCode).toBe(1);
+      expect(noMatches.isError).not.toBe(true);
+      const invalidRegex = await call("rg", project, "[");
+      expect(invalidRegex.structuredContent.exitCode).toBe(2);
+      expect(invalidRegex.isError).toBe(true);
+      const directoryRead = await call("cat", project);
+      expect(directoryRead.structuredContent.exitCode).not.toBe(0);
+      expect(directoryRead.isError).toBe(true);
       expect((await call("sh", project)).isError).toBe(true);
       expect((await call("cat", "/etc/passwd")).isError).toBe(true);
       expect((await call("cat", path.join(project, "request.md; touch stolen"))).isError).toBe(true);

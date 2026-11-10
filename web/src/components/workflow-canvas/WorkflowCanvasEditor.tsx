@@ -2307,7 +2307,7 @@ export function WorkflowCanvasEditor({
   );
   const focusedNodeId = selectedEdgeId ? undefined : hoveredNodeId ?? selectedId;
   const canvasFocusMode = hoveredNodeId ? "hover" : focusedNodeId ? "selected" : undefined;
-  const selectedLoopId = selectedEdge?.loop?.role === "exit" ? undefined : selectedEdge?.loop?.id;
+  const selectedLoopId = selectedEdge?.loop?.id;
   const relatedEdgeIds = useMemo(
     () => new Set(model.edges.filter((edge) => edge.source === focusedNodeId || edge.target === focusedNodeId).map((edge) => edge.id)),
     [focusedNodeId, model.edges]

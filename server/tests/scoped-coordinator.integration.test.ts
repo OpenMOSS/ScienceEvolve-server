@@ -102,7 +102,7 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
     const prior = seenCwd.get(input.request.agent); if (prior) expect(input.request.workspacePath).toBe(prior);
     seenCwd.set(input.request.agent, input.request.workspacePath);
     if (options.childHandoff && input.controlScope?.role === "scoped-agent" && !input.controlScope.executionId.startsWith("group-final-") && input.request.agent === "execution") {
-      const projection = coordinator.database().projectState(id);
+      const projection = await coordinator.database().projectState(id);
       const child = projection.scopedGroupRuns!.find((group) => group.groupId === "H")!;
       expect(child.status).toBe("completed"); expect(projection.scopedGroupFinalMerges?.some((merge) => merge.groupRunId === child.id)).toBe(true);
     }
@@ -179,7 +179,7 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
             !scope.executionId.startsWith("group-final-") && !finishOmitted;
           if (omitOwnFinish) finishOmitted = true;
           else if (businessTask) {
-            // The live completion call authors Memory before its Git delivery.
+            // Completion records the Agent's handoff without changing Git.
             actions.push(await accept(input, turn, { tool: "finish_task", summary: `Verified ${input.request.agent}'s assigned task` }));
           }
           if ((scope?.role === "execution-artifact" || scope?.role === "standalone-route") && !(options.omitFirstRootGit && !rootGitOmitted)) {
@@ -195,7 +195,7 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
             }
           }
           if (scope?.role === "scoped-agent" && scope.executionId.startsWith("group-final-")) {
-            const final = coordinator.database().scopedFinalIntegration(id, scope.groupRunId)!;
+            const final = (await coordinator.database().scopedFinalIntegration(id, scope.groupRunId))!;
             if (git.pulls.get(final.id)?.status !== "merged") actions.push(await accept(input, turn, {
               tool: "github_create_pr", base: final.integrationTarget, title: "Canonical group delivery", body: "Canonical group delivery" }));
             actions.push(await accept(input, turn, { tool: "github_merge_pr", providerNumber: git.pulls.get(final.id)!.providerNumber,
@@ -203,8 +203,8 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
           }
           if (scope?.role === "scoped-agent" && !scope.executionId.startsWith("group-final-") &&
             !(turn.prompt.includes("Missing formal mechanism actions:") && git.pulls.get(scope.executionId)?.status === "merged")) {
-            const execution = coordinator.database().scopedExecution(id, scope.executionId)!;
-            const group = coordinator.database().scopedGroupRun(id, scope.groupRunId)!;
+            const execution = (await coordinator.database().scopedExecution(id, scope.executionId))!;
+            const group = (await coordinator.database().scopedGroupRun(id, scope.groupRunId))!;
             actions.push(await accept(input, turn, { tool: "git_push", reason: `Commit ${input.request.agent}` }));
             actions.push(await accept(input, turn, { tool: "github_create_pr", base: group.groupBranch,
               title: `Delivery ${execution.agentId}`, body: `Delivery ${execution.id}` }));
@@ -217,12 +217,12 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
           if (!businessTask) actions.push(await accept(input, turn, { tool: "finish_task" }));
           if (scope?.role === "scoped-leader") {
             if (input.request.workflowContext?.purpose === "complete") {
-              const proof = coordinator.database().scopedGroupFinalMergeFact(id, scope.groupRunId);
+              const proof = await coordinator.database().scopedGroupFinalMergeFact(id, scope.groupRunId);
               const action: ControlAction = proof
                 ? { tool: "complete_group", groupRunId: scope.groupRunId, coordinatorEpoch: scope.coordinatorEpoch,
                     output: `Committed ${input.request.agent}` }
                 : { tool: "request_group_integration", groupRunId: scope.groupRunId, coordinatorEpoch: scope.coordinatorEpoch,
-                    integrationOwnerAgentId: coordinator.database().scopedGroupWorkflow(id, scope.groupRunId).nodes
+                    integrationOwnerAgentId: (await coordinator.database().scopedGroupWorkflow(id, scope.groupRunId)).nodes
                       .filter((node) => node.kind === "agent").find((node) => node.agentId !== input.request.agent)!.agentId };
               actions.push(await accept(input, turn, action));
             } else if (scope.failedArrivalRequestIds.length) {
@@ -238,7 +238,7 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
     decideRoute: vi.fn(async (input) => {
       await prepare(input.open); await session(input.open);
       const completed = options.legacyRoot
-        ? coordinator.database().projectState(id).executions.some((execution) => execution.agentId === "execution" && execution.status === "succeeded")
+        ? (await coordinator.database().projectState(id)).executions.some((execution) => execution.agentId === "execution" && execution.status === "succeeded")
         : state.scopedGroupRuns?.some((group) => group.groupId === "G" && group.status === "completed");
       let action: ControlAction = completed ? { tool: "complete_project", rationale: "Both nested group and outer Agent delivered through their PRs." }
         : { tool: "route_to_agent", target: options.legacyRoot ? "execution" : "G", assignment: "Execute the existing workflow.", rationale: "Use the existing graph" };
@@ -284,7 +284,7 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
         if (pull.status !== "merged" || !pull.mergeCommitSha) return pull;
         // Production facade merges also synchronize the exact local target
         // before returning the provider result to the calling Agent.
-        if (!coordinator.database().hasScopedGitExecution(id, request.execution.id)) {
+        if (!(await coordinator.database().hasScopedGitExecution(id, request.execution.id))) {
           git.localRefs.set(request.expectedBase, git.refs.get(request.expectedBase)!);
           return { ...pull, localSynchronization: { projectId: id, operationId: request.operationId,
             targetBranch: request.expectedBase, temporaryRef: `refs/openfars/reconcile/${request.operationId}`,
@@ -339,7 +339,8 @@ describe("v3 project coordinator production entry", () => {
   it("archives a resumably stopped project without losing its session or allowing an archived resume", async () => {
     const f = await fixture({ blockScopedAgent: "idea" });
     await f.coordinator.createProject(f.state, { enabled: true, provider: "github" });
-    await expect.poll(() => f.state.agentSessionIds?.idea, { timeout: 10_000 }).toBe("session-idea");
+    await expect.poll(() => ({ session: f.state.agentSessionIds?.idea, error: f.state.lastError }), { timeout: 10_000 })
+      .toEqual({ session: "session-idea", error: undefined });
     await f.coordinator.cancelProject(f.state, { actor: "user" });
     expect(f.state.status).toBe("paused");
     const publication = vi.spyOn(f.coordinator as unknown as {
@@ -360,7 +361,7 @@ describe("v3 project coordinator production entry", () => {
     expect(f.state.archivedAt).toBeTruthy();
     expect(f.state.status).toBe("paused");
     expect(f.state.agentSessionIds).toEqual(nativeSessions);
-    expect(f.coordinator.database().projectState(f.state.id).resumableCancellation?.stoppedAt).toBeTruthy();
+    expect((await f.coordinator.database().projectState(f.state.id)).resumableCancellation?.stoppedAt).toBeTruthy();
     await expect(f.coordinator.resumeProject(f.state)).rejects.toThrow("unarchive it first");
     expect(f.opened).toHaveLength(opensBeforeArchive);
     const restarted = await f.restart();
@@ -416,10 +417,10 @@ describe("v3 project coordinator production entry", () => {
     const saved = JSON.parse(await fs.readFile(path.join(f.storage.projectDir(f.state.id), "state.json"), "utf8"));
     expect(saved.lastError).toBe(f.state.lastError);
     expect(saved.agentSessions.idea).toEqual(original);
-    const execution = f.coordinator.database().projectState(f.state.id).scopedExecutions!.find((execution) => execution.agentId === "idea")!;
+    const execution = (await f.coordinator.database().projectState(f.state.id)).scopedExecutions!.find((execution) => execution.agentId === "idea")!;
     expect(execution.status).toBe("running");
     expect(execution.ownershipEpoch).toBe(1);
-    const native = f.coordinator.database().scopedAgentTurn(f.state.id, execution.id, execution.ownershipEpoch)!;
+    const native = (await f.coordinator.database().scopedAgentTurn(f.state.id, execution.id, execution.ownershipEpoch))!;
     expect(native.status).toBe("reserved");
     expect(native.openedAt).toBeUndefined();
     expect(native.stoppedAt).toBeUndefined();
@@ -444,7 +445,7 @@ describe("v3 project coordinator production entry", () => {
     expect(f.git().createPullRequest).toHaveBeenCalledTimes(1);
     expect(f.git().mergePullRequest).toHaveBeenCalledTimes(1);
     expect(f.git().closePullRequest).not.toHaveBeenCalled();
-    const owner = f.coordinator.database().projectState(f.state.id).executions.find((execution) => execution.agentId === "execution")!;
+    const owner = (await f.coordinator.database().projectState(f.state.id)).executions.find((execution) => execution.agentId === "execution")!;
     expect(f.state.taskCompletions?.[owner.id]).toBeDefined();
     expect(owner.status).toBe("succeeded");
   });
@@ -478,7 +479,7 @@ describe("v3 project coordinator production entry", () => {
     expect(f.state.scopedGroupFinalMerges).toHaveLength(2); expect(f.state.agentSessionIds?.main).toBe("session-main");
     expect(f.state.executions?.some((entry) => entry.agentId === "main")).toBe(false);
     expect(f.state.agents.main.gatewaySnapshot?.apiKey).toBe("private-original-main-route");
-    expect(f.coordinator.database().scopedConfiguration(f.state.id)?.agents.main.gatewaySnapshot).toBeUndefined();
+    expect((await f.coordinator.database().scopedConfiguration(f.state.id))?.agents.main.gatewaySnapshot).toBeUndefined();
   }, 20_000);
 
   it("uses formal request_user for a completed group's outer weak route and consumes the reply without rerunning the group", async () => {
@@ -518,14 +519,17 @@ describe("v3 project coordinator production entry", () => {
     let clock = Date.now();
     const f = await fixture({ blockScopedAgent: "idea", now: () => clock });
     await f.coordinator.createProject(f.state, { enabled: true, provider: "github" });
-    await expect.poll(() => f.state.agentSessionIds?.idea, { timeout: 10_000 }).toBe("session-idea");
+    await expect.poll(() => ({ session: f.state.agentSessionIds?.idea, error: f.state.lastError }), { timeout: 10_000 })
+      .toEqual({ session: "session-idea", error: undefined });
     const mutationsBefore = f.git().log.length;
     clock += 60_000;
     f.releaseBlocked();
-    await expect.poll(() => f.coordinator.projectReadModel(f.state).phase, { timeout: 4_000 }).toBe("collaboration:writer-lease-lost");
-    expect(f.coordinator.projectReadModel(f.state).status).toBe("retrying");
-    expect(hasUserWorkflowPause(f.coordinator.projectReadModel(f.state))).toBe(false);
-    expect(f.coordinator.projectReadModel(f.state).lastError).toMatch(/restart/i);
+    await expect.poll(async () => (await f.coordinator.projectReadModel(f.state)).phase, { timeout: 4_000 }).toBe("collaboration:writer-lease-lost");
+    expect((await f.coordinator.projectReadModel(f.state)).status).toBe("interrupted");
+    expect(hasUserWorkflowPause((await f.coordinator.projectReadModel(f.state)))).toBe(false);
+    expect((await f.coordinator.projectReadModel(f.state)).lastError).toContain("服务写入租约失效");
+    expect((await f.coordinator.projectReadModel(f.state)).runtime?.waiting)
+      .toMatchObject({ kind: "service", errorCode: "WRITER_LEASE_STALE" });
     await expect(f.coordinator.resumeProject(f.state)).rejects.toThrow(/writer lease was lost/);
     expect(f.git().log).toHaveLength(mutationsBefore);
     expect(f.state.scopedGroupFinalMerges ?? []).toHaveLength(0);
@@ -540,19 +544,19 @@ describe("v3 project coordinator production entry", () => {
     clock += 60_000;
     await new Promise((resolve) => setTimeout(resolve, 1_800));
     await expect(f.coordinator.resumeProject(f.state)).rejects.toThrow(/writer lease was lost/);
-    expect(f.coordinator.projectReadModel(f.state).status).toBe("completed");
-    expect(f.coordinator.projectReadModel(f.state).lastError).toBeUndefined();
+    expect((await f.coordinator.projectReadModel(f.state)).status).toBe("completed");
+    expect((await f.coordinator.projectReadModel(f.state)).lastError).toBeUndefined();
   }, 20_000);
 
   it("records completed scoped runtime recovery without validating its group as legacy state", async () => {
     const f = await fixture({ omitFirstFinish: "idea" });
     await f.coordinator.createProject(f.state, { enabled: true, provider: "github" });
     await expect.poll(() => f.state.status, { timeout: 15_000 }).toBe("completed");
-    const projection = f.coordinator.database().projectState(f.state.id);
+    const projection = await f.coordinator.database().projectState(f.state.id);
     const root = projection.scopedGroupRuns!.find((group) => !group.parentGroupRunId)!;
     const child = projection.scopedGroupRuns!.find((group) => group.parentGroupRunId)!;
     const operation = `scoped.runtime:${child.id}:synthetic-recovery`;
-    f.coordinator.database().appendFailureAttempt({
+    await f.coordinator.database().appendFailureAttempt({
       attemptId: "scoped-runtime-recovery-synthetic",
       projectId: f.state.id,
       scope: "scheduler",
@@ -567,15 +571,15 @@ describe("v3 project coordinator production entry", () => {
       metadata: { rootGroupRunId: root.id, groupRunId: child.id }
     });
     const runtime = f.coordinator as unknown as {
-      reconcileScopedRuntimeFailures(state: ProjectState, result: unknown): { unresolvedMessages: string[] };
+      reconcileScopedRuntimeFailures(state: ProjectState, result: unknown): Promise<{ unresolvedMessages: string[] }>;
     };
-    const reconciled = runtime.reconcileScopedRuntimeFailures(f.state, {
+    const reconciled = await runtime.reconcileScopedRuntimeFailures(f.state, {
       status: "completed",
       groupRun: root,
       issues: []
     });
     expect(reconciled.unresolvedMessages).toEqual([]);
-    expect(f.coordinator.database().failureAttempts(f.state.id)
+    expect((await f.coordinator.database().failureAttempts(f.state.id))
       .filter((attempt) => attempt.operation === operation)
       .map((attempt) => attempt.status)).toEqual(["failed", "succeeded"]);
   }, 20_000);
@@ -665,17 +669,17 @@ describe("v3 project coordinator production entry", () => {
       await expect.poll(async () => (await persisted()).pauseRequest?.requestedAt).toBeTruthy();
       const pending = await persisted(); requestedAt = pending.pauseRequest?.requestedAt;
       expect(pending.pauseRequest?.settledAt).toBeUndefined();
-      expect(f.coordinator.projectReadModel(f.state)).toMatchObject({ status: "pausing", runtime: { status: "pausing" } });
+      expect((await f.coordinator.projectReadModel(f.state))).toMatchObject({ status: "pausing", runtime: { status: "pausing" } });
       f.releaseBlocked(); expect(await pauseOutcome).toBeUndefined();
     } finally { f.releaseBlocked(); await pauseOutcome; }
     expect(f.state.status).toBe("paused"); expect(f.state.scopedGroupFinalMerges ?? []).toHaveLength(0);
     expect(f.state.pauseRequest?.requestedAt).toBe(requestedAt);
     expect(f.state.pauseRequest?.settledAt).toBeTruthy();
-    const nativeOutputs = f.coordinator.database().eventsAfter(f.state.id, 0, 1000)
+    const nativeOutputs = (await f.coordinator.database().eventsAfter(f.state.id, 0, 1000))
       .filter(event => event.type === "scoped.agent.native_output.recorded" && event.agentId === "idea");
     expect(nativeOutputs).toHaveLength(1);
     expect(nativeOutputs[0]!.payload.output).toBe("Committed idea");
-    expect(f.coordinator.database().projectState(f.state.id).scopedAgentReports?.some(report => report.agentId === "idea")).not.toBe(true);
+    expect((await f.coordinator.database().projectState(f.state.id)).scopedAgentReports?.some(report => report.agentId === "idea")).not.toBe(true);
     expect(f.opened.filter((entry) => entry.request.agent === "idea" && !(entry.controlScope && "executionId" in entry.controlScope && entry.controlScope.executionId.startsWith("group-final-")))).toHaveLength(1);
     await f.coordinator.resumeProject(f.state);
     try { await expect.poll(() => f.state.status, { timeout: 12_000 }).toBe("completed"); } catch (error) { throw new Error(`${f.state.phase}: ${f.state.lastError}`, { cause: error }); }
@@ -698,30 +702,30 @@ describe("v3 project coordinator production entry", () => {
     const original = f.opened.find(entry => entry.request.agent === "idea")!;
     const scope = original.controlScope!;
     if (scope.role !== "scoped-agent") throw new Error("Expected original scoped Agent");
-    const outputs = f.coordinator.database().scopedAgentNativeOutputs(f.state.id, scope.executionId, scope.ownershipEpoch, original.request.invocationId);
+    const outputs = await f.coordinator.database().scopedAgentNativeOutputs(f.state.id, scope.executionId, scope.ownershipEpoch, original.request.invocationId);
     expect(outputs).toEqual([expect.objectContaining({ invocationId: original.request.invocationId, output: "Committed idea" })]);
-    expect(f.coordinator.database().scopedAgentReport(f.state.id, scope.executionId, scope.ownershipEpoch)).toBeUndefined();
+    expect((await f.coordinator.database().scopedAgentReport(f.state.id, scope.executionId, scope.ownershipEpoch))).toBeUndefined();
     const sessions = structuredClone(f.state.agentSessionIds);
     const openedCount = f.opened.length;
     const restarted = await f.restart();
     expect(f.state.status).toBe("paused");
     expect(f.state.agentSessionIds).toEqual(sessions);
     expect(f.opened).toHaveLength(openedCount);
-    expect(restarted.database().scopedAgentNativeOutputs(f.state.id, scope.executionId, scope.ownershipEpoch, original.request.invocationId)).toEqual(outputs);
-    expect(restarted.database().scopedAgentReport(f.state.id, scope.executionId, scope.ownershipEpoch)).toBeUndefined();
-    expect(restarted.database().projectState(f.state.id).scopedGroupFinalMerges ?? []).toHaveLength(0);
+    expect((await restarted.database().scopedAgentNativeOutputs(f.state.id, scope.executionId, scope.ownershipEpoch, original.request.invocationId))).toEqual(outputs);
+    expect((await restarted.database().scopedAgentReport(f.state.id, scope.executionId, scope.ownershipEpoch))).toBeUndefined();
+    expect((await restarted.database().projectState(f.state.id)).scopedGroupFinalMerges ?? []).toHaveLength(0);
     expect(f.active.size).toBe(0);
   }, 25_000);
 
   it("stops nested scoped turns, preserves their PRs and resumes only after an explicit request", async () => {
     const f = await fixture({ blockScopedAgent: "idea" }); await f.coordinator.createProject(f.state, { enabled: true, provider: "github" });
     await expect.poll(() => f.state.agentSessionIds?.idea, { timeout: 10_000 }).toBe("session-idea");
-    const before = f.coordinator.database().projectState(f.state.id).scopedExecutions!.map((entry) => ({
+    const before = (await f.coordinator.database().projectState(f.state.id)).scopedExecutions!.map((entry) => ({
       id: entry.id, branch: entry.executionBranch, path: entry.worktreePath
     }));
     await f.coordinator.cancelProject(f.state, { actor: "user", reason: "user_cancelled" });
     expect(f.state).toMatchObject({ status: "paused", phase: "collaboration:user-cancelled" });
-    expect(f.coordinator.projectReadModel({ ...f.state, status: "running", phase: "stale:running" }))
+    expect((await f.coordinator.projectReadModel({ ...f.state, status: "running", phase: "stale:running" })))
       .toMatchObject({ status: "paused", phase: "collaboration:user-cancelled",
         runtime: { status: "paused", phase: "collaboration:user-cancelled" } });
     expect(f.state.scopedGroupRuns?.every((group) => group.status === "paused")).toBe(true);
@@ -749,12 +753,12 @@ describe("v3 project coordinator production entry", () => {
       await expect.poll(f.blockedTurnCount, { timeout: 10_000 }).toBe(cycle);
       await f.coordinator.cancelProject(f.state, { actor: "user", reason: "user_cancelled" });
       expect(f.state).toMatchObject({ status: "paused", phase: "collaboration:user-cancelled" });
-      const intent = f.coordinator.database().resumableProjectCancellationIntent(f.state.id)!;
+      const intent = (await f.coordinator.database().resumableProjectCancellationIntent(f.state.id))!;
       expect(intent).toBeDefined(); expect(intent.seq).toBeGreaterThan(firstSequence); firstSequence = intent.seq;
       const before = f.opened.length;
       await new Promise((resolve) => setTimeout(resolve, 50)); expect(f.opened).toHaveLength(before);
       await f.coordinator.resumeProject(f.state);
-      expect(f.coordinator.database().projectCancellationIntent(f.state.id)).toBeUndefined();
+      expect((await f.coordinator.database().projectCancellationIntent(f.state.id))).toBeUndefined();
     }
     await expect.poll(() => f.state.status, { timeout: 12_000 }).toBe("completed");
     const turns = f.opened.filter((entry) => entry.request.agent === "idea" && !(entry.controlScope && "executionId" in entry.controlScope && entry.controlScope.executionId.startsWith("group-final-")));
@@ -771,7 +775,7 @@ describe("v3 project coordinator production entry", () => {
     await expect.poll(f.blockedTurnCount, { timeout: 10_000 }).toBe(1);
     const original = f.state.scopedExecutions!.find((entry) => entry.agentId === "idea")!.id;
     await f.coordinator.cancelProject(f.state, { actor: "user", reason: "user_cancelled" });
-    const unstarted = f.coordinator.database().projectState(f.state.id).scopedArrivals!.find((entry) => entry.targetNodeId === "H_idea_next")!;
+    const unstarted = (await f.coordinator.database().projectState(f.state.id)).scopedArrivals!.find((entry) => entry.targetNodeId === "H_idea_next")!;
     expect(unstarted.status).toBe("queued");
     expect(f.state.scopedExecutions!.some((entry) => entry.arrivalRequestId === unstarted.requestId)).toBe(false);
     await f.coordinator.resumeProject(f.state);
@@ -784,12 +788,12 @@ describe("v3 project coordinator production entry", () => {
     const f = await fixture({ blockFinalAgent: "idea" });
     await f.coordinator.createProject(f.state, { enabled: true, provider: "github" });
     await expect.poll(f.blockedTurnCount, { timeout: 10_000 }).toBe(1);
-    const child = f.coordinator.database().projectState(f.state.id).scopedGroupRuns!.find((group) => group.groupId === "H")!;
-    const owner = f.coordinator.database().scopedFinalIntegration(f.state.id, child.id)!;
+    const child = (await f.coordinator.database().projectState(f.state.id)).scopedGroupRuns!.find((group) => group.groupId === "H")!;
+    const owner = (await f.coordinator.database().scopedFinalIntegration(f.state.id, child.id))!;
     expect(f.state.runtime?.activities.some((activity) => activity.executionId === owner.id && activity.agentId === "idea")).toBe(true);
     await f.coordinator.cancelProject(f.state, { actor: "user", reason: "user_cancelled" });
     expect(f.state.status).toBe("paused");
-    expect(f.coordinator.database().scopedFinalNativeTurns(f.state.id).every((turn) => turn.status === "stopped")).toBe(true);
+    expect((await f.coordinator.database().scopedFinalNativeTurns(f.state.id)).every((turn) => turn.status === "stopped")).toBe(true);
     expect(f.git().closePullRequest).not.toHaveBeenCalled();
     await f.coordinator.resumeProject(f.state);
     await expect.poll(() => f.state.status, { timeout: 15_000 }).toBe("completed");
@@ -797,7 +801,7 @@ describe("v3 project coordinator production entry", () => {
     expect(turns).toHaveLength(2);
     expect(turns[1].request.resumeThreadId).toBe("session-idea");
     expect(turns[1].request.workspacePath).toBe(turns[0].request.workspacePath);
-    expect(f.coordinator.database().scopedFinalIntegration(f.state.id, child.id)?.ownershipEpoch).toBe(owner.ownershipEpoch);
+    expect((await f.coordinator.database().scopedFinalIntegration(f.state.id, child.id))?.ownershipEpoch).toBe(owner.ownershipEpoch);
   }, 20_000);
 
   it("wakes the original root Agent to supply missing Git actions without a system PR or a second native session", async () => {
@@ -851,26 +855,26 @@ describe("v3 project coordinator production entry", () => {
     await f.coordinator.createProject(f.state, { enabled: true, provider: "github" });
     try {
       await expect.poll(f.blockedTurnCount, { timeout: 10_000 }).toBe(1);
-      await expect.poll(() => database.projectState(f.state.id).scopedGroupRuns?.find((group) => group.groupId === "H"),
+      await expect.poll(async () => (await database.projectState(f.state.id)).scopedGroupRuns?.find((group) => group.groupId === "H"),
         { timeout: 10_000 }).toBeDefined();
-      const child = database.projectState(f.state.id).scopedGroupRuns!.find((group) => group.groupId === "H")!;
+      const child = (await database.projectState(f.state.id)).scopedGroupRuns!.find((group) => group.groupId === "H")!;
       await expect.poll(() => claims.mock.calls.some(([input]) => input.groupRunId === child.id),
         { timeout: 10_000 }).toBe(true);
       const attempted = claims.mock.calls.flatMap(([input], index) => input.groupRunId === child.id ? [claims.mock.results[index]] : []);
       expect(attempted.every((result) => result.type === "return" && result.value === undefined)).toBe(true);
       expect(f.opened.some((input) => input.controlScope?.role === "scoped-leader" && input.controlScope.groupRunId === child.id)).toBe(false);
-      const original = database.projectState(f.state.id).scopedExecutions!.find((execution) => execution.agentId === "execution")!;
+      const original = (await database.projectState(f.state.id)).scopedExecutions!.find((execution) => execution.agentId === "execution")!;
       expect(original.status).toBe("running");
-      expect(database.scopedAgentTurn(f.state.id, original.id, original.ownershipEpoch)?.status).toBe("opened");
-      expect(database.scopedAgentTaskCompletion(f.state.id, original.id, original.ownershipEpoch)).toBeUndefined();
+      expect((await database.scopedAgentTurn(f.state.id, original.id, original.ownershipEpoch))?.status).toBe("opened");
+      expect((await database.scopedAgentTaskCompletion(f.state.id, original.id, original.ownershipEpoch))).toBeUndefined();
       expect(f.git().pulls.get(original.id)).toBeUndefined();
       f.releaseBlocked();
       await expect.poll(() => f.state.status, { timeout: 15_000 }).toBe("completed");
-      const final = database.projectState(f.state.id);
+      const final = await database.projectState(f.state.id);
       expect(final.scopedExecutions!.find((execution) => execution.id === original.id)).toMatchObject({
         arrivalRequestId: original.arrivalRequestId, ownershipEpoch: original.ownershipEpoch,
         agentId: original.agentId, worktreePath: original.worktreePath, executionBranch: original.executionBranch, status: "completed" });
-      const events = database.eventsAfter(f.state.id, 0, 1_000);
+      const events = await database.eventsAfter(f.state.id, 0, 1_000);
       const delivered = events.find((event) => event.type === "scoped.agent.merged_route" && event.payload.executionId === original.id)!;
       const nestedManager = events.find((event) => event.type === "scoped.leader.claimed" && event.payload.groupRunId === child.id)!;
       expect(delivered).toBeDefined(); expect(nestedManager).toBeDefined();

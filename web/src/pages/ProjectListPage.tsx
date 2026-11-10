@@ -21,6 +21,8 @@ import {
   Database,
   Download,
   Eye,
+  Folder,
+  FolderPlus,
   FolderKanban,
   ListTree,
   MessageSquareText,
@@ -56,6 +58,11 @@ import {
   getCatalog,
   getGitHubAccounts,
   getProjects,
+  getProjectFolders,
+  createProjectFolder,
+  renameProjectFolder,
+  deleteProjectFolder,
+  moveProjectsToFolder,
   getQueue,
   getSavedResearchTasks,
   projectAction,
@@ -74,7 +81,9 @@ import {
 } from "../components/Common";
 import { SaveAgentConfigDialog } from "../components/SaveAgentConfigDialog";
 import { ProjectStopDialog } from "../components/ProjectStopDialog";
+import { ProjectFolderDialog } from "../components/ProjectFolderDialog";
 import { ProjectAuthorizationNotice } from "../components/ProjectAuthorizationNotice";
+import { ProjectServiceFailureNotice } from "../components/ProjectServiceFailureNotice";
 import { withProjectAuthorizationWaiting } from "../lib";
 import { canArchiveProject, canStopProject, isStoppedProject } from "../project-status";
 import { OrchestrationTemplateEditor } from "../components/OrchestrationTemplateEditor";
@@ -99,7 +108,6 @@ import {
   cloneAgentsConfig,
   orchestrationWithoutGit,
   createBlankWorkflow,
-  DEFAULT_AGENT_ORCHESTRATION,
   DEFAULT_AGENTS,
   formatTokenCount,
   formatRelativeTime,
@@ -116,6 +124,7 @@ import {
   type ProjectSkillDefinitions,
   type AgentsConfig,
   type Project,
+  type ProjectFolder,
   type ProjectStatus,
   type QueueSnapshot,
   type SavedResearchTask,
@@ -128,6 +137,7 @@ import {
 import { workflowOuterNodes } from "../components/workflow-canvas/core/workflow-nodes";
 import { cacheProjectOverview, readCachedProjectOverview } from "../project-overview-cache";
 import { readCachedResource } from "../resource-cache";
+import { DEFAULT_RESEARCH_WORKFLOW, defaultResearchAgents } from "../default-research-preset";
 import {
   cacheProjectList,
   cacheProjectQueue,
@@ -237,7 +247,11 @@ function ProjectCard({
   onStop,
   onArchive,
   onDelete,
-  onSaveConfig
+  onSaveConfig,
+  folders,
+  folderId,
+  folderBusy,
+  onMoveToFolder
 }: {
   project: Project;
   batchMode: boolean;
@@ -252,6 +266,10 @@ function ProjectCard({
   onArchive: () => Promise<void>;
   onDelete: () => void;
   onSaveConfig: (title: string) => Promise<string>;
+  folders: ProjectFolder[] | undefined;
+  folderId: string | undefined;
+  folderBusy: boolean;
+  onMoveToFolder: (folderId: string | null) => void;
 }) {
   const project = withProjectAuthorizationWaiting(sourceProject);
   const [lifecycleAction, setLifecycleAction] = useState<
@@ -480,6 +498,15 @@ function ProjectCard({
           </span>
         </div>
       </button>
+      <label className="project-folder-strip">
+        <Folder size={16} aria-hidden="true" />
+        <span>文件夹</span>
+        <select aria-label={`项目 ${project.title} 所属文件夹`} value={folderId ?? ""}
+          disabled={!folders || folderBusy} onChange={event => onMoveToFolder(event.target.value || null)}>
+          <option value="">{folders ? "未分类" : "正在加载分类…"}</option>
+          {folders?.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
+        </select>
+      </label>
       {waitingForUser && project.userIntervention && (
         <div className="project-user-intervention-strip">
           <span>
@@ -498,6 +525,7 @@ function ProjectCard({
           </Button>
         </div>
       )}
+      <ProjectServiceFailureNotice project={project} compact />
       <ProjectAuthorizationNotice project={project} compact />
       {mainRecoveryRequired && (
         <div className="project-main-recovery-strip" role="alert">
@@ -902,9 +930,7 @@ function SavedResearchTaskLibrary({
   tasks,
   loading,
   warning,
-  startBlockedReason,
-  startBlockedReasonForTask,
-  startWarningForTask,
+  startNoticesForTask,
   onEdit,
   onDelete,
   onStart,
@@ -913,9 +939,7 @@ function SavedResearchTaskLibrary({
   tasks: SavedResearchTask[];
   loading: boolean;
   warning: string;
-  startBlockedReason?: string;
-  startBlockedReasonForTask?: (task: SavedResearchTask) => string;
-  startWarningForTask?: (task: SavedResearchTask) => string;
+  startNoticesForTask: (task: SavedResearchTask) => string[];
   onEdit: (task: SavedResearchTask) => void;
   onDelete: (task: SavedResearchTask) => Promise<void>;
   onStart: (task: SavedResearchTask) => Promise<Project>;
@@ -926,6 +950,7 @@ function SavedResearchTaskLibrary({
   const [startingId, setStartingId] = useState("");
   const [actionError, setActionError] = useState("");
   const [startedProject, setStartedProject] = useState<Project>();
+  const [startCheckTaskId, setStartCheckTaskId] = useState("");
 
   const deleteTask = async (task: SavedResearchTask) => {
     const confirmed = window.confirm(
@@ -946,11 +971,16 @@ function SavedResearchTaskLibrary({
     }
   };
 
-  const startTask = async (task: SavedResearchTask) => {
+  const startTask = async (task: SavedResearchTask, force = false) => {
     if (startingId || deletingId) return;
-    setStartingId(task.id);
     setActionError("");
     setStartedProject(undefined);
+    if (!force && startNoticesForTask(task).length) {
+      setStartCheckTaskId(task.id);
+      return;
+    }
+    setStartCheckTaskId("");
+    setStartingId(task.id);
     try {
       const project = await onStart(task);
       if (!project.id) throw new Error("任务已提交，但服务未返回项目 ID");
@@ -982,11 +1012,6 @@ function SavedResearchTaskLibrary({
           已保存任务暂不可用：{warning}
         </div>
       )}
-      {startBlockedReason && !actionError && (
-        <div className="saved-task-warning" role="alert">
-          已保存任务暂不能启动：{startBlockedReason}
-        </div>
-      )}
       {actionError && (
         <div className="saved-task-warning" role="alert">
           {actionError}
@@ -1013,8 +1038,7 @@ function SavedResearchTaskLibrary({
         <div className="saved-task-list">
           {tasks.map((task) => {
             const expanded = expandedId === task.id;
-            const taskStartBlockedReason = startBlockedReason || startBlockedReasonForTask?.(task) || "";
-            const taskStartWarning = startWarningForTask?.(task) || "";
+            const startNotices = startCheckTaskId === task.id ? startNoticesForTask(task) : [];
             const models = new Set(
               Object.values(task.agents).map((config) => config.model)
             ).size;
@@ -1047,16 +1071,6 @@ function SavedResearchTaskLibrary({
                       <span>{skillAssignments} 个 Skill 绑定</span>
                       <span>{mcpAssignments} 个 MCP 绑定</span>
                     </div>
-                    {taskStartBlockedReason && (
-                      <small className="saved-task-start-blocked" role="status">
-                        启动前检查未通过：{taskStartBlockedReason}
-                      </small>
-                    )}
-                    {taskStartWarning && (
-                      <small className="saved-task-start-blocked" role="status">
-                        网关连接验证未通过，允许启动：{taskStartWarning}
-                      </small>
-                    )}
                   </div>
                   <div className="saved-task-actions" role="group">
                     <button
@@ -1079,7 +1093,6 @@ function SavedResearchTaskLibrary({
                       className="saved-task-start"
                       onClick={() => void startTask(task)}
                       disabled={Boolean(startingId || deletingId)}
-                      title={taskStartBlockedReason || undefined}
                       aria-label={`启动任务 ${task.title}`}
                     >
                       {startingId === task.id ? (
@@ -1100,6 +1113,17 @@ function SavedResearchTaskLibrary({
                     </button>
                   </div>
                 </div>
+                {startNotices.length > 0 && (
+                  <div className="launch-advisory" role="status">
+                    <strong>启动前提示 · {task.title}</strong>
+                    {startNotices.map(notice => <p key={notice}>{notice}</p>)}
+                    <div className="launch-advisory-actions">
+                      <Button type="button" variant="ghost" onClick={() => setStartCheckTaskId("")}>取消</Button>
+                      <Button type="button" variant="secondary" disabled={Boolean(startingId || deletingId)}
+                        onClick={() => void startTask(task, true)}>强制启动</Button>
+                    </div>
+                  </div>
+                )}
                 {expanded && (
                   <div className="saved-task-detail">
                     <div>
@@ -1364,6 +1388,15 @@ export function ProjectListPage({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [showArchived, setShowArchived] = useState(false);
+  const [projectFolders, setProjectFolders] = useState<ProjectFolder[]>();
+  const [selectedFolderId, setSelectedFolderId] = useState("all");
+  const [folderLoadError, setFolderLoadError] = useState("");
+  const [folderActionError, setFolderActionError] = useState("");
+  const [folderNotice, setFolderNotice] = useState("");
+  const [folderBusy, setFolderBusy] = useState(false);
+  const [folderBatchMode, setFolderBatchMode] = useState(false);
+  const [folderDestination, setFolderDestination] = useState<string>();
+  const [folderDialog, setFolderDialog] = useState<{ mode: "create" } | { mode: "rename" | "delete"; folder: ProjectFolder }>();
   const [visibleProjectLimit, setVisibleProjectLimit] = useState(PROJECT_PAGE_SIZE);
   const [archiveNotice, setArchiveNotice] = useState("");
   const [batchMode, setBatchMode] = useState(false);
@@ -1384,6 +1417,7 @@ export function ProjectListPage({
   const setQuickRequirement = quickDraft?.onRequirementChange ?? setLocalQuickRequirement;
   const [quickSubmitting, setQuickSubmitting] = useState(false);
   const [quickError, setQuickError] = useState("");
+  const [quickStartRequested, setQuickStartRequested] = useState(false);
   const [quickCreated, setQuickCreated] = useState<Project>();
   const [quickSaving, setQuickSaving] = useState(false);
   const [quickConfigSaving, setQuickConfigSaving] = useState(false);
@@ -1424,10 +1458,10 @@ export function ProjectListPage({
   const [quickWorkflowName, setQuickWorkflowName] = useState("未命名流程");
   const [quickOrchestration, setQuickOrchestration] =
     useState<AgentOrchestrationTemplate>(() =>
-      cloneAgentOrchestration(DEFAULT_AGENT_ORCHESTRATION)
+      cloneAgentOrchestration(DEFAULT_RESEARCH_WORKFLOW)
     );
   const [quickAgents, setQuickAgents] = useState<AgentsConfig>(() =>
-    cloneAgentsConfig(DEFAULT_AGENTS)
+    defaultResearchAgents()
   );
   const [quickSkillDefinitions, setQuickSkillDefinitions] = useState<ProjectSkillDefinitions>({});
   const [quickMcpDefinitions, setQuickMcpDefinitions] = useState<ProjectMcpDefinitions>({});
@@ -1437,8 +1471,12 @@ export function ProjectListPage({
   const [savedTasksLoading, setSavedTasksLoading] = useState(!cachedSavedTasks);
   const [savedTasksWarning, setSavedTasksWarning] = useState("");
   const loadInFlight = useRef(false);
+  const pendingProjectRefresh = useRef(false);
   const queueLoadInFlight = useRef(false);
   const projectRequestRef = useRef(0);
+  const folderRequestRef = useRef(0);
+  const folderLoadInFlight = useRef(false);
+  const folderMutationPending = useRef(false);
   const hasProjectSnapshotRef = useRef(Boolean(cachedProjectList));
   const projectsRef = useRef(projects);
   const pageActiveRef = useRef(true);
@@ -1481,9 +1519,22 @@ export function ProjectListPage({
     setError("");
   }, []);
 
-  const load = useCallback(async (initial = false, refreshTokens = false) => {
+  const load = useCallback(async (initial = false, refreshTokens = false): Promise<void> => {
     if (!pageActiveRef.current) return;
     const requests: Promise<void>[] = [];
+    if (!folderLoadInFlight.current && !folderMutationPending.current) {
+      const request = ++folderRequestRef.current;
+      folderLoadInFlight.current = true;
+      requests.push(getProjectFolders().then(folders => {
+        if (!pageActiveRef.current || request !== folderRequestRef.current) return;
+        setProjectFolders(folders);
+        setFolderLoadError("");
+      }).catch((reason: unknown) => {
+        if (pageActiveRef.current && request === folderRequestRef.current) {
+          setFolderLoadError(reason instanceof Error ? reason.message : "文件夹加载失败");
+        }
+      }).finally(() => { if (request === folderRequestRef.current) folderLoadInFlight.current = false; }));
+    }
     // Cached cards stay visible during refresh. Project and queue requests
     // have separate locks so a slow queue cannot hold up the list or its polls.
     if (!loadInFlight.current) {
@@ -1518,8 +1569,14 @@ export function ProjectListPage({
           if (request !== projectRequestRef.current) return;
           loadInFlight.current = false;
           if (pageActiveRef.current) setRefreshing(queueLoadInFlight.current);
+          if (pageActiveRef.current && pendingProjectRefresh.current) {
+            pendingProjectRefresh.current = false;
+            void load();
+          }
         })
       );
+    } else {
+      pendingProjectRefresh.current = true;
     }
     if (!queueLoadInFlight.current) {
       queueLoadInFlight.current = true;
@@ -1548,6 +1605,7 @@ export function ProjectListPage({
     // cards or overwrite the cache with the previous archive/status snapshot.
     ++projectRequestRef.current;
     loadInFlight.current = false;
+    pendingProjectRefresh.current = false;
     if (update) {
       const next = update(projectsRef.current);
       publishListSnapshot(next);
@@ -1564,17 +1622,20 @@ export function ProjectListPage({
         Date.now() - lastTokenRefreshAt.current >= 10 * 60_000;
       void load(false, tokenUsageIsStale);
     };
-    const statusTimer = window.setInterval(refresh, 5_000);
+    const statusTimer = window.setInterval(refresh, 2_000);
     const tokenTimer = window.setInterval(() => {
       if (document.visibilityState === "visible") void load(false, true);
     }, 10 * 60_000);
     document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
     window.addEventListener("openfars:projects-started", refresh);
     return () => {
       pageActiveRef.current = false;
+      pendingProjectRefresh.current = false;
       window.clearInterval(statusTimer);
       window.clearInterval(tokenTimer);
       document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
       window.removeEventListener("openfars:projects-started", refresh);
     };
   }, [load]);
@@ -1730,62 +1791,70 @@ export function ProjectListPage({
   const quickGithubAccountReady = !quickGitEnabled || githubAccounts.some(
     (account) => account.id === quickGithubAccountId && account.status === "ready"
   );
-  const quickRuntimeConfigErrors = agentRuntimeConfigurationErrors(
+  const quickRuntimeConfigErrors = runtimeCatalogState === "ready" ? agentRuntimeConfigurationErrors(
     quickOrchestration,
     quickAgents,
     gateways,
     harnesses,
     runtimeCatalogState === "ready"
-  );
-  const quickRuntimeConfigWarnings = agentRuntimeConfigurationWarnings(
+  ) : [];
+  const quickRuntimeConfigWarnings = runtimeCatalogState === "ready" ? agentRuntimeConfigurationWarnings(
     quickOrchestration,
     quickAgents,
     gateways,
     harnesses
-  );
-  const runtimeCatalogBlocker = runtimeCatalogState === "ready"
+  ) : [];
+  const runtimeCatalogNotice = runtimeCatalogState === "ready"
     ? catalogDefaultHarnessId(harnesses, defaultHarnessId)
       ? gateways.length > 0
         ? ""
         : "运行目录已加载，但服务端没有可用的全局网关。"
       : "运行目录已加载，但服务端没有可用的 Workflow Harness。"
     : runtimeCatalogState === "loading"
-      ? "运行目录仍在加载，暂不能启动项目。"
+      ? "运行目录仍在加载，本地配置尚未完成检查。"
       : runtimeCatalogState === "invalid"
-        ? `运行目录尚未就绪，暂不能启动项目：${runtimeCatalogError}`
-        : `运行目录加载失败，暂不能启动项目：${runtimeCatalogError}`;
-  const savedTaskStartBlocker = (task: SavedResearchTask): string =>
-    [
+        ? `运行目录尚未就绪：${runtimeCatalogError}`
+        : `运行目录加载失败：${runtimeCatalogError}`;
+  const savedTaskStartNotices = (task: SavedResearchTask): string[] =>
+    [...new Set([
+      runtimeCatalogNotice,
       agentOrchestrationError(task.orchestration, task.git?.enabled === true),
-      task.git?.enabled && !githubAccounts.some(
+      task.git?.enabled && githubAccountsLoading ? "GitHub 账号目录仍在加载。" : "",
+      task.git?.enabled && !githubAccountsLoading && !githubAccounts.some(
         (account) => account.id === task.git?.accountId && account.status === "ready"
       ) ? "请编辑任务并选择一个授权正常的 GitHub 账号" : "",
-      ...agentRuntimeConfigurationErrors(
+      ...(runtimeCatalogState === "ready" ? agentRuntimeConfigurationErrors(
         task.orchestration,
         task.agents,
         gateways,
         harnesses,
         runtimeCatalogState === "ready"
-      )
-    ].filter(Boolean).join("；");
-  const savedTaskStartWarning = (task: SavedResearchTask): string =>
-    agentRuntimeConfigurationWarnings(
-      task.orchestration,
-      task.agents,
-      gateways,
-      harnesses
-    ).join("；");
+      ) : []),
+      ...(runtimeCatalogState === "ready" ? agentRuntimeConfigurationWarnings(
+        task.orchestration,
+        task.agents,
+        gateways,
+        harnesses
+      ) : [])
+    ].filter((notice): notice is string => Boolean(notice)))];
+  const quickStartNotices = [...new Set([
+    runtimeCatalogNotice,
+    quickOrchestrationError && `Workflow：${quickOrchestrationError}`,
+    quickGitEnabled && githubAccountsLoading ? "GitHub 账号目录仍在加载。" : !quickGithubAccountReady && "请选择一个授权正常的 GitHub 账号",
+    ...quickRuntimeConfigErrors,
+    ...quickRuntimeConfigWarnings
+  ].filter((notice): notice is string => Boolean(notice)))];
 
   const applyQuickPreset = (presetId: string) => {
     setQuickPresetId(presetId);
     const preset = configPresets.find((item) => item.id === presetId);
     const nextOrchestration = preset?.importSource
       ? normalizeAgentOrchestration(preset.orchestration)
-      : cloneAgentOrchestration(preset?.orchestration ?? DEFAULT_AGENT_ORCHESTRATION);
+      : cloneAgentOrchestration(preset?.orchestration ?? DEFAULT_RESEARCH_WORKFLOW);
     setQuickOrchestration(nextOrchestration);
     const nextAgents = preset?.importSource
       ? normalizeAgents(preset.agents, nextOrchestration)
-      : cloneAgentsConfig(preset?.agents ?? DEFAULT_AGENTS);
+      : cloneAgentsConfig(preset?.agents ?? defaultResearchAgents());
     setQuickAgents(presetId === "default"
       ? applyCatalogDefaultGateway(
           applyCatalogDefaultHarness(nextAgents, harnesses, defaultHarnessId),
@@ -1860,23 +1929,18 @@ export function ProjectListPage({
     return [...byKey.values()];
   }, [mcpDirectory, quickAgents, quickMcpDefinitions, quickOrchestration.agents]);
 
-  const submitQuickTask = async (event: FormEvent) => {
-    event.preventDefault();
+  const submitQuickTask = async (event?: FormEvent, force = false) => {
+    event?.preventDefault();
     if (quickSubmitting || quickSaving || quickConfigSaving) return;
     const requirement = quickRequirement.trim();
-    const errors = [
-      requirement.length < 10 && "请至少输入 10 个字符，说明研究目标与期望成果",
-      runtimeCatalogBlocker,
-      quickOrchestrationError && `Workflow：${quickOrchestrationError}`,
-      !quickGithubAccountReady && "请选择一个授权正常的 GitHub 账号",
-      ...quickRuntimeConfigErrors
-    ].filter(Boolean);
-    if (errors.length) {
-      setQuickError(`启动前检查未通过：${errors.join("；")}`);
+    if (requirement.length < 10) {
+      setQuickError("请至少输入 10 个字符，说明研究目标与期望成果");
       return;
     }
-    setQuickSubmitting(true);
     setQuickError("");
+    if (!force && quickStartNotices.length) { setQuickStartRequested(true); return; }
+    setQuickStartRequested(false);
+    setQuickSubmitting(true);
     setQuickSaveNotice("");
     setQuickCreated(undefined);
     try {
@@ -2048,7 +2112,7 @@ export function ProjectListPage({
       if (quickPresetId === id) {
         const fallback = remaining.find((item) => item.id === "default") ?? remaining[0];
         setQuickPresetId(fallback?.id ?? "default");
-        const fallbackAgents = cloneAgentsConfig(fallback?.agents ?? DEFAULT_AGENTS);
+        const fallbackAgents = cloneAgentsConfig(fallback?.agents ?? defaultResearchAgents());
         setQuickAgents(fallback?.id === "default"
           ? applyCatalogDefaultGateway(
               applyCatalogDefaultHarness(fallbackAgents, harnesses, defaultHarnessId),
@@ -2056,13 +2120,69 @@ export function ProjectListPage({
               catalogGatewayRef.current?.gateways ?? gateways
             )
           : fallbackAgents);
-        setQuickOrchestration(cloneAgentOrchestration(fallback?.orchestration ?? DEFAULT_AGENT_ORCHESTRATION));
+        setQuickOrchestration(cloneAgentOrchestration(fallback?.orchestration ?? DEFAULT_RESEARCH_WORKFLOW));
         setQuickSkillDefinitions(structuredClone(fallback?.skillDefinitions ?? {}));
         setQuickMcpDefinitions(structuredClone(fallback?.mcpDefinitions ?? {}));
         setQuickWorkflowName(fallback?.name ?? "未命名流程");
       }
     } catch (reason) {
       setQuickError(reason instanceof Error ? reason.message : "删除配置失败");
+    }
+  };
+
+  const folderByProject = useMemo(() => new Map(projectFolders?.flatMap(folder => folder.projectIds.map(id => [id, folder.id] as const))), [projectFolders]);
+  const selectedFolder = projectFolders?.find(folder => folder.id === selectedFolderId);
+  useEffect(() => {
+    if (projectFolders && selectedFolderId !== "all" && selectedFolderId !== "unfiled" && !selectedFolder) {
+      setSelectedFolderId("all");
+      setFolderNotice("所选文件夹已删除，已显示全部项目。");
+    }
+  }, [projectFolders, selectedFolderId, selectedFolder]);
+
+  const runFolderMutation = async (operation: () => Promise<ProjectFolder[]>, notice: string): Promise<boolean> => {
+    if (folderMutationPending.current) return false;
+    folderMutationPending.current = true;
+    ++folderRequestRef.current;
+    folderLoadInFlight.current = false;
+    setFolderBusy(true);
+    setFolderActionError("");
+    setFolderNotice("");
+    try {
+      const folders = await operation();
+      if (pageActiveRef.current) {
+        setProjectFolders(folders);
+        setFolderLoadError("");
+        setFolderNotice(notice);
+      }
+      return true;
+    } catch (reason) {
+      if (pageActiveRef.current) setFolderActionError(reason instanceof Error ? reason.message : "文件夹操作失败");
+      return false;
+    } finally {
+      folderMutationPending.current = false;
+      if (pageActiveRef.current) setFolderBusy(false);
+    }
+  };
+
+  const moveSelectedProjects = async () => {
+    if (folderDestination === undefined || !selectedProjectIds.size) return;
+    const ids = [...selectedProjectIds];
+    const destination = folderDestination === "" ? null : folderDestination;
+    if (await runFolderMutation(() => moveProjectsToFolder(ids, destination), `已移动 ${ids.length} 个项目。`)) {
+      setSelectedProjectIds(new Set());
+    }
+  };
+
+  const confirmFolderDialog = async (name: string) => {
+    if (!folderDialog) return;
+    const dialog = folderDialog;
+    const success = await runFolderMutation(
+      () => dialog.mode === "create" ? createProjectFolder(name) : dialog.mode === "rename" ? renameProjectFolder(dialog.folder.id, name) : deleteProjectFolder(dialog.folder.id),
+      dialog.mode === "delete" ? "文件夹已删除，其中的项目已移回未分类。" : "文件夹已保存。"
+    );
+    if (success) {
+      setFolderDialog(undefined);
+      if (dialog.mode === "delete") setSelectedFolderId("unfiled");
     }
   };
 
@@ -2074,12 +2194,13 @@ export function ProjectListPage({
           (showArchived
             ? Boolean(project.archivedAt)
             : !project.archivedAt && matchesFilter(project, filter)) &&
+          (selectedFolderId === "all" || (selectedFolderId === "unfiled" ? !folderByProject.has(project.id) : folderByProject.get(project.id) === selectedFolderId)) &&
           (!keyword ||
             project.title.toLowerCase().includes(keyword) ||
             project.requirement.toLowerCase().includes(keyword))
       )
       .sort(compareProjectsByStartedAtDescending);
-  }, [filter, projects, search, showArchived]);
+  }, [filter, projects, search, showArchived, selectedFolderId, folderByProject]);
 
   useEffect(() => {
     setVisibleProjectLimit(PROJECT_PAGE_SIZE);
@@ -2087,14 +2208,14 @@ export function ProjectListPage({
     setBatchConfirmationOpen(false);
     setBatchConfirmation("");
     setManagementFailures([]);
-  }, [filter, search, showArchived]);
+  }, [filter, search, showArchived, selectedFolderId]);
 
   const displayedProjects = visibleProjects.slice(0, visibleProjectLimit);
 
   const selectableVisibleProjects = displayedProjects.filter((project) =>
-    showArchived
+    folderBatchMode || (showArchived
       ? Boolean(project.archivedAt)
-      : canArchiveProject(project)
+      : canArchiveProject(project))
   );
   const allVisibleSelected = selectableVisibleProjects.length > 0 &&
     selectableVisibleProjects.every((project) => selectedProjectIds.has(project.id));
@@ -2104,6 +2225,8 @@ export function ProjectListPage({
 
   const leaveBatchMode = () => {
     setBatchMode(false);
+    setFolderBatchMode(false);
+    setFolderDestination(undefined);
     setSelectedProjectIds(new Set());
     setBatchConfirmationOpen(false);
     setBatchConfirmation("");
@@ -2454,20 +2577,16 @@ export function ProjectListPage({
               </Button>
             </div>
             {quickError && <span className="quick-task-error" role="alert">{quickError}</span>}
-            {!quickError && quickRuntimeConfigErrors.length > 0 && (
-              <span className="quick-task-error" role="alert">
-                启动前配置检查未通过：{quickRuntimeConfigErrors.join("；")}
-              </span>
-            )}
-            {quickRuntimeConfigWarnings.length > 0 && (
-              <span className="quick-task-error" role="alert">
-                网关连接验证未通过，允许启动：{quickRuntimeConfigWarnings.join("；")}
-              </span>
-            )}
-            {!quickError && runtimeCatalogBlocker && (
-              <span className="quick-task-error" role={runtimeCatalogState === "loading" ? "status" : "alert"}>
-                {runtimeCatalogBlocker} 仍可保存研究任务副本，稍后再启动。
-              </span>
+            {quickStartRequested && quickStartNotices.length > 0 && !quickError && (
+              <div className="launch-advisory" role="status">
+                <strong>启动前提示</strong>
+                {quickStartNotices.map(notice => <p key={notice}>{notice}</p>)}
+                <div className="launch-advisory-actions">
+                  <Button type="button" variant="ghost" onClick={() => setQuickStartRequested(false)}>取消</Button>
+                  <Button type="button" variant="secondary" disabled={quickSubmitting || quickSaving || quickConfigSaving}
+                    onClick={() => void submitQuickTask(undefined, true)}>强制启动</Button>
+                </div>
+              </div>
             )}
             {quickSaveNotice && (
               <span className="quick-task-save-notice" role="status">
@@ -2527,12 +2646,12 @@ export function ProjectListPage({
               setQuickOrchestration(
                 cloneAgentOrchestration(
                   defaultPreset?.orchestration ??
-                    DEFAULT_AGENT_ORCHESTRATION
+                    DEFAULT_RESEARCH_WORKFLOW
                 )
               );
               setQuickSkillDefinitions(structuredClone(defaultPreset?.skillDefinitions ?? {}));
               setQuickMcpDefinitions(structuredClone(defaultPreset?.mcpDefinitions ?? {}));
-              const fallbackAgents = cloneAgentsConfig(defaultPreset?.agents ?? DEFAULT_AGENTS);
+              const fallbackAgents = cloneAgentsConfig(defaultPreset?.agents ?? defaultResearchAgents());
               setQuickAgents(defaultPreset
                 ? applyCatalogDefaultGateway(
                     applyCatalogDefaultHarness(fallbackAgents, harnesses, defaultHarnessId),
@@ -2642,9 +2761,7 @@ export function ProjectListPage({
         tasks={savedTasks}
         loading={savedTasksLoading}
         warning={savedTasksWarning}
-        startBlockedReason={runtimeCatalogBlocker}
-        startBlockedReasonForTask={savedTaskStartBlocker}
-        startWarningForTask={savedTaskStartWarning}
+        startNoticesForTask={savedTaskStartNotices}
         onEdit={(task) => onEditSavedTask?.(task.id)}
         onDelete={async (task) => {
           await deleteSavedResearchTask(task.id);
@@ -2653,9 +2770,6 @@ export function ProjectListPage({
           );
         }}
         onStart={async (task) => {
-          if (runtimeCatalogBlocker) throw new Error(runtimeCatalogBlocker);
-          const taskBlocker = savedTaskStartBlocker(task);
-          if (taskBlocker) throw new Error(taskBlocker);
           const project = await createProject({
             sourceSavedTaskId: task.id,
             title: task.title,
@@ -2704,7 +2818,8 @@ export function ProjectListPage({
             <Button
               variant={batchMode ? "primary" : "secondary"}
               icon={<CheckCircle2 size={17} />}
-              onClick={() => batchMode ? leaveBatchMode() : setBatchMode(true)}
+              onClick={() => { if (batchMode) leaveBatchMode(); else { leaveBatchMode(); setBatchMode(true); } }}
+              disabled={folderBusy}
             >
               {batchMode ? "退出批量管理" : "批量管理"}
             </Button>
@@ -2713,6 +2828,44 @@ export function ProjectListPage({
             </Button>
           </div>
         </div>
+
+        <div className="project-folder-browser" aria-label="项目文件夹">
+          <nav className="project-folder-tabs" aria-label="按文件夹筛选项目">
+            <button type="button" aria-pressed={selectedFolderId === "all"} disabled={folderBusy} onClick={() => setSelectedFolderId("all")}><FolderKanban size={16} />全部项目</button>
+            <button type="button" aria-pressed={selectedFolderId === "unfiled"} disabled={!projectFolders || folderBusy} onClick={() => setSelectedFolderId("unfiled")}><Folder size={16} />未分类</button>
+            {projectFolders?.map(folder => <button type="button" key={folder.id} aria-pressed={selectedFolderId === folder.id} disabled={folderBusy}
+              onClick={() => setSelectedFolderId(folder.id)}><Folder size={16} /><span>{folder.name}</span></button>)}
+          </nav>
+          <div className="project-folder-actions">
+            <Button variant="secondary" icon={<FolderPlus size={15} />} disabled={!projectFolders || folderBusy}
+              onClick={() => { setFolderActionError(""); setFolderDialog({ mode: "create" }); }}>新建文件夹</Button>
+            {selectedFolder && <>
+              <Button variant="ghost" icon={<Pencil size={15} />} disabled={folderBusy}
+                onClick={() => { setFolderActionError(""); setFolderDialog({ mode: "rename", folder: selectedFolder }); }}>重命名文件夹</Button>
+              <Button variant="ghost" icon={<Trash2 size={15} />} disabled={folderBusy}
+                onClick={() => { setFolderActionError(""); setFolderDialog({ mode: "delete", folder: selectedFolder }); }}>删除文件夹</Button>
+            </>}
+            <Button variant={folderBatchMode ? "primary" : "secondary"} icon={<ListTree size={15} />} disabled={!projectFolders || folderBusy}
+              onClick={() => { if (folderBatchMode) leaveBatchMode(); else { leaveBatchMode(); setFolderBatchMode(true); } }}>
+              {folderBatchMode ? "退出批量分类" : "批量分类"}
+            </Button>
+          </div>
+        </div>
+        {folderLoadError && <div className="projects-refresh-warning" role="alert">文件夹加载失败：{folderLoadError}
+          <Button variant="ghost" onClick={() => void load()}>重新加载文件夹</Button>
+        </div>}
+        {folderActionError && !folderDialog && <div className="project-lifecycle-error" role="alert">{folderActionError}</div>}
+        {folderNotice && <div className="projects-archive-notice" role="status">{folderNotice}</div>}
+        {folderBatchMode && <div className="project-batch-bar project-folder-batch" role="region" aria-label="批量分类项目">
+          <label><input type="checkbox" checked={allVisibleSelected} disabled={!selectableVisibleProjects.length || folderBusy} onChange={toggleAllVisible} />全选当前页面项目</label>
+          <span>已选择 <strong>{selectedProjectIds.size}</strong> 个</span>
+          <select aria-label="批量分类目标文件夹" value={folderDestination ?? "__choose__"} onChange={event => setFolderDestination(event.target.value)} disabled={folderBusy}>
+            <option value="__choose__" disabled>选择目标文件夹</option><option value="">未分类</option>
+            {projectFolders?.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
+          </select>
+          <Button variant="primary" loading={folderBusy} disabled={!selectedProjectIds.size || folderDestination === undefined}
+            onClick={() => void moveSelectedProjects()}>移动所选项目</Button>
+        </div>}
 
         {batchMode && (
           <div className="project-batch-bar" role="region" aria-label="批量管理项目">
@@ -2817,10 +2970,14 @@ export function ProjectListPage({
             {displayedProjects.map((project) => (
               <ProjectCard
                 project={project}
-                batchMode={batchMode}
+                batchMode={batchMode || folderBatchMode}
+                folders={projectFolders}
+                folderId={folderByProject.get(project.id)}
+                folderBusy={folderBusy || batchMode || folderBatchMode}
+                onMoveToFolder={folderId => { void runFolderMutation(() => moveProjectsToFolder([project.id], folderId), `项目“${project.title}”已移至${projectFolders?.find(folder => folder.id === folderId)?.name ?? "未分类"}。`); }}
                 selected={selectedProjectIds.has(project.id)}
-                selectable={showArchived || canArchiveProject(project)}
-                selectionReason={showArchived
+                selectable={!folderBusy && (folderBatchMode || showArchived || canArchiveProject(project))}
+                selectionReason={folderBatchMode || showArchived
                   ? undefined
                   : canArchiveProject(project)
                     ? undefined
@@ -2905,6 +3062,8 @@ export function ProjectListPage({
             </div>
           )}
           </>
+        ) : selectedFolderId !== "all" ? (
+          <EmptyState icon={<Folder size={27} />} title="此分类下没有匹配的项目" description="可调整搜索和状态筛选，或在全部项目中将项目移入此文件夹。" />
         ) : showArchived ? (
           <EmptyState
             icon={<Archive size={27} />}
@@ -2936,6 +3095,10 @@ export function ProjectListPage({
           />
         )}
       </section>
+
+      {folderDialog && <ProjectFolderDialog mode={folderDialog.mode} name={folderDialog.mode === "create" ? undefined : folderDialog.folder.name}
+        busy={folderBusy} error={folderActionError} onClose={() => { setFolderDialog(undefined); setFolderActionError(""); }}
+        onConfirm={name => void confirmFolderDialog(name)} />}
 
       {batchConfirmationOpen && (
         <div className="workflow-modal-backdrop" role="presentation">

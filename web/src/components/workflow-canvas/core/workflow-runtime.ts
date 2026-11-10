@@ -30,7 +30,7 @@ export interface WorkflowRuntimeState {
   /** Latest human-readable failure/interruption diagnostic per node. */
   nodeReasons: Record<string, string>;
   edgeStates: Record<string, RuntimeEdgeState>;
-  /** Business executions, not technical invocation/retry counts. */
+  /** Main counts native invocations; other nodes count business executions. */
   executionCounts: Record<string, number>;
   currentInvocationId?: string;
   recentInvocationPath: Array<{
@@ -137,6 +137,7 @@ export function buildWorkflowRuntimeState(
   const recent: WorkflowRuntimeState["recentInvocationPath"] = [];
   const seenExecutions = new Set<string>();
   const seenInvocations = new Set<string>();
+  const mainInvocations = new Set<string>();
   const seenEventSeqs = new Set<number>();
   const lastStartSeq = new Map<string, number>();
   const lastQueueSeq = new Map<string, number>();
@@ -402,6 +403,7 @@ export function buildWorkflowRuntimeState(
     if (type === "agent.started" || type === "agent.run.started" || type === "invocation.started") {
       if (!eventAgent || !invocationId || seenInvocations.has(invocationId)) continue;
       seenInvocations.add(invocationId);
+      if (eventAgent === "main") mainInvocations.add(invocationId);
       setNodeState(states, eventAgent, "running");
       lastStartSeq.set(eventAgent, event.seq);
       currentNodeId = eventAgent;
@@ -562,13 +564,20 @@ export function buildWorkflowRuntimeState(
       setNodeState(states, currentNodeId, runtimeStatus(activeNodeRun.status));
     }
   }
+  const activeAgent = project.currentAgent;
+  // Without an authoritative runtime snapshot, a later observed start wins
+  // over the earlier retry badge. Pause and current runtime facts still win.
+  const lifecycleProject = !project.runtime && project.status === "retrying" && activeAgent &&
+    states[activeAgent] === "running" && (lastStartSeq.get(activeAgent) ?? -1) >
+      Math.max(lastQueueSeq.get(activeAgent) ?? -1, lastTerminalSeq.get(activeAgent) ?? -1)
+    ? { ...project, status: "running" as const } : project;
   for (const definition of project.orchestration.agents) {
     if (!outerNodeIdSet.has(definition.name)) continue;
     const state = states[definition.name] ?? "waiting";
     setNodeState(states, definition.name, project.runtime
-      ? agentDisplayState(project, definition.name, state) : projectLifecycleState(project, state));
+      ? agentDisplayState(project, definition.name, state) : projectLifecycleState(lifecycleProject, state));
   }
-  for (const id of outerNodeIds) setNodeState(states, id, projectLifecycleState(project, states[id]!));
+  for (const id of outerNodeIds) setNodeState(states, id, projectLifecycleState(lifecycleProject, states[id]!));
   if (currentNodeId && !["running", "stopping"].includes(states[currentNodeId]!)) currentNodeId = undefined;
   if ((project.status === "completed" || projectCompletedInTimeline) && terminationCompleted) {
     const terminationAgent = project.orchestration.termination.agent;
@@ -580,6 +589,9 @@ export function buildWorkflowRuntimeState(
     states[CANVAS_FINISH_NODE_ID] = "completed";
   }
 
+  if (outerNodeIdSet.has("main")) {
+    counts.main = Math.max(project.agentProgress?.main?.executions ?? 0, mainInvocations.size);
+  }
   return {
     nodeStates: states,
     nodeReasons: reasons,

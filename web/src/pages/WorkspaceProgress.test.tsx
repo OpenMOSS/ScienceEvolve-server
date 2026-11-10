@@ -66,18 +66,18 @@ const explainerHarnesses: HarnessCatalogEntry[] = [
   ["codex", "Codex", "responses"],
   ["dsh", "dsh", "chat-completions"],
   ["pi", "pi", "chat-completions"],
-  ["claude-code", "Claude Code", "anthropic-messages"]
+  ["fixture-anthropic", "Fixture Harness", "anthropic-messages"]
 ].map(([id, label, nativeProtocol]) => ({
   id: id as HarnessCatalogEntry["id"],
   label,
   adapterVersion: "1",
   nativeProtocol: nativeProtocol as HarnessCatalogEntry["nativeProtocol"],
-  purposes: id === "claude-code" ? ["workflow", "explainer", "probe"] : ["workflow", "probe"],
+  purposes: id === "fixture-anthropic" ? ["workflow", "explainer", "probe"] : ["workflow", "probe"],
   mode: "workflow",
   notes: `Embedded ${label}`,
   capabilities: {
     durableSession: true, officialEvents: true, toolEvents: true, usageEvents: true,
-    readOnlyExplainer: id === "claude-code", webSearch: true, skills: true, mcp: true
+    readOnlyExplainer: id === "fixture-anthropic", webSearch: true, skills: true, mcp: true
   },
   available: true
 }));
@@ -92,23 +92,23 @@ const explainerGatewayA: GatewayRecord = {
   revision: 1,
   apiKeyConfigured: true,
   test: {
-    status: "passed", protocol: "responses", model: "model-a", harness: "claude-code",
+    status: "passed", protocol: "responses", model: "model-a", harness: "fixture-anthropic",
     nativeProtocol: "anthropic-messages", routeMode: "proxy",
     routeDirection: "anthropic-messages->responses", probeKind: "adapter-smoke",
-    cacheKey: "claude-model-a", adapterVersion: "1", executableFingerprint: "fixture-claude",
+    cacheKey: "alternate-model-a", adapterVersion: "1", executableFingerprint: "fixture-native",
     gatewayRevision: 1, routerCompatibilityVersion: "1"
   },
   tests: [
     {
-      status: "passed", protocol: "responses", model: "model-a", harness: "claude-code",
+      status: "passed", protocol: "responses", model: "model-a", harness: "fixture-anthropic",
       nativeProtocol: "anthropic-messages", routeMode: "proxy",
       routeDirection: "anthropic-messages->responses", probeKind: "route"
     },
     {
-      status: "passed", protocol: "responses", model: "model-a", harness: "claude-code",
+      status: "passed", protocol: "responses", model: "model-a", harness: "fixture-anthropic",
       nativeProtocol: "anthropic-messages", routeMode: "proxy",
       routeDirection: "anthropic-messages->responses", probeKind: "adapter-smoke",
-      cacheKey: "claude-model-a", adapterVersion: "1", executableFingerprint: "fixture-claude",
+      cacheKey: "alternate-model-a", adapterVersion: "1", executableFingerprint: "fixture-native",
       gatewayRevision: 1, routerCompatibilityVersion: "1"
     },
     {
@@ -165,7 +165,7 @@ const explainerGatewayB: GatewayRecord = {
 
 const initialExplainerConfig: ProjectExplainerRuntimeConfig = {
   schemaVersion: 2,
-  harness: "claude-code",
+  harness: "fixture-anthropic",
   gatewayId: explainerGatewayA.id,
   nativeProtocol: "anthropic-messages",
   gatewayProtocol: "responses",
@@ -473,9 +473,9 @@ function canonicalTraceFixture(harnessId: string): AgentEvent[] {
           kind: "tool.completed",
           tool: {
             callId: "call-sentinel",
-            // Claude's official tool_result frame has no tool name, so its
+            // An unnamed native tool result has no tool name, so its
             // canonical mapper emits the neutral placeholder.
-            name: harnessId === "claude-code" ? "tool" : "Read",
+            name: harnessId === "fixture-anthropic" ? "tool" : "Read",
             status: "completed",
             outputPreview: "OPENFARS_SMOKE_SENTINEL",
             truncated: true
@@ -585,7 +585,7 @@ describe("Workspace task progress", () => {
     });
     vi.mocked(getProjectExplainerConfig).mockReset().mockResolvedValue({
       schemaVersion: 2,
-      harness: "claude-code",
+      harness: "fixture-anthropic",
       gatewayId: explainerGatewayA.id,
       nativeProtocol: "anthropic-messages",
       gatewayProtocol: "responses",
@@ -881,7 +881,7 @@ describe("Workspace task progress", () => {
     expect(options.find(option => option.value === agentId)!.textContent).not.toContain("已退役");
   });
 
-  it.each(["codex", "dsh", "pi", "claude-code"])("restores resident %s history bodies and tool details without live snapshots", harness => {
+  it.each(["codex", "dsh", "pi", "fixture-anthropic"])("restores resident %s history bodies and tool details without live snapshots", harness => {
     const events = canonicalTraceFixture(harness).map(event => event.data?.canonicalEvent
       ? normalizeEvent({ ...event, message: "Resident Harness event", data: { resident: true, event: event.data.canonicalEvent } })!
       : event);
@@ -926,7 +926,7 @@ describe("Workspace task progress", () => {
 
   it("renders one canonical trace DOM for every Harness and collapses results and diagnostics", () => {
     const structures: string[] = [];
-    for (const harnessId of ["codex", "dsh", "pi", "claude-code"]) {
+    for (const harnessId of ["codex", "dsh", "pi", "fixture-anthropic"]) {
       const events = canonicalTraceFixture(harnessId);
       const view = render(
         <TraceView
@@ -1324,7 +1324,7 @@ describe("Workspace task progress", () => {
   });
 
   it("renders an explicit empty result when a canonical tool completed with an empty preview", () => {
-    const events = canonicalTraceFixture("claude-code").map((event) =>
+    const events = canonicalTraceFixture("fixture-anthropic").map((event) =>
       event.seq === 4
         ? {
             ...event,
@@ -1442,7 +1442,7 @@ describe("Workspace task progress", () => {
       skills: [],
       models: [],
       gateways: [explainerGatewayA],
-      harnesses: explainerHarnesses.filter((item) => item.id !== "claude-code"),
+      harnesses: explainerHarnesses.filter((item) => item.id !== "fixture-anthropic"),
       agentPrompts
     });
     render(<WorkspacePage projectId={project.id} onBack={vi.fn()} />);
@@ -1453,7 +1453,7 @@ describe("Workspace task progress", () => {
 
   it("offers Codex, Pi and DSH as visible read-only Project Explainer Harnesses", async () => {
     const harnesses = explainerHarnesses
-      .filter((item) => item.id !== "claude-code")
+      .filter((item) => item.id !== "fixture-anthropic")
       .map((item) => ({
         ...item,
         purposes: ["workflow", "explainer", "probe"] as HarnessCatalogEntry["purposes"],
@@ -1482,7 +1482,7 @@ describe("Workspace task progress", () => {
     expect(within(selector).getByRole("option", { name: "Codex" })).toBeEnabled();
     expect(within(selector).getByRole("option", { name: "pi" })).toBeEnabled();
     expect(within(selector).getByRole("option", { name: "dsh" })).toBeEnabled();
-    expect(within(selector).queryByRole("option", { name: "Claude Code" })).not.toBeInTheDocument();
+    expect(within(selector).queryByRole("option", { name: "Fixture Harness" })).not.toBeInTheDocument();
   });
 
   it.each([false, true])("collapses Explainer lifecycle logs into one reply status across history reloads (active: %s)", async active => {
@@ -1629,7 +1629,7 @@ describe("Workspace task progress", () => {
     );
     expect(explainer).toHaveTextContent("只读 · 无 Skills · 无 MCP");
     await waitFor(() => {
-      expect(explainer).toHaveTextContent("PROJECT EXPLAINER · Claude Code");
+      expect(explainer).toHaveTextContent("PROJECT EXPLAINER · Fixture Harness");
       expect(explainer).toHaveTextContent("Responses Gateway · OpenAI Responses");
       expect(explainer).toHaveTextContent("Anthropic Messages → OpenAI Responses");
     });
@@ -1701,14 +1701,14 @@ describe("Workspace task progress", () => {
         status: "passed" as const,
         protocol: "chat-completions" as const,
         model: "model-b",
-        harness: "claude-code" as const,
+        harness: "fixture-anthropic" as const,
         nativeProtocol: "anthropic-messages" as const,
         routeMode: "proxy" as const,
         routeDirection: "anthropic-messages->chat-completions" as const,
         probeKind: "adapter-smoke" as const,
-        cacheKey: "claude-model-b",
+        cacheKey: "alternate-model-b",
         adapterVersion: "1",
-        executableFingerprint: "fixture-claude",
+        executableFingerprint: "fixture-native",
         gatewayRevision: 1,
         routerCompatibilityVersion: "1"
       },
@@ -1717,7 +1717,7 @@ describe("Workspace task progress", () => {
           status: "passed" as const,
           protocol: "chat-completions" as const,
           model: "model-b",
-          harness: "claude-code" as const,
+          harness: "fixture-anthropic" as const,
           nativeProtocol: "anthropic-messages" as const,
           routeMode: "proxy" as const,
           routeDirection: "anthropic-messages->chat-completions" as const,
@@ -1727,14 +1727,14 @@ describe("Workspace task progress", () => {
           status: "passed" as const,
           protocol: "chat-completions" as const,
           model: "model-b",
-          harness: "claude-code" as const,
+          harness: "fixture-anthropic" as const,
           nativeProtocol: "anthropic-messages" as const,
           routeMode: "proxy" as const,
           routeDirection: "anthropic-messages->chat-completions" as const,
           probeKind: "adapter-smoke" as const,
-          cacheKey: "claude-model-b",
+          cacheKey: "alternate-model-b",
           adapterVersion: "1",
-          executableFingerprint: "fixture-claude",
+          executableFingerprint: "fixture-native",
           gatewayRevision: 1,
           routerCompatibilityVersion: "1"
         }
@@ -1777,7 +1777,7 @@ describe("Workspace task progress", () => {
     await waitFor(() => expect(updateProjectExplainerConfig).toHaveBeenCalledWith(
       project.id,
       {
-        harness: "claude-code",
+        harness: "fixture-anthropic",
         gatewayId: updatedGateway.id,
         model: "model-b",
         reasoningEffort: "high"
@@ -1823,7 +1823,7 @@ describe("Workspace task progress", () => {
         status,
         protocol: "responses",
         model: "model-a",
-        harness: "claude-code",
+        harness: "fixture-anthropic",
         nativeProtocol: "anthropic-messages",
         routeMode: "proxy",
         routeDirection: "anthropic-messages->responses",
@@ -1890,7 +1890,7 @@ describe("Workspace task progress", () => {
     render(<ProjectExplainerPanel projectId={project.id} />);
 
     const selector = await screen.findByLabelText("Project Explainer Harness");
-    expect(within(selector).getByRole("option", { name: "Claude Code" })).toBeEnabled();
+    expect(within(selector).getByRole("option", { name: "Fixture Harness" })).toBeEnabled();
     expect(within(selector).getByRole("option", {
       name: /Codex（Codex 未声明 Project Explainer purpose）/
     })).toBeDisabled();
@@ -1953,7 +1953,7 @@ describe("Workspace task progress", () => {
 
   it("confirms an active harness switch and keeps the visible product-session history", async () => {
     const alternateExplainer: HarnessCatalogEntry = {
-      ...explainerHarnesses.find((item) => item.id === "claude-code")!,
+      ...explainerHarnesses.find((item) => item.id === "fixture-anthropic")!,
       id: "fixture-explainer",
       label: "Fixture Explainer"
     };
@@ -1982,7 +1982,7 @@ describe("Workspace task progress", () => {
           probeKind: "adapter-smoke",
           cacheKey: "fixture-explainer-model-a",
           adapterVersion: "1",
-          executableFingerprint: "fixture-claude",
+          executableFingerprint: "fixture-native",
           gatewayRevision: 1,
           routerCompatibilityVersion: "1"
         }
@@ -2012,7 +2012,7 @@ describe("Workspace task progress", () => {
         id: "harness_switch",
         kind: "status",
         text: "已切换 harness，历史上下文已带入新会话",
-        data: { previousHarness: "claude-code", harness: alternateExplainer.id, nativeSessionRebuilt: true }
+        data: { previousHarness: "fixture-anthropic", harness: alternateExplainer.id, nativeSessionRebuilt: true }
       }
     ];
     vi.mocked(getCatalog).mockResolvedValue({

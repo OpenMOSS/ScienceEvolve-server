@@ -44,6 +44,46 @@ function callBridge(
 }
 
 describe("orchestration control bridge", () => {
+  it("rejects an incomplete completion result rather than returning a successful save acknowledgement", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "finish-incomplete-")); roots.push(root);
+    const onResult = vi.fn();
+    const service = new ControlActionService({ projectId: "project", agent: "worker", invocationId: "turn", stateVersion: 1,
+      capability: "secret", stagingPath: path.join(root, "actions.json"),
+      revalidate: async () => ({ taskId: "task" }), onResult });
+    await expect(service.stageWithResult("secret", "finish", { tool: "finish_task" })).rejects.toThrow("missing agent");
+    expect(onResult).not.toHaveBeenCalled();
+    await expect(fs.readFile(path.join(root, "actions.json"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("retains finish facts but refuses a successful tool return after its capability is revoked", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "finish-revoked-")); roots.push(root);
+    const onResult = vi.fn(() => { service.revoke(); return "a".repeat(64); });
+    const service = new ControlActionService({ projectId: "project", agent: "worker", invocationId: "turn", stateVersion: 1,
+      capability: "secret", stagingPath: path.join(root, "actions.json"), revalidate: async () => ({ receiptPath: "/runtime/finish.json" }), onResult });
+    await expect(service.stageWithResult("secret", "finish", { tool: "finish_task" })).rejects.toThrow("revoked");
+    expect(onResult).toHaveBeenCalledWith(expect.objectContaining({ result: { receiptPath: "/runtime/finish.json" } }));
+    expect(JSON.parse(await fs.readFile(path.join(root, "actions.json"), "utf8"))).toHaveLength(1);
+  });
+
+  it("returns the persisted finish receipt without repeating its summary or memory", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "finish-result-")); roots.push(root);
+    const receipt = { taskId: "same-task", agent: "worker", invocationId: "original-invocation", callId: "original-finish",
+      requestedAt: "2026-11-04T05:40:51.164Z", status: "accepted", acceptedAt: "2026-11-04T05:41:00.000Z",
+      memoryPath: "/workspace/agent-memory/worker/Memory.md", summary: "Original summary", memory: "Original memory" };
+    const onResult = vi.fn(() => "a".repeat(64)), execute = vi.fn();
+    const service = new ControlActionService({ projectId: "project", agent: "worker", invocationId: "recovered-invocation",
+      stateVersion: 2, capability: "secret", stagingPath: path.join(root, "actions.json"),
+      revalidate: async () => receipt, onResult, execute });
+    const action = { tool: "finish_task" as const, memory: "Replacement memory that is not appended" };
+    const result = await service.stageWithResult("secret", "finish", action);
+    expect(result.result).toEqual({ taskId: receipt.taskId, agent: receipt.agent, invocationId: receipt.invocationId,
+      callId: receipt.callId, requestedAt: receipt.requestedAt, status: receipt.status, acceptedAt: receipt.acceptedAt,
+      memoryPath: receipt.memoryPath });
+    expect(onResult).toHaveBeenCalledWith(expect.objectContaining({ result: result.result }));
+    expect(await service.stageWithResult("secret", "finish", action)).toEqual(result);
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it("replays the original Git request when only its explanation changes, retaining exact targets and authority", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "git-retry-identity-")); roots.push(root);
     let authorized = true;
@@ -561,7 +601,7 @@ describe("orchestration control bridge", () => {
       }
     });
     const paths = authoritativeWorkflowPaths(root);
-    const parseAttempts: Promise<void>[] = ["codex", "dsh", "pi", "claude-code"]
+    const parseAttempts: Promise<void>[] = ["codex", "pi", "dsh"]
       .map(async () => {
         for (let attempt = 0; attempt < 80; attempt += 1) {
           try {
@@ -582,7 +622,7 @@ describe("orchestration control bridge", () => {
     });
     await Promise.all([...publications, ...parseAttempts]);
 
-    for (const harness of ["codex", "dsh", "pi", "claude-code"]) {
+    for (const harness of ["codex", "pi", "dsh"]) {
       const definition = JSON.parse(await fs.readFile(paths.definition, "utf8")) as {
         workflowRevision: number;
         workflow: { decisionPlans: { main: string } };

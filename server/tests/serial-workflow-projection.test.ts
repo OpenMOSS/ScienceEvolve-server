@@ -118,7 +118,7 @@ describe("actual SDK configuration roll-forward from an explicitly registered se
       const f = await fixture(), original = business(f.state);
       const gateway = { id: "gwy_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", name: "Accepted route", url: "https://controlled.invalid", apiKey: "prepared-private-secret",
         models: [f.state.agents.writing.model], defaultModel: f.state.agents.writing.model, protocol: "responses" as const };
-      f.apply("Accepted safe configuration", mode === "original Session" ? "claude-code" : undefined, proposal => {
+      f.apply("Accepted safe configuration", mode === "original Session" ? "dsh" : undefined, proposal => {
         if (mode === "queued owner" || mode === "retired Session") removeWriting(proposal);
         if (mode === "private snapshot") proposal.agents.writing.gatewayId = gateway.id;
       });
@@ -392,7 +392,7 @@ describe("actual SDK configuration roll-forward from an explicitly registered se
   });
 
   it("rechecks a Session bound during validation without replacing it or silently recovering another Harness", async () => {
-    const f = await fixture(); f.apply("A formally accepted route", "claude-code"); const agents = f.state.agents;
+    const f = await fixture(); f.apply("A formally accepted route", "dsh"); const agents = f.state.agents;
     await expect(restoreSerialWorkflowConfiguration(f.database, f.storage, f.state, async () => {
       f.state.agentSessions!.writing = { ...f.session, nativeId: "late-original-worker-session" };
     })).rejects.toThrow(/Harness/);
@@ -410,7 +410,7 @@ describe("actual SDK configuration roll-forward from an explicitly registered se
   });
 
   it("rechecks retained Session authority even when the SDK configuration already matches the journal", async () => {
-    const f = await fixture(); f.apply("Accepted route before the late Session", "claude-code");
+    const f = await fixture(); f.apply("Accepted route before the late Session", "dsh");
     await restoreSerialWorkflowConfiguration(f.database, f.storage, f.state, validator());
     f.state.agentSessions!.writing = { ...f.session, nativeId: "late-original-matching-projection-session" };
     const validate = validator(), request = await f.request();
@@ -492,8 +492,8 @@ describe("actual SDK configuration roll-forward from an explicitly registered se
     expect(archive.meta).toEqual({ generation: 4, contextSeq: 17, resumeFailureCount: 2 });
     expect(await readFile(memory, "utf8")).toBe("Original business memory 原记录");
     expect((await f.persisted()).archivedAgentSessions).toEqual([archive]);
-    expect(() => assertWorkflowSessionHarnesses(f.state, { ...f.state.agents, writing: { ...originalConfig, harness: "claude-code" } })).toThrow(/codex/);
-    expect(() => assertWorkflowSessionHarnesses(f.state, { ...f.state.agents, independent_new_agent: { ...originalConfig, harness: "claude-code" } })).not.toThrow();
+    expect(() => assertWorkflowSessionHarnesses(f.state, { ...f.state.agents, writing: { ...originalConfig, harness: "dsh" } })).toThrow(/codex/);
+    expect(() => assertWorkflowSessionHarnesses(f.state, { ...f.state.agents, independent_new_agent: { ...originalConfig, harness: "dsh" } })).not.toThrow();
   });
 
   it("preserves readable legacy partial Session metadata without inventing missing counters", async () => {
@@ -560,7 +560,7 @@ describe("actual SDK configuration roll-forward from an explicitly registered se
     if (owner === "active") runtime.state.activeAgentExecution!.agent = "writing";
     if (owner === "queued") { runtime.state.activeAgentExecution = undefined; runtime.state.queuedAgent = "writing"; }
     const originalTask = structuredClone(runtime.state.activeAgentExecution);
-    const context = coordinator.getWorkflowAdjustments(runtime.state), proposal = structuredClone(context.current.snapshot); removeWriting(proposal);
+    const context = await coordinator.getWorkflowAdjustments(runtime.state), proposal = structuredClone(context.current.snapshot); removeWriting(proposal);
     const result = await orchestrator.submitWorkflowAdjustment(f.state.id, { projectId: f.state.id, requestId: "actual-retire-writing", base: context.current.version, proposal });
     if (owner === "idle" || owner === "unbound") {
       expect(result.record.status).toBe("applied"); expect(runtime.state.agents.writing).toBeUndefined();

@@ -1,5 +1,5 @@
-import { render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { CanvasEdges, type CanvasEdgeGeometry } from "./CanvasEdges";
 
 function edge(id: string, loopId?: string): CanvasEdgeGeometry {
@@ -24,6 +24,52 @@ function loopExit(id: string): CanvasEdgeGeometry {
 }
 
 describe("CanvasEdges Loop presentation", () => {
+  it.each([
+    ["证据复核员->定点补证员:0", "定点补证员->证据复核员:0"],
+    ["a:b", "a_b"],
+    ["🧪->🔬:0", "🔬->🧪:0"]
+  ])("binds particles to distinct paths for %s and %s", (forwardId, returnId) => {
+    const edges = [edge(forwardId, "evidence_refinement"), edge(returnId, "evidence_refinement"), loopExit("evidence_refinement")];
+    const view = render(<CanvasEdges edges={edges} selectedLoopId="evidence_refinement" />);
+    const paths = [...view.container.querySelectorAll<SVGPathElement>(".workflow-edge")];
+    expect(new Set(paths.map(path => path.id)).size).toBe(paths.length);
+    for (const path of paths) {
+      const edgeId = path.closest<SVGGElement>("[data-edge-id]")!.dataset.edgeId;
+      const particle = [...view.container.querySelectorAll<SVGGElement>("[data-flow-route]")].find(item => item.dataset.flowRoute === edgeId)!;
+      const reference = particle.querySelector("mpath")!.getAttribute("href")!;
+      expect(document.getElementById(reference.slice(1))).toBe(path);
+    }
+  });
+
+  it("allows selecting a fixed Loop exit by mouse and keyboard without enabling fixed ordinary edges", () => {
+    const onSelectEdge = vi.fn();
+    render(<CanvasEdges edges={[loopExit("alpha"), { ...edge("a-b"), fixed: true }]} onSelectEdge={onSelectEdge} />);
+    const exit = screen.getByRole("button", { name: /只读批次退出边/ });
+    fireEvent.click(exit);
+    fireEvent.keyDown(exit, { key: "Enter" });
+    expect(onSelectEdge).toHaveBeenCalledTimes(2);
+    expect(onSelectEdge).toHaveBeenLastCalledWith(expect.objectContaining({ loop: expect.objectContaining({ id: "alpha", role: "exit" }) }));
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+  });
+  it("animates the entire focused Loop including non-adjacent members and the fixed exit", () => {
+    const edges = [edge("a-b", "alpha"), edge("b-c", "alpha"), edge("c-a", "alpha"), loopExit("alpha"), edge("d-e", "beta")];
+    const view = render(<CanvasEdges edges={edges} focusedNodeId="a" relatedEdgeIds={new Set(["a-b", "c-a"])} mutedEdgeIds={new Set(["b-c", "loop:alpha:exit", "d-e"])} />);
+    expect([...view.container.querySelectorAll<SVGGElement>("[data-flow-route]")].map(item => item.dataset.flowRoute))
+      .toEqual(["a-b", "b-c", "c-a", "loop:alpha:exit"]);
+    const middle = view.container.querySelector('[data-edge-id="b-c"]')!;
+    expect(middle).toHaveClass("is-related-highlight");
+    expect(middle).not.toHaveClass("is-unrelated-muted");
+    expect(view.container.querySelector('[data-flow-route="c-a"]')).toHaveClass("is-incoming-flow");
+    view.rerender(<CanvasEdges edges={edges} focusedNodeId="d" />);
+    expect(view.container.querySelector('[data-flow-route="b-c"]')).toBeNull();
+  });
+
+  it("keeps every highlighted Loop edge animated even in a dense graph", () => {
+    const loop = [edge("a-b", "alpha"), edge("b-c", "alpha"), edge("c-a", "alpha"), loopExit("alpha")];
+    const view = render(<CanvasEdges edges={[...loop, ...Array.from({ length: 100 }, (_, n) => edge(`x-${n}`))]} selectedLoopId="alpha" selectedEdgeId="a-b" />);
+    expect(view.container.querySelectorAll(".flow-particle")).toHaveLength(4);
+  });
+
   it("keeps every dense connection selectable while bounding decorative motion during group selection and dragging", () => {
     const edges = Array.from({ length: 100 }, (_, index) => edge(`a-${index}`));
     const props = { edges, focusedNodeId: "a", relatedEdgeIds: new Set(edges.map((edge) => edge.id)), selectedEdgeIds: new Set(edges.map((edge) => edge.id)) };
@@ -99,6 +145,6 @@ describe("CanvasEdges Loop presentation", () => {
     expect(particles()[0]).not.toHaveClass("is-loop-flow");
 
     view.rerender(<CanvasEdges edges={edges} focusedNodeId="a" relatedEdgeIds={new Set(["a-b", "b-a"])} />);
-    expect(particles().map((particle) => particle.dataset.flowRoute)).toEqual(["a-b", "b-a"]);
+    expect(particles().map((particle) => particle.dataset.flowRoute)).toEqual(["a-b", "b-a", "loop:alpha:exit"]);
   });
 });

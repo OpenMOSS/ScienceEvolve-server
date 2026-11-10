@@ -37,7 +37,6 @@ Install other Harnesses as needed:
 ```bash
 npm ci --prefix harness/dsh
 npm ci --prefix harness/pi
-npm ci --prefix "harness/claude code"
 ```
 
 If a CLI is already installed, you can skip its bundled installation and configure its absolute path in `.env`.
@@ -121,7 +120,7 @@ Use the repository root `.env` consistently. When started through npm workspace 
 | `SCIENCEEVOLVE_DSH_TURN_IDLE_TIMEOUT_MS` | `1200000` | Inactivity window for a normal DSH Adapter turn with no native events. |
 | `SCIENCEEVOLVE_RESIDENT_MODEL_INACTIVITY_TIMEOUT_MS` | `1200000` | Shared inactivity window while resident Harnesses await valid model/provider activity. |
 | `SCIENCEEVOLVE_RESIDENT_TOOL_INACTIVITY_TIMEOUT_MS` | `7200000` | Shared inactivity window for active tools in resident Harnesses with no valid updates. |
-| `SCIENCEEVOLVE_PROTOCOL_PROXY_TIMEOUT_MS` | `1200000` | Inactivity timeout for one upstream protocol-proxy request; SSE frames reset the timer. |
+| `SCIENCEEVOLVE_PROTOCOL_PROXY_TIMEOUT_MS` | `1200000` | Upper bound for upstream inactivity; streaming startup and buffered recovery share one waiting budget. |
 | `SCIENCEEVOLVE_INTERRUPT_FORCE_TIMEOUT_MS` | `8000` | Wait before forced cleanup of an interrupted call. |
 | `SCIENCEEVOLVE_MAX_EVENT_HISTORY` | `10000` | Maximum events in a normal project snapshot; SSE can still recover the full history. |
 | `SCIENCEEVOLVE_GITHUB_OAUTH_CLIENT_ID` | Empty | GitHub OAuth App Client ID. When empty, accounts remain viewable but sign-in is disabled. |
@@ -131,7 +130,13 @@ Use the repository root `.env` consistently. When started through npm workspace 
 
 Keep real credentials out of committed `.env` files. `SCIENCEEVOLVE_DATA_DIR` contains gateway credentials, research materials, and run logs and should also be treated as sensitive.
 
+The transport budget is capped at 90% of the smallest configured proxy, Agent model-inactivity, and resident model-inactivity window. Before the first actual model event, streaming gets one third of that budget; a transport failure permits one non-streaming recovery within the remaining budget, with time reserved to deliver errors. The chosen buffered mode remains local to this invocation. Once model content or a tool call has arrived, the proxy does not replay that request. Keep-alives do not count as model progress. Function argument strings are delivered to the native Harness for parsing and Agent correction; formats requiring an object still reject unrepresentable arguments.
+
 The Agent queue dashboard reads both shared queues and Git project scheduling state. It counts actual parallel calls and shows running, waiting, and awaiting recovery. Git project concurrency limits are displayed separately; historical process records and current model calls do not count twice.
+
+Collaboration process records share a checkpoint write in batches of up to 128 records or a one-second window. Native live output is published immediately; tool and lifecycle boundaries, invocation settlement, pause/stop completion, and shutdown drain pending records before acknowledgement. Each project has at most one writing batch and one pending batch; producers wait when the pending batch fills. Checkpoint preparation runs before the write transaction, which rechecks the document version and writer authority. SQLite lock contention may delay renewal only within the original confirmed lease expiry; it never extends that expiry or acquires a replacement lease. Slow-mutation diagnostics report preparation, SQL update, audit insertion, view publication, and commit timing.
+
+On Linux, the execution layer automatically tracks native Harness processes and observed descendants using their ancestry, inherited launch scope, PID namespace, boot identity, and start ticks. A shared one-second observation pass records starts, exits, and explicit background handoffs; it does not scan or write for every output fragment. Lifecycle changes enter the existing audit trace and private runtime inventories, with bounded audit delivery from a retained log. Cleanup also covers owned descendants that created a different process group. Before a logical resident task returns, outstanding untransferred background work is reported to the same Agent Session for up to two cleanup continuations; it is not acknowledged as completed if work remains. An explicit `background_job` handoff remains under project lifecycle control. `sii_defer_task` retains the unfinished task and monitored experiments and does not trigger task-completion cleanup. Restart reconciliation verifies retained birth identities before signalling processes.
 
 ### Global gateways
 
@@ -227,13 +232,12 @@ Access and refresh tokens are stored only on Server, encrypted with AES-256-GCM 
 | Codex | OpenAI Responses | `harness/codex` | `SCIENCEEVOLVE_CODEX_BIN` |
 | DSH | OpenAI Chat Completions | `harness/dsh` | `SCIENCEEVOLVE_DSH_BIN` |
 | pi | OpenAI Chat Completions | `harness/pi` | `SCIENCEEVOLVE_PI_BIN` |
-| Claude Code | Anthropic Messages | `harness/claude code` | `SCIENCEEVOLVE_CLAUDE_CODE_BIN` |
 
-Use absolute executable paths for external Harness installations. `SCIENCEEVOLVE_HARNESS_ROOT` can point to a custom root containing `codex/`, `dsh/`, `pi/`, and `claude code/`. With a custom root, explicitly setting `SCIENCEEVOLVE_CODEX_BIN` is still recommended.
+Use absolute executable paths for external Harness installations. `SCIENCEEVOLVE_HARNESS_ROOT` can point to a custom root containing `codex/`, `dsh/`, and `pi/`. With a custom root, explicitly setting `SCIENCEEVOLVE_CODEX_BIN` is still recommended.
 
 After configuration, check Harness availability on the gateway page. Use the gateway matrix to run the protocol route probe and actual Adapter smoke probe. A combination is verified when both pass and its cached identity still matches the current Gateway revision, Adapter version, and executable. Test status is advisory and does not prevent an execution attempt. See the [Harness runtime overview](../harness/README_en.md) and [adding a Harness](adding-a-harness-en.md).
 
-Harness availability is published separately for each Catalog capability. Workflow support does not automatically make a Harness available in Project Explainer. Explainer supports Codex, pi, and DSH, defaulting to Codex. Claude Code compatibility data is retained, but it is no longer selectable there. The interactive assistant's native Harness keeps files read-only and disables Shell and browser access. Only the dedicated product MCP is injected for the current turn, allowing context reads, draft edits and saves, undo, and Workflow change submissions for existing projects. Independent configuration recommendation calls still disable all MCP services. Switching Harness recreates the native session while preserving Explainer history.
+Harness availability is published separately for each Catalog capability. Workflow support does not automatically make a Harness available in Project Explainer. Explainer supports Codex, pi, and DSH, defaulting to Codex. The interactive assistant's native Harness keeps files read-only and disables Shell and browser access. Only the dedicated product MCP is injected for the current turn, allowing context reads, draft edits and saves, undo, and Workflow change submissions for existing projects. Independent configuration recommendation calls still disable all MCP services. Switching Harness recreates the native session while preserving Explainer history.
 
 ### Agent
 
@@ -296,7 +300,7 @@ Changing an existing Agent's `template` changes only its high-level role label. 
 
 ### Skills and MCP
 
-All workflow Agents, including Main, Workers, and resident collaboration Agents, automatically receive the built-in `scienceevolve-sleep` stdio MCP. It supports Codex, Claude Code, DSH, and pi without manual Agent configuration. `sleep({ "duration_ms": 1000 })` accepts an integer from 1 to 43200000 milliseconds, up to 12 hours, matching Codex's built-in sleep range, and returns requested and actual duration. MCP cancellation and connection closure cancel the wait. Immediate user interruption cancels it; queued messages follow normal scheduling. Codex's built-in sleep MCP has a sufficiently long call timeout. Sleep pauses only the current tool call and does not change workflow state or end an Agent turn. Project Explainer and configuration recommendations do not receive it. `scienceevolve-sleep` is reserved and cannot be overridden by custom MCP services.
+All workflow Agents, including Main, Workers, and resident collaboration Agents, automatically receive the built-in `scienceevolve-sleep` stdio MCP. It supports Codex, DSH, and pi without manual Agent configuration. `sleep({ "duration_ms": 1000 })` accepts an integer from 1 to 43200000 milliseconds, up to 12 hours, matching Codex's built-in sleep range, and returns requested and actual duration. MCP cancellation and connection closure cancel the wait. Immediate user interruption cancels it; queued messages follow normal scheduling. Codex's built-in sleep MCP has a sufficiently long call timeout. Sleep pauses only the current tool call and does not change workflow state or end an Agent turn. Project Explainer and configuration recommendations do not receive it. `scienceevolve-sleep` is reserved and cannot be overridden by custom MCP services.
 
 Run `npm run smoke:sleep-mcp -w server` to build and launch a real sleep MCP subprocess. The official MCP client checks one- and three-second waits, concurrency, cancellation, argument validation, and process shutdown. No model gateway or credentials are needed.
 
@@ -335,7 +339,7 @@ Set the assistant's Harness, gateway, model, and reasoning level in the floating
 
 ### Workspaces and artifact integrity
 
-Without Git collaboration, Main and all Workers share the business workspace and `Memory.md` under `${SCIENCEEVOLVE_DATA_DIR}/projects/<project-id>/workspaces/`. Sessions, logs, and invocation temporary directories remain isolated. Git projects use isolated worktrees, publication, and integration according to their scoped Workflow; see [scoped collaboration workflows (v3)](openfars-collaboration/scoped-workflow-v3-en.md). Historical `<agent>/shared/` files remain in place without automatic merging or overwriting.
+Without Git collaboration, Main and all Workers share the business workspace and `Memory.md` under `${SCIENCEEVOLVE_DATA_DIR}/projects/<project-id>/workspaces/`. Sessions, logs, and invocation temporary directories remain isolated. Git projects use isolated worktrees, publication, and integration according to their scoped Workflow; see [scoped collaboration workflows (v3)](scienceevolve-collaboration/scoped-workflow-v3-en.md). Historical `<agent>/shared/` files remain in place without automatic merging or overwriting.
 
 For a new task, select files, images, or folders, or click “打开目录” (open directory) on the host to add materials directly to temporary `user_inputs/` through Windows Explorer, macOS Finder, or Linux `xdg-open`. This requires a graphical desktop session on the service host; file/folder upload remains available if opening fails. The list initially shows up to five files or top-level folders and can be expanded. It refreshes after upload or returning from the file manager. Filenames, duplicate uploads, and deletion follow the host filesystem's rules and case sensitivity. On creation, files enter the shared workspace's `user_inputs/`, where more files can be added later. All Agents can read them. Originals are reference material and are not automatically published. Limits are 50 MiB per file, 1000 files and 200 MiB per upload.
 

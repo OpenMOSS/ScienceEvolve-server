@@ -13,6 +13,17 @@ const member = (seq: number, agent: string, invocationId: string, executionId: s
 })!;
 
 describe("Agent call list", () => {
+  it("offers older business history without presenting the loaded window as the total", () => {
+    const load = vi.fn().mockResolvedValue(undefined);
+    const project = normalizeProject({ id: "prj_history", status: "paused" });
+    const { rerender } = render(<AgentCallGraph project={project} events={[]} hasOlder onLoadOlder={load} />);
+    expect(screen.getByText("已加载调用")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "加载更早调用" }));
+    expect(load).toHaveBeenCalledOnce();
+    rerender(<AgentCallGraph project={project} events={[]} hasOlder historyLoading onLoadOlder={load} historyError="读取失败" />);
+    expect(screen.getByRole("button", { name: "正在加载…" })).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent("读取失败");
+  });
   it("shows parallel members and their Leader with correct active rows after a bootstrap or live replay", () => {
     const project = normalizeProject({ id: "prj_calls", status: "running", phase: "resident:running", runtime: {
       status: "running", phase: "resident:running", activities: [

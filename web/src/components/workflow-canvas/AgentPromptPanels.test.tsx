@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_AGENTS, normalizeAgentOrchestration } from "../../lib";
 import { AgentPromptPanels } from "./AgentPromptPanels";
 import { CanvasInspector } from "./CanvasInspector";
-import { getHarnessPrompt } from "../../api";
-import type { HarnessPromptResult } from "../../types";
+import { getCatalog, getHarnessPrompt } from "../../api";
+import type { Catalog, HarnessPromptResult } from "../../types";
 
 vi.mock("../../api", async importOriginal => ({ ...await importOriginal<typeof import("../../api")>(),
   getCatalog: vi.fn(async () => ({ mainSystemPrompt: "FIXED_MAIN_SYSTEM" })),
@@ -21,10 +21,11 @@ describe("canvas Prompt sources", () => {
     vi.mocked(getHarnessPrompt).mockResolvedValue(result("a"));
     const agent = { ...DEFAULT_AGENTS.writing, harness: "dsh", model: "a", permission: "workspace" as const };
     const { rerender } = render(<AgentPromptPanels agentId="writing" agent={agent} />);
-    expect(screen.getByLabelText("System Prompt")).toHaveProperty("value", expect.stringContaining("OpenFARS permission mode: workspace."));
+    expect(screen.getByLabelText("System Prompt")).toHaveProperty("value", expect.stringContaining("ScienceEvolve permission mode: workspace."));
+    expect(screen.getByLabelText("System Prompt")).toHaveProperty("value", expect.not.stringContaining("OpenFARS"));
     expect(screen.getByLabelText("System Prompt")).toHaveAttribute("readonly");
     rerender(<AgentPromptPanels agentId="writing" agent={{ ...agent, permission: "compute" }} />);
-    expect(screen.getByLabelText("System Prompt")).toHaveProperty("value", expect.stringContaining("OpenFARS permission mode: compute."));
+    expect(screen.getByLabelText("System Prompt")).toHaveProperty("value", expect.stringContaining("ScienceEvolve permission mode: compute."));
     await waitFor(() => expect(screen.getByRole("button", { name: "刷新提示词" })).toBeEnabled());
   });
 
@@ -77,16 +78,52 @@ describe("canvas Prompt sources", () => {
     expect(screen.queryByDisplayValue("NATIVE_a")).toBeNull();
     await act(async () => finishB(result("b")));
     expect(screen.getByLabelText("Harness Prompt")).toHaveValue("NATIVE_b");
-    expect(screen.getByLabelText("System Prompt")).toHaveProperty("value", expect.stringContaining("OpenFARS permission mode:"));
+    expect(screen.getByLabelText("System Prompt")).toHaveProperty("value", expect.stringContaining("ScienceEvolve permission mode:"));
     expect(screen.queryByDisplayValue("FIXED_MAIN_SYSTEM")).toBeNull();
   });
 
-  it("shows the exact unavailable state and sends no secret configuration", async () => {
-    vi.mocked(getHarnessPrompt).mockResolvedValue({ ...result("custom"), status: "model-unmatched", text: undefined,
-      reason: "安装版没有该模型的精确匹配" });
+  it("shows an actual source failure with the selected model and installed version", async () => {
+    vi.mocked(getHarnessPrompt).mockResolvedValue({ ...result("custom"), status: "source-unavailable", text: undefined,
+      reason: "当前安装版模板读取失败" });
     render(<AgentPromptPanels agentId="worker" agent={{ ...DEFAULT_AGENTS.idea, harness: "codex", model: "custom" }} />);
-    await waitFor(() => expect(screen.getByText("安装版没有该模型的精确匹配")).toBeVisible());
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("当前安装版模板读取失败"));
+    expect(screen.getByRole("alert")).toHaveTextContent("codex 0.153.4 · 模型：custom");
+    expect(screen.getByRole("alert")).toHaveTextContent("无法显示 Harness Prompt");
     expect(screen.queryByLabelText("Harness Prompt")).toBeNull();
+  });
+
+  it.each(["gpt-6.1-sol", "deepseek-chat", "qwen3-coder", "claude-sonnet-4-5"])(
+    "displays the Codex Prompt and its actual template for %s", async model => {
+    vi.mocked(getHarnessPrompt).mockResolvedValue({ ...result(model), resolvedModel: "gpt-5.5",
+      text: "ACTUAL_GATEWAY_PROMPT", scopeNote: `网关运行使用安装版 gpt-5.5 的基础 Prompt 模板，请求模型仍为 ${model}。` });
+    render(<AgentPromptPanels agentId="worker" agent={{ ...DEFAULT_AGENTS.idea, harness: "codex", model }} />);
+    await waitFor(() => expect(screen.getByLabelText("Harness Prompt")).toHaveValue("ACTUAL_GATEWAY_PROMPT"));
+    expect(screen.getByLabelText("Harness Prompt")).toHaveAttribute("readonly");
+    expect(screen.getByText(/Prompt 模板：gpt-5.5/)).toHaveTextContent(`模型：${model}`);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("shows a failed default Harness lookup for workers and allows a manual refresh", async () => {
+    vi.mocked(getHarnessPrompt).mockClear().mockResolvedValue(result("default"));
+    vi.mocked(getCatalog).mockRejectedValueOnce(new Error("目录连接失败"));
+    const agent = { ...DEFAULT_AGENTS.idea, harness: undefined, model: "default" };
+    render(<AgentPromptPanels agentId="worker" agent={agent} />);
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("无法读取默认 Harness：目录连接失败"));
+    expect(screen.getByRole("button", { name: "刷新提示词" })).toBeEnabled();
+    expect(getHarnessPrompt).not.toHaveBeenCalled();
+    vi.mocked(getCatalog).mockResolvedValueOnce({ defaultHarnessId: "codex", mainSystemPrompt: "FIXED_MAIN_SYSTEM" } as Catalog);
+    fireEvent.click(screen.getByRole("button", { name: "刷新提示词" }));
+    await waitFor(() => expect(screen.getByLabelText("Harness Prompt")).toHaveValue("NATIVE_default"));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("reports a catalog without a default Harness instead of waiting indefinitely", async () => {
+    vi.mocked(getHarnessPrompt).mockClear();
+    vi.mocked(getCatalog).mockResolvedValueOnce({ mainSystemPrompt: "FIXED_MAIN_SYSTEM" } as Catalog);
+    render(<AgentPromptPanels agentId="worker" agent={{ ...DEFAULT_AGENTS.idea, harness: undefined, model: "a" }} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "刷新提示词" })).toBeEnabled());
+    expect(screen.getByRole("alert")).toHaveTextContent("未找到默认 Harness，请先选择 Harness。");
+    expect(getHarnessPrompt).not.toHaveBeenCalled();
   });
 
   it("keeps the Harness section visible without querying an empty model", () => {

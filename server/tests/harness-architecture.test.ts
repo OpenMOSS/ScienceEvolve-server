@@ -23,7 +23,7 @@ function relativeServerSource(file: string): string {
   return normalizedPath(path.relative(path.resolve(process.cwd(), "src"), file));
 }
 
-const CONCRETE_HARNESS_ID = /["'](?:codex|dsh|pi|claude-code)["']/;
+const CONCRETE_HARNESS_ID = /["'](?:codex|dsh|pi)["']/;
 const BUSINESS_EXECUTION_CALLERS = [
   "src/orchestrator.ts",
   "src/project-explainer.ts",

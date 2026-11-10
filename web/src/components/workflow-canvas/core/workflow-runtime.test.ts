@@ -37,6 +37,18 @@ function event(seq: number, type: string, agent?: string, data?: Record<string, 
 }
 
 describe("workflow runtime overlay", () => {
+  it("counts every distinct Main invocation independently of workflow arrivals and replay duplicates", () => {
+    const starts = [
+      event(1, "invocation.started", "main", { invocationId: "main-route" }),
+      event(2, "agent.started", "main", { invocationId: "main-route" }),
+      event(3, "agent.started", "main", { invocationId: "main-repair" }),
+      event(4, "agent.started", "main", { invocationId: "main-management" })
+    ];
+    expect(buildWorkflowRuntimeState(project, [...starts, starts[3]!]).executionCounts.main).toBe(3);
+    const refreshed = { ...project, agentProgress: { main: { state: "completed", runs: 0, executions: 11 } } } as Project;
+    expect(buildWorkflowRuntimeState(refreshed, starts).executionCounts.main).toBe(11);
+    expect(buildWorkflowRuntimeState(refreshed, []).executionCounts.main).toBe(11);
+  });
   it("does not complete a collaboration node from a member completion carrying its outer node id", () => {
     const grouped = structuredClone(project);
     grouped.currentAgent = undefined;
@@ -83,6 +95,14 @@ describe("workflow runtime overlay", () => {
     expect(state.executionCounts.idea).toBe(1);
     expect(state.nodeStates.idea).toBe("running");
     expect(state.recentInvocationPath.map((entry) => entry.nodeId)).toEqual(["idea", "idea"]);
+  });
+
+  it.each(["later queue", "paused", "current runtime"])("preserves %s instead of reviving a stale timeline start", variant => {
+    const waiting = { ...project, currentAgent: "idea", queuedAgent: "idea", status: variant === "paused" ? "paused" : "retrying" } as Project;
+    if (variant === "current runtime") waiting.runtime = { stateRevision: 2, status: "retrying", phase: "collaboration:recovering", executionCount: 1, activities: [] };
+    const events = [event(1, "retry.scheduled", "idea"), event(2, "agent.started", "idea", { invocationId: "recovered" })];
+    if (variant === "later queue") events.push(event(3, "agent.queued", "idea"));
+    expect(buildWorkflowRuntimeState(waiting, events).nodeStates.idea).toBe(variant === "paused" ? "paused" : "retrying");
   });
 
   it("increments only when the Agent starts a distinct business task", () => {

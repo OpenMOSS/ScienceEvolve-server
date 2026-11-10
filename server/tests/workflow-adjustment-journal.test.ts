@@ -774,7 +774,7 @@ describe("root Main workflow publication consumes the shared journal", () => {
 
   it("rechecks an actually retained native Harness at final Main publication after initial acceptance", async () => {
     const { database, acceptMain, root, options } = await fixture();
-    const main = acceptMain("late-main-harness", snapshot => { snapshot.agents.idea.harness = "claude-code"; });
+    const main = acceptMain("late-main-harness", snapshot => { snapshot.agents.idea.harness = "dsh"; });
     const original = database.workflowAdjustment("p", main.requestId)!, before = database.workflowAdjustmentCurrent("p");
     database.recordAgentNativeSessionBinding({ projectId: "p", agentId: "idea", invocationId: "original-worker",
       runtimePath: join(root, "runtime", "original-worker"), worktreePath: join(root, "worktrees", "idea"),
@@ -794,7 +794,7 @@ describe("root Main workflow publication consumes the shared journal", () => {
   });
 
   it("rechecks a native binding written after a user publication token was prepared", async () => {
-    const { database, input, root } = await fixture(), request = input("late-user-native-harness"); request.proposal.agents.idea.harness = "claude-code";
+    const { database, input, root } = await fixture(), request = input("late-user-native-harness"); request.proposal.agents.idea.harness = "dsh";
     database.submitUserWorkflowAdjustment(request);
     const prepared = database.prepareUserWorkflowAdjustmentPublication("p", request.requestId);
     expect(prepared.ready).toBe(true); if (!prepared.ready) throw new Error("Expected original ready token");
@@ -811,7 +811,7 @@ describe("root Main workflow publication consumes the shared journal", () => {
   });
 
   it("rechecks S Session bindings when submitting an earlier prepared user request without altering its seed", async () => {
-    const { database, input, root } = await fixture(), request = input("prepared-before-saved-session"); request.proposal.agents.idea.harness = "claude-code";
+    const { database, input, root } = await fixture(), request = input("prepared-before-saved-session"); request.proposal.agents.idea.harness = "dsh";
     expect(database.prepareUserWorkflowAdjustment(request).replay).toBe(false);
     const before = database.workflowAdjustmentCurrent("p");
     database.recordAgentNativeSessionBinding({ projectId: "p", agentId: "idea", invocationId: "saved-before-submit",
@@ -826,13 +826,13 @@ describe("root Main workflow publication consumes the shared journal", () => {
 
   it("preserves every original native Harness rather than only the newest binding", async () => {
     const { database, acceptMain, root } = await fixture();
-    const main = acceptMain("multiple-native-harnesses", snapshot => { snapshot.agents.idea.harness = "claude-code"; });
+    const main = acceptMain("multiple-native-harnesses", snapshot => { snapshot.agents.idea.harness = "dsh"; });
     const before = database.workflowAdjustmentCurrent("p");
-    for (const [index, harnessId] of ["codex", "claude-code"].entries()) database.recordAgentNativeSessionBinding({ projectId: "p", agentId: "idea", invocationId: `retained-${index}`,
+    for (const [index, harnessId] of ["codex", "dsh"].entries()) database.recordAgentNativeSessionBinding({ projectId: "p", agentId: "idea", invocationId: `retained-${index}`,
       runtimePath: join(root, "runtime", `retained-${index}`), worktreePath: join(root, "worktrees", "idea"),
       executionContext: { role: "leader", nodeRunId: "original-idea-node", routeScopeId: `original-role-${index}`, coordinatorEpoch: 1 },
       session: { schemaVersion: 1, harnessId, adapterVersion: "test", nativeId: `retained-session-${index}`, generation: 0, durable: true, createdAt: "2026-10-11T00:00:00.000Z" } });
-    expect(database.latestAgentNativeSessionBinding("p", "idea")!.session.harnessId).toBe("claude-code");
+    expect(database.latestAgentNativeSessionBinding("p", "idea")!.session.harnessId).toBe("dsh");
     expect(publish(database, main)).toMatchObject({ status: "pending", workflowRevision: 1, reason: expect.stringContaining("codex") });
     expect(database.workflowAdjustmentCurrent("p")).toEqual(before);
   });
@@ -1401,7 +1401,7 @@ try { const result = process.argv[3] === "publish" ? database.rollForwardAccepte
   });
 
   it("upgrades v21 with an indexed native Harness guard while preserving all original Session and request bytes", async () => {
-    const f = await fixture(), request = f.input("v21-retained-harness"); request.proposal.agents.idea.harness = "claude-code";
+    const f = await fixture(), request = f.input("v21-retained-harness"); request.proposal.agents.idea.harness = "dsh";
     f.database.submitUserWorkflowAdjustment(request);
     f.database.recordAgentNativeSessionBinding({ projectId: "p", agentId: "idea", invocationId: "v21-original-native",
       runtimePath: join(f.root, "runtime", "v21-original"), worktreePath: join(f.root, "worktrees", "idea"),

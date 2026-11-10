@@ -140,12 +140,20 @@ export const AgentCallGraph = memo(function AgentCallGraph({
   project,
   events,
   harnesses,
-  runtime
+  runtime,
+  hasOlder = false,
+  historyLoading = false,
+  historyError = "",
+  onLoadOlder
 }: {
   project: Project;
   events: AgentEvent[];
   harnesses?: ReadonlyArray<Pick<HarnessCatalogEntry, "id" | "label">>;
   runtime?: WorkflowRuntimeState;
+  hasOlder?: boolean;
+  historyLoading?: boolean;
+  historyError?: string;
+  onLoadOlder?: () => Promise<void>;
 }) {
   const calls = useMemo(() => buildAgentInvocations(events, project), [events, project.executions, project.scopedExecutions]);
   const interventions = useMemo(() => buildUserInterventions(events), [events]);
@@ -176,9 +184,9 @@ export const AgentCallGraph = memo(function AgentCallGraph({
 
       <div className="agent-call-graph-scroll">
         <div className="agent-call-summary">
-          <span><strong>{calls.length}</strong><small>总调用</small></span>
+          <span><strong>{calls.length}</strong><small>{hasOlder ? "已加载调用" : "总调用"}</small></span>
           <span><strong>{new Set(calls.map((call) => call.role)).size}</strong><small>已参与 Agent</small></span>
-          <span><strong>{calls.length ? `#${calls.length}` : "—"}</strong><small>最新步骤</small></span>
+          <span><strong>{calls.length ? `#${calls.length}` : "—"}</strong><small>{hasOlder ? "已加载步骤" : "最新步骤"}</small></span>
         </div>
 
         <div className="agent-call-runtime-map" data-runtime-ledger="true">
@@ -188,11 +196,15 @@ export const AgentCallGraph = memo(function AgentCallGraph({
         <div className="agent-call-page-row">
           <span>{calls.length ? `${pageStart + 1}–${pageStart + visibleCalls.length} / ${calls.length}` : "尚无调用"}</span>
           <div>
+            {hasOlder && <button type="button" className="agent-call-history-load" disabled={historyLoading} onClick={() => { void onLoadOlder?.(); }}>
+              {historyLoading ? "正在加载…" : "加载更早调用"}
+            </button>}
             <button type="button" aria-label="查看上一组调用" disabled={page === 0} onClick={() => goToPage(page - 1)}><ChevronLeft size={15} /></button>
             <small>{page + 1} / {latestPage + 1}</small>
             <button type="button" aria-label="查看下一组调用" disabled={page === latestPage} onClick={() => goToPage(page + 1)}><ChevronRight size={15} /></button>
           </div>
         </div>
+        {historyError && <p role="alert">{historyError}</p>}
 
         {visibleCalls.length > 0 && (
           <div className="agent-call-sequence" aria-label="调用记录">
@@ -236,7 +248,7 @@ export const AgentCallGraph = memo(function AgentCallGraph({
         )}
 
         <p className="agent-call-graph-note">
-          编号按逻辑调用顺序生成，失败重试和中断恢复合并为同一次调用；用户介入与主动需求不占用 Agent 调用编号。
+          {hasOlder ? "当前编号仅对应已加载记录，可加载更早调用。" : "编号按逻辑调用顺序生成。"}失败重试和中断恢复合并为同一次调用；用户介入与主动需求不占用 Agent 调用编号。
           上方 Workflow 画布只读展示当前项目配置拓扑及真实状态，路径顺序和调用次数以本记录为准。
         </p>
       </div>

@@ -77,12 +77,13 @@ import {
 import type { PublicHarnessDescriptor } from "./harness-runtime/contracts.js";
 import { AGENT_PROTOCOLS } from "./agent-runtime.js";
 import { PROTOCOL_ROUTER_COMPATIBILITY_VERSION } from "./protocol-router.js";
-import { redactTrace } from "./utils.js";
+import { redactTrace, safeGitArtifactRelativePath, safeRelativePath } from "./utils.js";
 import type { ExecutionSummaryService } from "./execution-summary.js";
 import { GitHubAccountStore } from "./github-accounts.js";
 import { GitHubRepositoryManager, registerGitHubRepositoryManagementRoutes } from "./github-repository-management.js";
 import { GitHubAuthorizationError } from "./collaboration-git/errors.js";
 import { ProjectInputUploads, ProjectInputUploadError } from "./project-input-uploads.js";
+import { ProjectFolderStore, registerProjectFolderRoutes } from "./project-folders.js";
 
 const deployedBuildInfo = await readFile(new URL("../build-info.json", import.meta.url), "utf8")
   .then(text => JSON.parse(text) as { buildId: string; builtAt: string }).catch(() => undefined);
@@ -148,6 +149,7 @@ export interface AppDependencies {
   harnessCatalog?: () => Promise<PublicHarnessDescriptor[]>;
   harnessPrompts?: Pick<HarnessPromptCatalog, "query">;
   config: Pick<AppConfig, "modelSuggestions" | "maxEventHistory">;
+  runtimeHealth?: () => { status: "ready" | "unavailable"; [key: string]: unknown };
   harnessVersion?: string;
 }
 
@@ -194,6 +196,7 @@ export function createApp(dependencies: AppDependencies) {
   app.use("/api/explainer/conversations", express.json({ limit: "3mb" }));
   app.use(express.json({ limit: "2mb" }));
   registerExplainerAssistantRoutes(app, projectExplainer);
+  registerProjectFolderRoutes(app, new ProjectFolderStore(storage.root, async projectId => Boolean(await storage.tryLoadState(projectId))));
   registerGitHubRepositoryManagementRoutes(app, githubAccounts,
     new GitHubRepositoryManager(storage.root, githubAccounts, () => storage.listStates()));
 
@@ -306,8 +309,10 @@ export function createApp(dependencies: AppDependencies) {
   });
 
   app.get("/api/health", async (_request, response) => {
-    response.json({
-      status: "ok",
+    const runtime = dependencies.runtimeHealth?.();
+    response.status(runtime?.status === "unavailable" ? 503 : 200).json({
+      status: runtime?.status === "unavailable" ? "unavailable" : "ok",
+      ...(runtime ? { collaboration: runtime } : {}),
       processId: process.pid,
       startedAt: serverStartedAt,
       ...(deployedBuildInfo ? { build: deployedBuildInfo } : {}),
@@ -958,8 +963,8 @@ export function createApp(dependencies: AppDependencies) {
     }
   });
 
-  app.get("/api/queue", (_request, response) => {
-    response.json(orchestrator.getQueueSnapshot());
+  app.get("/api/queue", async (_request, response) => {
+    response.json(await orchestrator.getQueueSnapshot());
   });
 
   app.post("/api/project-input-uploads", async (_request, response, next) => {
@@ -1234,8 +1239,14 @@ export function createApp(dependencies: AppDependencies) {
           response.status(400).json({ error: "before must be a positive event sequence" });
           return;
         }
+        if (request.query.view !== undefined && request.query.view !== "timeline") {
+          response.status(400).json({ error: "view must be timeline when provided" });
+          return;
+        }
+        const readHistory = request.query.view === "timeline"
+          ? storage.readTimelineHistory.bind(storage) : storage.readEventHistory.bind(storage);
         response.json(
-          await storage.readEventHistory(
+          await readHistory(
             project.id,
             beforeSeq,
             eventPageLimit(request.query.limit)
@@ -1507,8 +1518,11 @@ export function createApp(dependencies: AppDependencies) {
     }
   );
 
-  app.get(
-    "/api/projects/:projectId/artifacts/content",
+  app.get<{ projectId: string; mode?: string; sourceKind?: string; sourceId?: string; revision?: string; artifactPath?: string[] }>(
+    [
+      "/api/projects/:projectId/artifacts/content",
+      "/api/projects/:projectId/artifacts/:mode/:sourceKind/:sourceId/:revision/*artifactPath"
+    ],
     async (request, response, next) => {
       try {
         const project = await orchestrator.getProject(request.params.projectId);
@@ -1516,7 +1530,35 @@ export function createApp(dependencies: AppDependencies) {
           response.status(404).json({ error: "Project not found" });
           return;
         }
-        const artifactPath = String(request.query.path ?? "");
+        const sourceBound = request.params.sourceKind !== undefined;
+        if (sourceBound && !["content", "preview"].includes(request.params.mode!)) {
+          response.status(404).json({ error: "Artifact resource mode not found" }); return;
+        }
+        const preview = request.params.mode === "preview";
+        const sourceKind = request.params.sourceKind;
+        const revision = request.params.revision;
+        if (sourceBound) {
+          if (!["agent", "workspace"].includes(sourceKind!) ||
+              !(revision === "live" || /^[a-f0-9]{40,64}$/.test(revision!))) {
+            response.status(400).json({ error: "Invalid artifact resource source or revision" }); return;
+          }
+          if (["path", "agent", "workspaceId", "commitSha"].some(key => request.query[key] !== undefined)) {
+            response.status(400).json({ error: "Artifact source and revision must be specified in the resource path" }); return;
+          }
+          if (sourceKind === "workspace" && revision !== "live") {
+            response.status(400).json({ error: "A live workspace preview cannot use a publication commit" }); return;
+          }
+          if (sourceKind === "agent" && (project.git?.enabled ? revision === "live" : revision !== "live")) {
+            response.status(400).json({ error: project.git?.enabled
+              ? "Git artifact preview requires an immutable commit"
+              : "Non-Git artifact preview requires the live workspace revision" }); return;
+          }
+          response.setHeader("Cache-Control", "no-store");
+        }
+        if (preview) {
+          response.removeHeader("Content-Security-Policy");
+        }
+        const artifactPath = sourceBound ? request.params.artifactPath!.join("/") : String(request.query.path ?? "");
         const origin = String(request.query.origin ?? "workspace");
         if (origin !== "workspace") {
           response.status(400).json({ error: "Invalid artifact origin" });
@@ -1524,9 +1566,10 @@ export function createApp(dependencies: AppDependencies) {
         }
         let mediaType = "text/plain";
         let content: Buffer;
-        const rawAgent = request.query.agent;
+        const rawAgent = sourceBound ? (sourceKind === "agent" ? request.params.sourceId : undefined) : request.query.agent;
         const agent = String(rawAgent ?? "");
-        const workspaceId = request.query.workspaceId === undefined ? undefined : String(request.query.workspaceId);
+        const workspaceId = sourceBound ? (sourceKind === "workspace" ? request.params.sourceId : undefined)
+          : request.query.workspaceId === undefined ? undefined : String(request.query.workspaceId);
         if (workspaceId !== undefined && !/^(?:shared|repository|worktree_[a-f0-9]{24})$/.test(workspaceId)) {
           response.status(400).json({ error: "Invalid workspace source" }); return;
         }
@@ -1538,9 +1581,8 @@ export function createApp(dependencies: AppDependencies) {
         const artifactId = request.query.artifactId === undefined
           ? undefined
           : String(request.query.artifactId);
-        const commitSha = request.query.commitSha === undefined
-          ? undefined
-          : String(request.query.commitSha);
+        const commitSha = sourceBound ? (revision === "live" ? undefined : revision)
+          : request.query.commitSha === undefined ? undefined : String(request.query.commitSha);
         if (artifactId !== undefined && (!artifactId || artifactId.length > 512)) {
           response.status(400).json({ error: "Invalid artifact identity" });
           return;
@@ -1548,6 +1590,14 @@ export function createApp(dependencies: AppDependencies) {
         if (commitSha !== undefined && !/^[a-f0-9]{40,64}$/.test(commitSha)) {
           response.status(400).json({ error: "Invalid artifact commit" });
           return;
+        }
+        if (sourceBound) {
+          try {
+            if (project.git?.enabled && !workspaceId) safeGitArtifactRelativePath(artifactPath);
+            else safeRelativePath(artifactPath);
+          } catch (error) {
+            response.status(400).json({ error: error instanceof Error ? error.message : "Invalid artifact path" }); return;
+          }
         }
         const exactBinding = artifactId || commitSha
           ? { artifactId, commitSha }
@@ -1594,7 +1644,7 @@ export function createApp(dependencies: AppDependencies) {
         }
         mediaType = workspaceArtifact.mediaType;
         const download = request.query.download === "1";
-        if (download || isBrowserInlineMediaType(mediaType)) {
+        if (preview || download || isBrowserInlineMediaType(mediaType)) {
           response.setHeader("Content-Type", mediaType);
           response.setHeader("Content-Length", String(workspaceArtifact.size));
           response.setHeader(
@@ -1911,6 +1961,24 @@ export function createApp(dependencies: AppDependencies) {
       else response.json(result.context);
     }
     catch (error) { next(error); }
+  });
+
+  app.get("/api/projects/:projectId/workflow/replay/configuration", async (request, response, next) => {
+    response.setHeader("Cache-Control", "no-store, private");
+    try { response.json(await orchestrator.getWorkflowReplayConfigurationHistory(request.params.projectId)); }
+    catch (error) { next(error); }
+  });
+
+  app.get("/api/projects/:projectId/workflow/replay/events", async (request, response, next) => {
+    response.setHeader("Cache-Control", "no-store, private");
+    try {
+      const input = z.object({ before: z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
+        through: z.coerce.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER - 1).optional(),
+        limit: z.coerce.number().int().min(1).max(1000).default(500) }).strict().parse(request.query);
+      const project = await orchestrator.getProject(request.params.projectId);
+      if (!project) { response.status(404).json({ error: "Project not found" }); return; }
+      response.json(await storage.readWorkflowReplayHistory(project.id, input));
+    } catch (error) { next(error); }
   });
 
   app.get("/api/projects/:projectId/workflow/adjustments/history", async (request, response, next) => {

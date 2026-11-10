@@ -22,10 +22,10 @@ import {
   validateProjectMcpReferences,
   type ProjectMcpDefinitions
 } from "./project-mcp.js";
-import { cloneAgentOrchestrationTemplate } from "./agent-orchestration.js";
 import { newId, nowIso } from "./utils.js";
 import { parseWorkflowImport, workflowImportSourceSchema } from "./workflow-import.js";
 import { scopedWorkflowContractSchema } from "./scoped-workflow-contract.js";
+import { DEFAULT_RESEARCH_WORKFLOW, DEFAULT_RESEARCH_AGENT_OVERRIDES } from "./internal/shared/default-research-workflow.js";
 
 export const DEFAULT_AGENT_CONFIG_PRESET_ID = "default";
 
@@ -181,14 +181,19 @@ export class AgentConfigPresetStore {
   }
 
   private defaultPreset(): AgentConfigPreset {
-    const orchestration = cloneAgentOrchestrationTemplate();
+    const orchestration = normalizeAgentOrchestrationTemplate(DEFAULT_RESEARCH_WORKFLOW);
+    const agents = mergeAgentConfigs(undefined, orchestration);
+    for (const [name, settings] of Object.entries(DEFAULT_RESEARCH_AGENT_OVERRIDES)) {
+      agents[name] = { ...agents[name], ...settings,
+        instructions: `${agents[name].instructions}\n\n${settings.instructions}` };
+    }
     return {
       schemaVersion: 2,
       kind: "scienceevolve-agent-config-preset",
       id: DEFAULT_AGENT_CONFIG_PRESET_ID,
       name: "系统默认配置",
       builtin: true,
-      agents: publicAgentConfigs(mergeAgentConfigs(undefined, orchestration)),
+      agents: publicAgentConfigs(agents),
       orchestration
     };
   }

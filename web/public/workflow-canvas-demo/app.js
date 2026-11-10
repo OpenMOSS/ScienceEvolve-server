@@ -11,6 +11,7 @@
   var runtimeScopeKey = null;
   var runtimeScopeViews = Object.create(null);
   var runtimeHostPositions = Object.create(null);
+  var runtimeOverviewBounds = null;
 
   // This branch intentionally uses the original direct-edge workflow model.
   // The selector-based implementation is preserved on the workflow-selector
@@ -2022,7 +2023,10 @@
   }
 
   function flowPathId(edgeId) {
-    return "workflow-edge-path-" + String(edgeId || "edge").replace(/[^a-zA-Z0-9_-]/g, "_");
+    // Preserve every UTF-16 unit so distinct route IDs always identify distinct paths.
+    return "workflow-edge-path-" + String(edgeId).split("").map(function (character) {
+      return character.charCodeAt(0).toString(16);
+    }).join("-");
   }
 
   function flowParticleDuration(displayKind, edgeKind) {
@@ -2030,11 +2034,15 @@
     return edgeKind === "weak" ? "2.9s" : "2.35s";
   }
 
-  function edgeFocusState(edge, focusedNodeId, focusMode) {
+  function edgeFocusState(edge, focusedNodeId, focusMode, focusedLoopIds, selectedLoopId) {
+    if (selectedLoopId && edge.loop && edge.loop.id === selectedLoopId) {
+      return { className: " is-selected is-related-highlight", showParticle: true, direction: "outgoing", focusMode: "selected" };
+    }
     if (!focusedNodeId) return { className: "", showParticle: false };
     var outgoing = edge.source === focusedNodeId;
     var incoming = edge.target === focusedNodeId;
-    if (!outgoing && !incoming) return { className: " is-unrelated-muted", showParticle: false };
+    var relatedLoop = Boolean(edge.loop && focusedLoopIds && focusedLoopIds.has(edge.loop.id));
+    if (!outgoing && !incoming && !relatedLoop) return { className: " is-unrelated-muted", showParticle: false };
     if (focusMode === "hover") {
       return outgoing
         ? { className: " is-outgoing-highlight", showParticle: !isMainDispatchEdge(edge), direction: "outgoing" }
@@ -2043,7 +2051,7 @@
     return {
       className: " is-related-highlight",
       showParticle: !isMainDispatchEdge(edge),
-      direction: outgoing ? "outgoing" : "incoming"
+      direction: incoming ? "incoming" : "outgoing"
     };
   }
 
@@ -2110,7 +2118,9 @@
       }
       var duration = flowParticleDuration(record.displayKind, record.edge.kind);
       if (motionElement.getAttribute("dur") !== duration) motionElement.setAttribute("dur", duration);
-      particle.setAttribute("class", "flow-particle " + record.edge.kind + (record.displayKind !== record.edge.kind ? " " + record.displayKind : "") + " is-" + record.direction + "-flow" + (record.focusMode === "selected" ? " is-related-flow" : "") + (record.focusMode === "runtime" ? " is-runtime-flow" : ""));
+      if (record.loopColor) particle.style.setProperty("--loop-color", record.loopColor);
+      else particle.style.removeProperty("--loop-color");
+      particle.setAttribute("class", "flow-particle " + (record.loopColor ? "is-loop-flow " : "") + record.edge.kind + (record.displayKind !== record.edge.kind ? " " + record.displayKind : "") + " is-" + record.direction + "-flow" + (record.focusMode === "selected" ? " is-related-flow" : "") + (record.focusMode === "runtime" ? " is-runtime-flow" : ""));
       delete existing[edgeId];
     });
 
@@ -2617,6 +2627,8 @@
     nodeLayer.style.transform = "translate(" + viewport.x + "px, " + viewport.y + "px) scale(" + viewport.k + ")";
     if (mainControlLayer) mainControlLayer.setAttribute("transform", "translate(" + viewport.x + " " + viewport.y + ") scale(" + viewport.k + ")");
     edgeLayer.setAttribute("transform", "translate(" + viewport.x + " " + viewport.y + ") scale(" + viewport.k + ")");
+    var runtimeExitEdges = document.getElementById("runtime-exit-edges");
+    if (runtimeExitEdges) runtimeExitEdges.setAttribute("transform", "translate(" + viewport.x + " " + viewport.y + ") scale(" + viewport.k + ")");
     if (flowParticleLayer) flowParticleLayer.setAttribute("transform", "translate(" + viewport.x + " " + viewport.y + ") scale(" + viewport.k + ")");
     pendingLayer.setAttribute("transform", "translate(" + viewport.x + " " + viewport.y + ") scale(" + viewport.k + ")");
     var gridSize = 18 * viewport.k;
@@ -5079,8 +5091,41 @@
       }
       return child;
     }
+    var selectedLoopEdge = workflow.edges.find(function (edge) { return edge.id === selectedEdge; });
+    var selectedLoopId = selectedLoopEdge && selectedLoopEdge.loop && selectedLoopEdge.loop.id;
     var focusedNodeId = hoveredNodeId || (!selectedEdge && selected && getNode(selected) ? selected : null);
     var focusMode = hoveredNodeId ? "hover" : (focusedNodeId ? "selected" : null);
+    var focusedLoopIds = new Set(workflow.edges.filter(function (edge) {
+      return focusedNodeId && edge.loop && edge.loop.role !== "exit" &&
+        (edge.source === focusedNodeId || edge.target === focusedNodeId);
+    }).map(function (edge) { return edge.loop.id; }));
+    var loopIds = Array.from(new Set(workflow.edges.filter(function (edge) { return edge.loop; }).map(function (edge) { return edge.loop.id; }))).sort();
+    var loopColors = {};
+    loopIds.forEach(function (id, index) { loopColors[id] = "hsl(" + (185 + index * 170 / Math.max(1, loopIds.length)) + " 62% 43%)"; });
+    var loopMarkers = {};
+    var markerDefinitions = document.getElementById("edge-layer").querySelector("defs");
+    function loopMarker(id, color) {
+      var marker = ensureSvgChild(markerDefinitions, id, "marker");
+      marker.setAttribute("id", id);
+      marker.setAttribute("markerWidth", "18");
+      marker.setAttribute("markerHeight", "18");
+      marker.setAttribute("refX", "16");
+      marker.setAttribute("refY", "9");
+      marker.setAttribute("orient", "auto");
+      marker.setAttribute("markerUnits", "userSpaceOnUse");
+      var shape = ensureSvgChild(marker, "shape", "path");
+      shape.setAttribute("d", "M 0 0 L 18 9 L 0 18 z");
+      shape.setAttribute("fill", color);
+      return id;
+    }
+    loopIds.forEach(function (id, index) { loopMarkers[id] = loopMarker("workflow-loop-" + index, loopColors[id]); });
+    var exitMarker = loopIds.length ? loopMarker("workflow-loop-exit", "#247b8a") : null;
+    if (RUNTIME_MODE && document.documentElement.classList.contains("runtime-playback-paused")) {
+      var motionSvg = document.getElementById("edge-layer");
+      // Selected particles describe direction independently of playback time.
+      if ((selectedLoopId || focusedNodeId) && motionSvg.unpauseAnimations) motionSvg.unpauseAnimations();
+      else if (motionSvg.pauseAnimations) motionSvg.pauseAnimations();
+    }
     var flowRecords = [];
     workflow.edges.forEach(function (edge) {
       var from = nodeElement(edge.source);
@@ -5098,8 +5143,9 @@
       if (edge.endChoice === "return-main") {
         pathData = returnMainCurvePath(start, end);
       }
-      var displayKind = isMainDispatchEdge(edge) ? "main-dispatch" : edgeDisplayKind(edge);
-      var branchVisible = DIRECT_EDGE_MODE || selectorBranchesVisible(edge);
+      var displayKind = edge.loop ? "loop-" + edge.loop.role : isMainDispatchEdge(edge) ? "main-dispatch" : edgeDisplayKind(edge);
+      var loopColor = edge.loop ? edge.loop.role === "exit" ? "#247b8a" : loopColors[edge.loop.id] : null;
+      var branchVisible = Boolean(selectedLoopId && edge.loop && edge.loop.id === selectedLoopId) || DIRECT_EDGE_MODE || selectorBranchesVisible(edge);
       var branchEditable = DIRECT_EDGE_MODE || selectorBranchEditable(edge);
       var flowState = demoFlowForEdge(edge.id);
       var runtimeSkipped = demoRun.skippedEdgeIds.indexOf(edge.id) >= 0;
@@ -5107,18 +5153,18 @@
       var focusState;
       if (RUNTIME_MODE) {
         var runtimeFocus = { className: " runtime-edge-" + (edge.runtimeState || "configured"), showParticle: edge.runtimeState === "active", direction: "outgoing", focusMode: "runtime" };
-        var selectedFocus = edgeFocusState(edge, focusedNodeId, focusMode);
-        var relatedToSelection = Boolean(focusedNodeId && (edge.source === focusedNodeId || edge.target === focusedNodeId));
+        var selectedFocus = edgeFocusState(edge, focusedNodeId, focusMode, focusedLoopIds, selectedLoopId);
+        var relatedToSelection = Boolean(selectedLoopId && edge.loop && edge.loop.id === selectedLoopId || focusedNodeId && (edge.source === focusedNodeId || edge.target === focusedNodeId || edge.loop && focusedLoopIds.has(edge.loop.id)));
         focusState = {
           className: runtimeFocus.className + (relatedToSelection ? selectedFocus.className : ""),
           showParticle: runtimeFocus.showParticle || (relatedToSelection && selectedFocus.showParticle),
           direction: relatedToSelection && selectedFocus.showParticle ? selectedFocus.direction : runtimeFocus.direction,
-          focusMode: relatedToSelection && selectedFocus.showParticle ? selectedFocus.focusMode : runtimeFocus.focusMode
+          focusMode: relatedToSelection && selectedFocus.showParticle ? selectedFocus.focusMode || focusMode : runtimeFocus.focusMode
         };
       } else {
         focusState = flowState && demoRun.active
           ? { className: " is-runtime-active", showParticle: true, direction: flowState.direction || "outgoing", focusMode: "runtime" }
-          : edgeFocusState(edge, focusedNodeId, focusMode);
+          : edgeFocusState(edge, focusedNodeId, focusMode, focusedLoopIds, selectedLoopId);
       }
       var focusClass = focusState.className;
       var runtimeRemoved = demoRun.removedEdgeIds.indexOf(edge.id) >= 0;
@@ -5135,6 +5181,17 @@
       // redraw would detach/reinsert it and can restart SVG/CSS animations.
       if (visual.parentNode !== drawingLayer) drawingLayer.appendChild(visual);
       delete registry[edge.id];
+      if (loopColor) visual.style.setProperty("--loop-color", loopColor);
+      else visual.style.removeProperty("--loop-color");
+      if (RUNTIME_MODE && edge.loop) {
+        visual.setAttribute("role", "button");
+        visual.setAttribute("tabindex", "0");
+        visual.setAttribute("aria-label", "Loop " + edge.loop.id + "：" + edge.source + " → " + edge.target);
+      } else {
+        visual.removeAttribute("role");
+        visual.removeAttribute("tabindex");
+        visual.removeAttribute("aria-label");
+      }
       var path = ensureSvgChild(visual, "path", "path");
       path.setAttribute("class", "workflow-edge " + edge.kind + (displayKind !== edge.kind ? " " + displayKind : "") + (displayKind === "termination" ? " termination" : "") + (selectedEdge === edge.id ? " is-selected" : "") + focusClass + (runtimeSkipped ? " is-runtime-skipped" : "") + (runtimeAdded ? " is-runtime-added" : "") + (runtimeRemoved ? " is-runtime-removed" : "") + (runtimeStrengthened ? " is-runtime-strengthened" : "") + (!branchVisible ? " is-selector-hidden" : ""));
       path.setAttribute("id", flowPathId(edge.id));
@@ -5143,6 +5200,8 @@
       path.setAttribute("data-target", edge.target);
       if (RUNTIME_MODE) path.setAttribute("data-runtime-state", edge.runtimeState || "configured");
       path.setAttribute("d", pathData);
+      if (edge.loop) path.style.setProperty("marker-end", "url(#" + (edge.loop.role === "exit" ? exitMarker : loopMarkers[edge.loop.id]) + ")");
+      else path.style.removeProperty("marker-end");
       if (edge.kind === "weak") path.setAttribute("stroke-dashoffset", String(edgeDashOffset(edge.id)));
       else path.removeAttribute("stroke-dashoffset");
       var hitPath = visual.querySelector('[data-edge-role="hit"]');
@@ -5190,6 +5249,7 @@
         flowRecords.push({
           edge: edge,
           displayKind: displayKind,
+          loopColor: loopColor,
           pathId: flowPathId(edge.id),
           direction: focusState.direction,
           focusMode: focusState.focusMode || focusMode
@@ -7479,6 +7539,13 @@
       maxX = Math.max(maxX, item.x + size.width);
       maxY = Math.max(maxY, item.y + size.height);
     });
+
+    if (RUNTIME_MODE && runtimeOverviewBounds) {
+      minX = Math.min(minX, runtimeOverviewBounds.minX);
+      minY = Math.min(minY, runtimeOverviewBounds.minY);
+      maxX = Math.max(maxX, runtimeOverviewBounds.maxX);
+      maxY = Math.max(maxY, runtimeOverviewBounds.maxY);
+    }
 
     var routes = RUNTIME_MODE ? buildEdgeRoutes() : buildClearLayoutEdgeRoutes();
     Object.keys(routes).forEach(function (id) {
@@ -9845,7 +9912,7 @@
   });
 
   edgeLayer.addEventListener("mousedown", function (event) {
-    if (isDemoLocked()) {
+    if (isDemoLocked() && !RUNTIME_MODE) {
       event.preventDefault();
       return;
     }
@@ -9856,6 +9923,17 @@
     cancelConnection();
     selected = null;
     selectedEdge = target.getAttribute("data-edge-hit");
+    render();
+  });
+
+  edgeLayer.addEventListener("keydown", function (event) {
+    if (!RUNTIME_MODE || (event.key !== "Enter" && event.key !== " ")) return;
+    var target = event.target.closest('[data-edge-group][role="button"]');
+    if (!target) return;
+    event.preventDefault();
+    event.stopPropagation();
+    selected = null;
+    selectedEdge = target.getAttribute("data-edge-group");
     render();
   });
 
@@ -10486,6 +10564,86 @@
   // topology through the demo editor or replay the scripted demo in live mode.
   if (RUNTIME_MODE) {
     var hasRuntimeSnapshot = false;
+    var runtimeMoves = {};
+    var runtimeMotionFrame = 0;
+    var runtimeMotionPausedAt = 0;
+    function finishRuntimeEffect(event) {
+      var node = event.target.closest && event.target.closest("[data-node]");
+      if (node && event.animationName === "demo-node-arrive") {
+        demoRun.addedAgentIds = demoRun.addedAgentIds.filter(function (id) { return id !== node.dataset.node; });
+        node.classList.remove("is-runtime-added");
+      }
+      var edge = event.target.closest && event.target.closest("[data-edge-group]");
+      if (edge && event.animationName === "demo-edge-draw") {
+        demoRun.addedEdgeIds = demoRun.addedEdgeIds.filter(function (id) { return id !== edge.getAttribute("data-edge-group"); });
+        edge.querySelectorAll(".is-runtime-added").forEach(function (element) { element.classList.remove("is-runtime-added"); });
+      }
+      if (edge && event.animationName === "demo-edge-strengthen") {
+        demoRun.updatedEdgeIds = demoRun.updatedEdgeIds.filter(function (id) { return id !== edge.getAttribute("data-edge-group"); });
+        edge.querySelectorAll(".is-runtime-strengthened").forEach(function (element) { element.classList.remove("is-runtime-strengthened"); });
+      }
+    }
+    nodeLayer.addEventListener("animationend", finishRuntimeEffect);
+    edgeLayer.addEventListener("animationend", finishRuntimeEffect);
+    if (mainControlLayer) mainControlLayer.addEventListener("animationend", finishRuntimeEffect);
+    function clearRuntimeTransitions() {
+      cancelAnimationFrame(runtimeMotionFrame);
+      runtimeMoves = {};
+      nodeLayer.querySelectorAll(".runtime-exit-layer").forEach(function (element) { element.remove(); });
+      var exits = document.getElementById("runtime-exit-edges");
+      if (exits) exits.replaceChildren();
+    }
+    function animateRuntimeMoves(now) {
+      runtimeMotionFrame = 0;
+      if (runtimeMotionPausedAt) return;
+      Object.keys(runtimeMoves).forEach(function (id) {
+        var move = runtimeMoves[id], node = getNode(id);
+        if (!node) { delete runtimeMoves[id]; return; }
+        var progress = Math.min(1, Math.max(0, (now - move.at) / 720));
+        var eased = 1 - Math.pow(1 - progress, 3);
+        node.x = move.x + (move.toX - move.x) * eased;
+        node.y = move.y + (move.toY - move.y) * eased;
+        if (progress === 1) delete runtimeMoves[id];
+      });
+      demoRun.movingAgentIds = Object.keys(runtimeMoves);
+      runtimeRoutes = null;
+      renderNodeLayer(); drawEdges();
+      if (Object.keys(runtimeMoves).length) runtimeMotionFrame = requestAnimationFrame(animateRuntimeMoves);
+    }
+    function captureRuntimeRemovals(next) {
+      if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      var nodeExits = document.createElement("div");
+      nodeExits.className = "runtime-exit-layer";
+      nodeExits.setAttribute("aria-hidden", "true");
+      nodeExits.setAttribute("inert", "");
+      workflow.nodes.filter(function (node) { return !next.nodes.some(function (entry) { return entry.id === node.id; }); }).forEach(function (node) {
+        var element = nodeElement(node.id);
+        if (!element) return;
+        var ghost = element.cloneNode(true);
+        ghost.removeAttribute("data-node"); ghost.removeAttribute("tabindex");
+        ghost.className = "agent-node is-runtime-removed";
+        ghost.addEventListener("animationend", function (event) { if (event.target === ghost) { ghost.remove(); if (!nodeExits.children.length) nodeExits.remove(); } });
+        nodeExits.appendChild(ghost);
+      });
+      if (nodeExits.children.length) nodeLayer.appendChild(nodeExits);
+      var edgeExits = document.getElementById("runtime-exit-edges");
+      if (!edgeExits) {
+        edgeExits = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        edgeExits.id = "runtime-exit-edges"; edgeExits.setAttribute("aria-hidden", "true");
+        edgeLayer.parentNode.insertBefore(edgeExits, edgeLayer);
+      }
+      workflow.edges.filter(function (edge) { return !next.edges.some(function (entry) { return entry.id === edge.id; }); }).forEach(function (edge) {
+        var element = Array.from(edgeLayer.children).concat(mainControlLayer ? Array.from(mainControlLayer.children) : []).find(function (child) { return child.getAttribute("data-edge-group") === edge.id; });
+        if (!element) return;
+        var ghost = element.cloneNode(true);
+        ghost.removeAttribute("data-edge-group"); ghost.classList.add("runtime-exit-edge");
+        ghost.querySelectorAll("[data-source], [data-target]").forEach(function (child) { child.removeAttribute("data-source"); child.removeAttribute("data-target"); });
+        ghost.querySelectorAll("[id]").forEach(function (child) { child.removeAttribute("id"); });
+        ghost.querySelectorAll(".workflow-edge").forEach(function (path) { path.classList.add("is-runtime-removed"); });
+        ghost.addEventListener("animationend", function () { ghost.remove(); }, { once: true });
+        edgeExits.appendChild(ghost);
+      });
+    }
     // Expanding a card can grow beyond the current view. Pan only enough to
     // reveal that card, preserving the user's zoom and the configured layout.
     function revealRuntimeGroup(nodeId) {
@@ -10505,8 +10663,27 @@
     }
     window.ScienceEvolveRuntimeCanvas = {
       update: function (snapshot) {
+        runtimeOverviewBounds = snapshot.playback && snapshot.playback.bounds || null;
         var nextScopeKey = JSON.stringify([snapshot.projectId, snapshot.scopeId || null]);
         var scopeChanged = nextScopeKey !== runtimeScopeKey;
+        var seeking = snapshot.playback && snapshot.playback.reset;
+        if (scopeChanged || seeking) clearRuntimeTransitions();
+        else if (hasRuntimeSnapshot) captureRuntimeRemovals(snapshot.workflow);
+        if (seeking) {
+          runtimeLayoutOverrides = {};
+          runtimeHostPositions = {};
+          runtimeScopeViews = Object.create(null);
+        }
+        var previousNodes = workflow.nodes;
+        var previousEdges = workflow.edges;
+        var paused = snapshot.playback && !snapshot.playback.playing;
+        document.documentElement.classList.toggle("runtime-playback-paused", Boolean(paused));
+        var svg = document.getElementById("edge-layer");
+        if (paused) { if (!runtimeMotionPausedAt) runtimeMotionPausedAt = performance.now(); if (svg.pauseAnimations) svg.pauseAnimations(); }
+        else {
+          if (runtimeMotionPausedAt) { var pauseDuration = performance.now() - runtimeMotionPausedAt; Object.keys(runtimeMoves).forEach(function (id) { runtimeMoves[id].at += pauseDuration; }); runtimeMotionPausedAt = 0; }
+          if (svg.unpauseAnimations) svg.unpauseAnimations();
+        }
         if (scopeChanged) {
           if (hasRuntimeSnapshot) runtimeScopeViews[runtimeScopeKey] = {
             viewport: clone(viewport), overrides: runtimeLayoutOverrides, positions: runtimeHostPositions,
@@ -10554,6 +10731,12 @@
             node.x = override.x;
             node.y = override.y;
           }
+          if (!scopeChanged && !seeking && movedIds.indexOf(node.id) >= 0) {
+            var previous = previousNodes.find(function (entry) { return entry.id === node.id; });
+            if (previous) runtimeMoves[node.id] = { x: previous.x, y: previous.y, toX: node.x, toY: node.y, at: performance.now() };
+          }
+          var motion = runtimeMoves[node.id];
+          if (motion) { var previous = previousNodes.find(function (entry) { return entry.id === node.id; }); if (previous) { node.x = previous.x; node.y = previous.y; } }
         });
         Object.keys(runtimeLayoutOverrides).forEach(function (nodeId) {
           if (!workflow.nodes.some(function (node) { return node.id === nodeId; })) delete runtimeLayoutOverrides[nodeId];
@@ -10579,13 +10762,14 @@
           clearRouteLock();
         }
         demoRun.hasRun = true;
-        demoRun.active = snapshot.status === "running";
+        demoRun.active = snapshot.status === "running" && !paused;
         demoRun.nodeStates = clone(snapshot.nodeStates);
         demoRun.nodeResults = clone(snapshot.nodeResults);
         demoRun.currentAgentId = snapshot.currentNodeId;
         demoRun.runningAgentIds = Object.keys(snapshot.nodeStates).filter(function (id) { return snapshot.nodeStates[id] === "running" || snapshot.nodeStates[id] === "retrying"; });
-        demoRun.addedAgentIds = knownScope ? workflow.nodes.filter(function (node) { return previousIds.indexOf(node.id) < 0; }).map(function (node) { return node.id; }) : [];
-        demoRun.addedEdgeIds = knownScope ? workflow.edges.filter(function (edge) { return previousEdgeIds.indexOf(edge.id) < 0; }).map(function (edge) { return edge.id; }) : [];
+        demoRun.addedAgentIds = knownScope && !scopeChanged && !seeking ? workflow.nodes.filter(function (node) { return previousIds.indexOf(node.id) < 0 || demoRun.addedAgentIds.indexOf(node.id) >= 0; }).map(function (node) { return node.id; }) : [];
+        demoRun.addedEdgeIds = knownScope && !scopeChanged && !seeking ? workflow.edges.filter(function (edge) { return previousEdgeIds.indexOf(edge.id) < 0 || demoRun.addedEdgeIds.indexOf(edge.id) >= 0; }).map(function (edge) { return edge.id; }) : [];
+        demoRun.updatedEdgeIds = !scopeChanged && !seeking ? workflow.edges.filter(function (edge) { var previous = previousEdges.find(function (entry) { return entry.id === edge.id; }); return previous && previous.kind !== edge.kind || demoRun.updatedEdgeIds.indexOf(edge.id) >= 0; }).map(function (edge) { return edge.id; }) : [];
         demoRun.movingAgentIds = scopeChanged ? [] : movedIds;
         demoRun.edgeData = {};
         workflow.edges.forEach(function (edge) {
@@ -10598,12 +10782,13 @@
           drag.element = nodeElement(drag.item.id);
           drag.element.classList.add("is-dragging");
         }
-        nodeLayer.querySelectorAll(".agent-node").forEach(function (node) {
+        nodeLayer.querySelectorAll(".agent-node[data-node]").forEach(function (node) {
           node.tabIndex = 0;
           node.setAttribute("role", getNode(node.dataset.node).type === "collaboration" ? "group" : "button");
           node.setAttribute("aria-label", (getNode(node.dataset.node).name || node.dataset.node) + " · " + snapshot.nodeLabels[node.dataset.node]);
         });
         applyViewport();
+        if (Object.keys(runtimeMoves).length && !runtimeMotionFrame && !runtimeMotionPausedAt) runtimeMotionFrame = requestAnimationFrame(animateRuntimeMoves);
         if (!knownScope) requestAnimationFrame(function () { if (runtimeScopeKey === nextScopeKey) fitViewportOnly(true); });
         else if (!scopeChanged) workflow.nodes.filter(function (node) {
           return node.type === "collaboration" && node.expanded && expandedGroups.indexOf(node.id) < 0;
@@ -10613,9 +10798,20 @@
       select: function (nodeId) {
         if (!getNode(nodeId)) return;
         selected = nodeId;
+        selectedEdge = null;
         syncNodeSelection();
         drawEdges();
         window.parent.postMessage({ type: "scienceevolve.workflow.runtime.select", nodeId: nodeId, scopeId: runtimeScopeId }, window.location.origin);
+      },
+      selectEdge: function (edgeId) {
+        if (!workflow.edges.some(function (edge) { return edge.id === edgeId; })) return;
+        selected = null;
+        selectedEdge = edgeId;
+        render();
+      },
+      positionChange: function (nodeId) {
+        demoRun.floatingUpdate = { agentId: nodeId };
+        positionDemoFloatingCard();
       },
       pan: function (dx, dy) {
         viewport.x += dx;

@@ -45,7 +45,7 @@ import { AGENT_PERMISSION_METADATA as PERMISSION_META } from "../../../../server
 
 import { CanvasTextDraftContext } from "./CanvasTextDraftContext";
 
-const RESULT_FORMAT_PRESETS = ["论文", "代码", "Markdown 文件", "图片", "表格", "其他"] as const;
+const RESULT_FORMAT_PRESETS = ["论文", "代码", "Markdown 文件", "HTML 文件", "图片", "表格", "其他"] as const;
 
 export interface CanvasInspectorProps {
   node?: CanvasNode;

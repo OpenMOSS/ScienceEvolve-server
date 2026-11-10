@@ -26,13 +26,12 @@ function smokeIdentity(harness: string) {
 }
 
 const acceptanceHarnessCatalog: AdapterSmokeProbeRunner = {
-  harnessIds: () => ["dsh", "pi", "codex", "claude-code"],
+  harnessIds: () => ["dsh", "pi", "codex"],
   nativeProtocol: (harness: string) => ({
     dsh: "chat-completions",
     pi: "chat-completions",
     codex: "responses",
-    "claude-code": "anthropic-messages"
-  } as const)[harness as "dsh" | "pi" | "codex" | "claude-code"],
+  } as const)[harness as "dsh" | "pi" | "codex"],
   cacheKey: async ({ harness }) => smokeIdentity(harness),
   runSmoke: async ({ harness }) => smokeIdentity(harness)
 };
@@ -140,7 +139,7 @@ describe("real gateway acceptance safety boundary", () => {
     );
   });
 
-  it("builds an explicit three-protocol/four-harness plan without exposing keys", () => {
+  it("builds an explicit three-protocol/three-harness plan without exposing keys", () => {
     const plans = buildRealGatewayAcceptancePlans(
       configuredEnvironment(),
       acceptanceHarnessCatalog
@@ -155,12 +154,11 @@ describe("real gateway acceptance safety boundary", () => {
       "dsh",
       "pi",
       "codex",
-      "claude-code"
     ]);
     const publicPlan = publicRealGatewayAcceptancePlan(plans[0]!);
-    expect(publicPlan.matrixCombinations).toBe(12);
-    expect(publicPlan.minimumMatrixRequests).toBe(60);
-    expect(publicPlan.maximumMatrixRequests).toBe(108);
+    expect(publicPlan.matrixCombinations).toBe(9);
+    expect(publicPlan.minimumMatrixRequests).toBe(45);
+    expect(publicPlan.maximumMatrixRequests).toBe(81);
     expect(JSON.stringify(publicPlan)).not.toContain("aigw-test-secret-value");
     expect(publicPlan).not.toHaveProperty("apiKey");
   });

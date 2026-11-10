@@ -52,6 +52,20 @@ describe("project runtime API and live updates", () => {
     expect(runtime.nodeStates.writing).toBe("completed");
   });
 
+  it.each(["retrying", "interrupted"] as const)("propagates a %s live snapshot to Agent badges and the workflow canvas", status => {
+    const project = runtimeProjectFixture();
+    const next = applyLiveRuntimeSnapshot(project, { ...project.runtime!, stateRevision: 13, status,
+      phase: status === "interrupted" ? "collaboration:repair-required" : "collaboration:recovering" });
+    expect(next.status).toBe(status);
+    expect(next.agentProgress.writing?.state).toBe(status);
+    expect(next.agentProgress.review?.state).toBe(status);
+    const runtime = buildWorkflowRuntimeState(next, []);
+    const canvas = buildLiveCanvasSnapshot({ model: adaptWorkflowToCanvas(next.orchestration), runtime, project: next, events: [] });
+    expect(runtime.nodeStates.research).toBe(status);
+    expect(canvas.nodeStates.research).toBe(status);
+    expect(project.status).toBe("running");
+  });
+
   it("keeps v3 failures as failures after normalization and discards malformed facts", () => {
     const project = runtimeProjectFixture();
     project.scopedExecutions![0]!.status = "failed";

@@ -1,3 +1,4 @@
+import { summarizeFailureAttempts } from "../../server/src/internal/shared/failure-attempt-history.js";
 import { normalizeScopedRuntime } from "./scoped-runtime";
 import { githubAuthorizationWaiting } from "../../server/src/internal/shared/project-runtime-status.js";
 import { isProjectViewStatus } from "./project-status";
@@ -1331,6 +1332,7 @@ export const STATUS_META: Record<
 
 export function projectWaitingLabel(status: ProjectStatus, runtime?: ProjectRuntimeProjection): string | undefined {
   if (runtime?.status !== status || !["queued", "retrying", "paused", "interrupted"].includes(status)) return undefined;
+  if (runtime.phase === "collaboration:writer-lease-lost" || runtime.waiting?.kind === "service") return "服务不可用";
   if (runtime.waiting?.kind === "configuration") return "等待配置修复";
   if (runtime.waiting?.kind === "authorization") return "等待授权修复";
   if (runtime.waiting?.kind === "user-input" || runtime.phase === "user-intervention-required") return "等待用户输入";
@@ -2762,7 +2764,8 @@ function normalizeFailureAttempts(value: unknown): FailureAttempt[] {
       retryable: raw.retryable === true,
       redactedMessage: asString(raw.redactedMessage),
       causeClass: asString(raw.causeClass, "Unknown"),
-      ...copyOptionalStrings(raw, ["agentId", "invocationId"]),
+      ...copyOptionalStrings(raw, ["agentId", "invocationId", "nodeRunId", "groupRunId", "taskId", "executionId"]),
+      ...(Number.isSafeInteger(raw.coordinatorEpoch) ? { coordinatorEpoch: asNonNegativeInteger(raw.coordinatorEpoch) } : {}),
       ...(Number.isFinite(raw.ownershipEpoch)
         ? { ownershipEpoch: asNonNegativeInteger(raw.ownershipEpoch) }
         : {}),
@@ -2804,71 +2807,12 @@ function deriveFailureAttemptSummary(
       ...copyOptionalStrings(operation, ["lastFailureAt", "lastSuccessAt"])
     }];
   });
-  const chronologicalAttempts = attempts
-    .map((attempt, index) => ({ attempt, index }))
-    .sort((left, right) => {
-      const time = Date.parse(left.attempt.finishedAt) - Date.parse(right.attempt.finishedAt);
-      return Number.isFinite(time) && time !== 0 ? time : left.index - right.index;
-    })
-    .map(({ attempt }) => attempt);
-  const byOperation = new Map<string, FailureAttemptOperationSummary>();
-  for (const attempt of chronologicalAttempts) {
-    const key = `${attempt.scope}\0${attempt.operation}`;
-    const prior = byOperation.get(key);
-    byOperation.set(key, {
-      scope: attempt.scope,
-      operation: attempt.operation,
-      status: attempt.status,
-      attemptId: attempt.attemptId,
-      attemptCount: (prior?.attemptCount ?? 0) + 1,
-      failureCount: (prior?.failureCount ?? 0) + (attempt.status === "failed" ? 1 : 0),
-      startedAt: attempt.startedAt,
-      finishedAt: attempt.finishedAt,
-      ...(attempt.status === "failed"
-        ? { lastFailureAt: attempt.finishedAt }
-        : prior?.lastFailureAt ? { lastFailureAt: prior.lastFailureAt } : {}),
-      ...(attempt.status === "succeeded"
-        ? { lastSuccessAt: attempt.finishedAt }
-        : prior?.lastSuccessAt ? { lastSuccessAt: prior.lastSuccessAt } : {})
-    });
-  }
-  const operations = attempts.length > 0
-    ? [...byOperation.values()].sort((left, right) =>
-      left.finishedAt.localeCompare(right.finishedAt) ||
-      left.scope.localeCompare(right.scope) ||
-      left.operation.localeCompare(right.operation))
-    : normalizedOperations;
-  const hasAttempts = attempts.length > 0;
-  const latestAttempt = chronologicalAttempts.at(-1);
-  const latestFailure = [...chronologicalAttempts]
-    .reverse()
-    .find((attempt) => attempt.status === "failed");
-  const derivedFailedAttempts = attempts.filter((attempt) => attempt.status === "failed").length;
-  const failedAttempts = hasAttempts
-    ? derivedFailedAttempts
-    : asNonNegativeInteger(raw.failedAttempts);
-  const succeededAttempts = hasAttempts
-    ? attempts.length - derivedFailedAttempts
-    : asNonNegativeInteger(raw.succeededAttempts);
-  const derivedUnresolvedFailures = operations
-    .filter((operation) => operation.status === "failed").length;
-  const unresolvedFailures = hasAttempts
-    ? derivedUnresolvedFailures
-    : Number.isFinite(raw.unresolvedFailures)
-      ? asNonNegativeInteger(raw.unresolvedFailures)
-      : derivedUnresolvedFailures;
-  return {
-    currentStatus: unresolvedFailures > 0 || (!hasAttempts && raw.currentStatus === "failed")
-      ? "failed"
-      : "healthy",
-    totalAttempts: hasAttempts ? attempts.length : asNonNegativeInteger(raw.totalAttempts),
-    failedAttempts,
-    succeededAttempts,
-    unresolvedFailures,
-    ...(latestAttempt ? { latestAttempt } : {}),
-    ...(latestFailure ? { latestFailure } : {}),
-    operations
-  };
+  if (attempts.length) return summarizeFailureAttempts(attempts);
+  const unresolvedFailures = Number.isFinite(raw.unresolvedFailures) ? asNonNegativeInteger(raw.unresolvedFailures)
+    : normalizedOperations.filter(operation => operation.status === "failed").length;
+  return { currentStatus: unresolvedFailures || raw.currentStatus === "failed" ? "failed" : "healthy", totalAttempts: asNonNegativeInteger(raw.totalAttempts),
+    failedAttempts: asNonNegativeInteger(raw.failedAttempts), succeededAttempts: asNonNegativeInteger(raw.succeededAttempts),
+    unresolvedFailures, operations: normalizedOperations };
 }
 
 
@@ -3157,7 +3101,7 @@ export function normalizeProjectRuntimeProjection(
     : [];
   const primary = normalizeProjectRuntimeActivity(raw.primaryActivity);
   const waiting = asObject(raw.waiting);
-  const waitingKind = waiting.kind === "recovery" || waiting.kind === "management" || waiting.kind === "workflow-adjustment" || waiting.kind === "configuration" || waiting.kind === "authorization" || waiting.kind === "user-input" || waiting.kind === "backoff"
+  const waitingKind = waiting.kind === "recovery" || waiting.kind === "management" || waiting.kind === "workflow-adjustment" || waiting.kind === "configuration" || waiting.kind === "authorization" || waiting.kind === "user-input" || waiting.kind === "backoff" || waiting.kind === "service"
     ? waiting.kind : undefined;
   const waitingReason = optionalString(waiting.reason);
   const currentAgent = optionalString(raw.currentAgent);
@@ -3171,7 +3115,7 @@ export function normalizeProjectRuntimeProjection(
     status: normalizeStatus(raw.status),
     phase: asString(raw.phase, "collaboration:ready"),
     ...(waitingKind && waitingReason ? { waiting: { kind: waitingKind, reason: waitingReason,
-      ...copyOptionalStrings(waiting, ["agentId", "groupRunId", "executionId", "operationId"]) } } : {}),
+      ...copyOptionalStrings(waiting, ["agentId", "groupRunId", "executionId", "operationId", "failedAt", "errorCode"]) } } : {}),
     ...(currentAgent ? { currentAgent } : {}),
     ...(activeInvocationId ? { activeInvocationId } : {}),
     ...(activityStartedAt ? { activityStartedAt } : {}),

@@ -12,7 +12,7 @@ import { WorkflowAdjustmentEditor } from "./WorkflowAdjustmentEditor";
 
 vi.mock("../api", async original => ({ ...await original<typeof import("../api")>(), getWorkflowAdjustmentPage: vi.fn(), getWorkflowAdjustmentDetail: vi.fn(), submitWorkflowAdjustment: vi.fn(),
   withdrawWorkflowAdjustment: vi.fn(), getRecommendationExplainerConfig: vi.fn(), getAgentToolRecommendationCatalog: vi.fn(), recommendAgentTools: vi.fn(), projectAction: vi.fn() }));
-const harnesses = ["codex", "claude-code"].map(id => ({ id, label: id, adapterVersion: "1", available: true, purposes: ["workflow"], nativeProtocol: "responses",
+const harnesses = ["codex", "fixture-anthropic"].map(id => ({ id, label: id, adapterVersion: "1", available: true, purposes: ["workflow"], nativeProtocol: "responses",
   capabilities: { durableSession: true, officialEvents: true, toolEvents: true, usageEvents: true, readOnlyExplainer: true, webSearch: true, skills: true, mcp: true } } as HarnessCatalogEntry));
 function setup(complex = false, gitEnabled = true) {
   const project = runtimeProjectFixture(); project.git = (gitEnabled ? { enabled: true, status: "ready", provider: "github" } : { enabled: false, status: "disabled" }) as Project["git"];
@@ -302,7 +302,7 @@ describe("runtime workflow adjustment window using the existing complete canvas"
 
   it("lets the user restore the exact original Harness when a Session binds after local drafting", async () => {
     const f = setup(); await ready(); enter("保留其余编辑"); fireEvent.blur(instructions());
-    fireEvent.change(screen.getByRole("combobox", { name: "main Harness" }), { target: { value: "claude-code" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "main Harness" }), { target: { value: "fixture-anthropic" } });
     f.context.constraints = { agentHarnesses: { main: { harnessId: "codex", reason: "已有原生会话，保留原 Harness" } } };
     await recordsTab(); await userEvent.click(screen.getByRole("button", { name: "刷新记录" }));
     await userEvent.click(screen.getByRole("tab", { name: "配置" }));

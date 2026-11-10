@@ -1,3 +1,4 @@
+import { failureAttemptHistory } from "../../../../../server/src/internal/shared/failure-attempt-history.js";
 import type {
   AgentEvent,
   CollaborationNode,
@@ -62,6 +63,7 @@ export interface FailureAttemptTimelineItem {
   scopeLabel: string;
   title: string;
   occurredAt: string;
+  resolution?: "current" | "resolved" | "unconfirmed";
 }
 
 export interface CollaborationMemberProgress {
@@ -124,8 +126,9 @@ const FAILURE_SCOPE_LABELS: Record<FailureAttempt["scope"], string> = {
   scheduler: "调度恢复"
 };
 
-/** Preserve every immutable attempt while labeling retries per scope/operation. */
+/** Retain every attempt and link follow-up only through its saved provenance. */
 export function buildFailureAttemptTimeline(project: Project): FailureAttemptTimelineItem[] {
+  const history = failureAttemptHistory(project.failureAttempts ?? []);
   const ordered = (project.failureAttempts ?? [])
     .map((attempt, index) => ({ attempt, index }))
     .sort((left, right) => {
@@ -135,12 +138,15 @@ export function buildFailureAttemptTimeline(project: Project): FailureAttemptTim
   const counts = new Map<string, number>();
   const failures = new Map<string, number>();
   return ordered.map(({ attempt }) => {
-    const key = `${attempt.scope}\0${attempt.operation}`;
+    const key = history.keys.get(attempt.attemptId)!;
     const ordinal = (counts.get(key) ?? 0) + 1;
     const priorFailures = failures.get(key) ?? 0;
     counts.set(key, ordinal);
     if (attempt.status === "failed") failures.set(key, priorFailures + 1);
-    const retry = ordinal > 1 || priorFailures > 0;
+    const retry = priorFailures > 0;
+    const current = !["completed", "cancelled", "archived"].includes(project.runtime?.status ?? project.status) &&
+      Boolean(project.runtime?.waiting) && project.runtime?.activities.length === 0 &&
+      project.error === attempt.redactedMessage;
     const scopeLabel = FAILURE_SCOPE_LABELS[attempt.scope];
     return {
       id: `failure-attempt:${attempt.attemptId}`,
@@ -151,7 +157,9 @@ export function buildFailureAttemptTimeline(project: Project): FailureAttemptTim
       title: attempt.status === "succeeded"
         ? retry ? `${scopeLabel} 重试成功` : `${scopeLabel} 尝试成功`
         : retry ? `${scopeLabel} 重试失败` : `${scopeLabel} 尝试失败`,
-      occurredAt: attempt.finishedAt
+      occurredAt: attempt.finishedAt,
+      ...(attempt.status === "failed" ? { resolution: history.resolved.has(attempt.attemptId)
+        ? "resolved" as const : current ? "current" as const : "unconfirmed" as const } : {})
     };
   });
 }

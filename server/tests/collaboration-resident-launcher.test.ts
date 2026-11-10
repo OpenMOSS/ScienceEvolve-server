@@ -13,6 +13,34 @@ import type { HarnessRuntimeFacade } from "../src/harness-runtime/runtime.js";
 import type { GroupRun, MemberExecution, ProjectState } from "../src/types.js";
 
 describe("production collaboration resident launcher", () => {
+  it.each(["pause", "resume"] as const)("retries an incomplete normal close before %s without reusing the closing handle", async action => {
+    const state = { id: "prj_normal_close", orchestration: { schemaVersion: 3 },
+      agents: { main: { harness: "pi", mcpServers: [] } } } as unknown as ProjectState;
+    const failure = new Error("Original process stop is not yet confirmed");
+    const lease = { session: fixtureSession("pi", "original-close-session"), acknowledgedControlSeq: 2 };
+    let stopConfirmed = false;
+    const nativeClose = vi.fn(async () => { if (!stopConfirmed) throw failure; });
+    const nativePause = vi.fn(async () => { throw new Error("Closing handle cannot pause"); });
+    const nativeResume = vi.fn(async () => { throw new Error("Closing handle cannot resume"); });
+    const launcher = createProductionCollaborationResidentLauncher({} as HarnessRuntimeFacade, {
+      open: async () => ({ initialLease: lease, probe: async () => lease, close: nativeClose,
+        pause: nativePause, resume: nativeResume })
+    } as unknown as HarnessRuntimeResidentAdapter);
+    const handle = await launcher.open(routeOpen(state));
+    try {
+      await expect(handle.close()).rejects.toBe(failure);
+      expect(handle.closed).toBe(false);
+      await expect(handle[action]()).rejects.toBe(failure);
+      expect(handle.closed).toBe(false);
+      stopConfirmed = true;
+      await handle[action]();
+      expect(handle.closed).toBe(true);
+      expect(nativeClose).toHaveBeenCalledTimes(3);
+      expect(nativePause).not.toHaveBeenCalled();
+      expect(nativeResume).not.toHaveBeenCalled();
+    } finally { stopConfirmed = true; await handle.close(); }
+  });
+
   it.each(["leader", "delivery"] as const)("retains the failed %s submit fence until its shared native close finishes", async (role) => {
     const state = { id: "prj_failed_pause", orchestration: { schemaVersion: 3 },
       agents: { main: { harness: "pi", mcpServers: [] } } } as unknown as ProjectState;

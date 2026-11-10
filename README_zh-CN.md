@@ -46,7 +46,7 @@ ScienceEvolve 是论文 [Rethinking Scientific Discovery in the Agentic Era](htt
 
 > “这里有一个泊松方程求解器。请探索两种改进方案，验证收敛性，比较误差，并整理成报告。”
 
-在画布中连接计划、并行探索、实现和评审。Main 负责协调任务与确认完成，Worker 负责研究、实验、编码和评审等具体工作；每个 Agent 可独立选择 **Codex、Claude Code、DSH 或 pi**，并配置模型、提示词、Skills 与 MCP 工具。
+在画布中连接计划、并行探索、实现和评审。Main 负责协调任务与确认完成，Worker 负责研究、实验、编码和评审等具体工作；每个 Agent 可独立选择 **Codex、DSH 或 pi**，并配置模型、提示词、Skills 与 MCP 工具。
 
 <div align="center">
 
@@ -355,7 +355,7 @@ Main：协调异常恢复与用户补充输入
 
 先配置 **“GitHub 账号”**，再启用 **“并行协作模式”** 并新建协作组。选择已有 Agent 作为 Leader，引用其他 Agent 作为组内业务节点；点击组进入内部 Workflow，使用面包屑或 **“返回父图”** 返回。只有组入口发出的边会创建并行路径，组内仍可使用强弱边、Loop 和嵌套协作组。
 
-同一 Agent 在多个位置引用时共享配置、会话和目录，调用按队列串行；不同 Agent 可并行执行。“结束协作组”需要等待必要路径与 Git 集成，逐级 PR 合并及本地同步完成后才推进后续节点。具体配置见 [Git 账号与协作](docs/configuration_zh-CN.md#github-账号库与-git-协作)和[协作组内 Workflow](docs/openfars-collaboration/scoped-workflow-v3.md)。
+同一 Agent 在多个位置引用时共享配置、会话和目录，调用按队列串行；不同 Agent 可并行执行。“结束协作组”需要等待必要路径与 Git 集成，逐级 PR 合并及本地同步完成后才推进后续节点。具体配置见 [Git 账号与协作](docs/configuration_zh-CN.md#github-账号库与-git-协作)和[协作组内 Workflow](docs/scienceevolve-collaboration/scoped-workflow-v3.md)。
 
 ### 保存、调整与恢复
 
@@ -468,7 +468,7 @@ CCFA 与 Nature 的内置副本未记录导入时的提交版本；上游仓库�
 <tr><td align="left">接入模型服务、选择协议和验证组合</td><td align="left"><a href="docs/configuration_zh-CN.md#%E5%85%A8%E5%B1%80%E7%BD%91%E5%85%B3">全局网关</a></td></tr>
 <tr><td align="left">安装其他 Harness、调整单个 Agent</td><td align="left"><a href="docs/configuration_zh-CN.md#harness">Harness</a> · <a href="docs/configuration_zh-CN.md#agent">Agent 参数</a> · <a href="harness/README.md">运行时说明</a></td></tr>
 <tr><td align="left">连接工具、添加项目级资源</td><td align="left"><a href="docs/configuration_zh-CN.md#skills-%E4%B8%8E-mcp">Skills 与 MCP</a> · <a href="docs/inspire-async-experiments.md">Inspire / SII 实验</a></td></tr>
-<tr><td align="left">设置 GitHub OAuth、并行与嵌套协作</td><td align="left"><a href="docs/configuration_zh-CN.md#github-%E8%B4%A6%E5%8F%B7%E5%BA%93%E4%B8%8E-git-%E5%8D%8F%E4%BD%9C">Git 账号配置</a> · <a href="docs/openfars-collaboration/scoped-workflow-v3.md">协作组内 Workflow</a></td></tr>
+<tr><td align="left">设置 GitHub OAuth、并行与嵌套协作</td><td align="left"><a href="docs/configuration_zh-CN.md#github-%E8%B4%A6%E5%8F%B7%E5%BA%93%E4%B8%8E-git-%E5%8D%8F%E4%BD%9C">Git 账号配置</a> · <a href="docs/scienceevolve-collaboration/scoped-workflow-v3.md">协作组内 Workflow</a></td></tr>
 <tr><td align="left">查看编排、权限、恢复与宿主差异</td><td align="left"><a href="docs/configuration_zh-CN.md#workflow">Workflow</a> · <a href="docs/architecture.md">系统架构</a> · <a href="docs/main-sdk-parity-zh.md">Web / SDK 边界</a></td></tr>
 </tbody></table>
 

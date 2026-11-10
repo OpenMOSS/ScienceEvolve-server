@@ -14,9 +14,9 @@
 
 每个项目都包含唯一且必需的 `main` Agent，负责理解需求、项目级调度、处理用户输入与失败恢复，并按终止协议验收交付。Worker 执行研究、实验、写作、评审或自定义工作。具体方法可以让获准的终止 Worker 直接验收，不能仅凭存在结束连线判定项目完成。
 
-每个 Agent 可独立选择 Codex、Claude Code、DSH 或 pi，以及模型、提示词、Skills、MCP、思考选项和运行权限。模型网关支持 OpenAI Responses、OpenAI Chat Completions 与 Anthropic Messages；配置步骤见[网关](configuration_zh-CN.md#全局网关)与 [Agent](configuration_zh-CN.md#agent)。
+每个 Agent 可独立选择 Codex、DSH 或 pi，以及模型、提示词、Skills、MCP、思考选项和运行权限。模型网关支持 OpenAI Responses、OpenAI Chat Completions 与 Anthropic Messages；配置步骤见[网关](configuration_zh-CN.md#全局网关)与 [Agent](configuration_zh-CN.md#agent)。
 
-Git 协作通过组内 Workflow 和嵌套协作组组织并行路径。相同 Agent 引用共享配置与会话，Leader 在组内范围协调，PR 按层级集成。详见[协作组内 Workflow（v3）](openfars-collaboration/scoped-workflow-v3.md)。
+Git 协作通过组内 Workflow 和嵌套协作组组织并行路径。相同 Agent 引用共享配置与会话，Leader 在组内范围协调，PR 按层级集成。详见[协作组内 Workflow（v3）](scienceevolve-collaboration/scoped-workflow-v3.md)。
 
 ## 双闭环
 

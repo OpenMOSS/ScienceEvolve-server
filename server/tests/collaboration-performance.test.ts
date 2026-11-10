@@ -22,7 +22,7 @@ async function fixture() {
   await mkdir(storage.projectDir(state.id), { recursive: true });
   await writeFile(path.join(storage.projectDir(state.id), "events.jsonl"), "");
   const dispatcher = new ProductionCollaborationInvocationDispatcher(storage);
-  const request = { invocationId: "inv-native", agent: "worker_a", onTokenUsage: vi.fn() } as unknown as AgentRunRequest;
+  const request = { invocationId: "inv_native", agent: "worker_a", onTokenUsage: vi.fn() } as unknown as AgentRunRequest;
   dispatcher.decorate({ state, request });
   async function send(phase: "started" | "delta" | "completed", seconds: number, text?: string) {
     vi.setSystemTime(new Date(at(seconds)));
@@ -31,6 +31,159 @@ async function fixture() {
   }
   return { storage, state, dispatcher, request, send };
 }
+
+function fragment(request: AgentRunRequest, seq: number) {
+  return { schemaVersion: 1 as const, eventId: `fragment-${seq}`, seq, timestamp: at(0),
+    invocationId: request.invocationId, harnessId: "fixture", attempt: 0,
+    kind: "assistant.delta" as const, phase: "delta" as const, itemId: "message", message: `fragment ${seq}` };
+}
+
+describe("collaboration audit batching", () => {
+  it("combines ordinary traces and native fragments into one checkpoint at a tool boundary", async () => {
+    const { storage, state, dispatcher, request } = await fixture();
+    state.turn = 0;
+    await mkdir(path.join(storage.projectDir(state.id), "traces"));
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(at(0)));
+    const writes = vi.spyOn(storage, "appendEvents");
+    const sink = dispatcher.trace({ state, agentId: request.agent, invocationId: request.invocationId });
+    for (let index = 0; index < 80; index++) await sink("status", `status ${index}`);
+    await request.onOfficialHarnessEvent!(fragment(request, 1));
+    expect(storage.hub.liveSnapshot(state.id).streams).toContainEqual(expect.objectContaining({ content: "fragment 1", phase: "streaming" }));
+    expect(writes).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(999);
+    expect(writes).not.toHaveBeenCalled();
+    await request.onOfficialHarnessEvent!({ ...fragment(request, 2), kind: "tool.started", phase: "started",
+      tool: { callId: "call", name: "read_file", toolType: "file", status: "started" } });
+    expect(writes).toHaveBeenCalledTimes(1);
+    expect(writes.mock.calls[0][1]).toHaveLength(82);
+    const events = await storage.readEvents(state.id);
+    expect(events.map(event => event.seq)).toEqual(Array.from({ length: 82 }, (_, index) => index + 1));
+    expect(events.slice(0, 80).map(event => event.message)).toEqual(Array.from({ length: 80 }, (_, index) => `status ${index}`));
+    const trace = await readFile(path.join(storage.projectDir(state.id), "traces", "0001_worker_a_inv_native.md"), "utf8");
+    expect(trace.match(/### /g)).toHaveLength(80);
+    expect(trace).toContain(at(0));
+    expect(JSON.parse(await readFile(path.join(storage.projectDir(state.id), "state.json"), "utf8")).eventSeq).toBe(82);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(writes).toHaveBeenCalledTimes(1);
+  });
+
+  it("flushes process records on the batching window and flushes errors immediately", async () => {
+    const { storage, state, dispatcher, request } = await fixture();
+    await mkdir(path.join(storage.projectDir(state.id), "traces"));
+    vi.useFakeTimers();
+    const writes = vi.spyOn(storage, "appendEvents");
+    const sink = dispatcher.trace({ state, agentId: request.agent, invocationId: request.invocationId });
+    await sink("status", "request started");
+    await request.onOfficialHarnessEvent!(fragment(request, 1));
+    await vi.advanceTimersByTimeAsync(1000);
+    await vi.waitFor(() => expect(writes).toHaveBeenCalledTimes(1));
+    // Wait for the real filesystem append without advancing another window.
+    await dispatcher.finish(state, request.invocationId, "completed");
+    await sink("message", "more output");
+    await sink("stderr", "original adapter failure");
+    expect(writes).toHaveBeenCalledTimes(2);
+    expect((await storage.readEvents(state.id)).map(event => event.message))
+      .toEqual(["request started", "fragment 1", "more output", "original adapter failure"]);
+  });
+
+  it("coalesces records arriving during a slow write instead of accumulating timed write jobs", async () => {
+    const { storage, state, dispatcher, request } = await fixture();
+    vi.useFakeTimers();
+    const original = storage.appendEvents.bind(storage);
+    let release!: () => void;
+    const blocked = new Promise<void>(resolve => { release = resolve; });
+    const writes = vi.spyOn(storage, "appendEvents").mockImplementationOnce(async (...args) => {
+      await blocked;
+      return original(...args);
+    });
+    await request.onOfficialHarnessEvent!(fragment(request, 0));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(writes).toHaveBeenCalledTimes(1);
+    for (let index = 1; index <= 20; index++) {
+      await request.onOfficialHarnessEvent!(fragment(request, index));
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    expect(writes).toHaveBeenCalledTimes(1);
+    const finished = dispatcher.finish(state, request.invocationId, "completed");
+    release();
+    await finished;
+    expect(writes.mock.calls.map(call => call[1].length)).toEqual([1, 20]);
+    expect((await storage.readEvents(state.id)).map(event => event.message))
+      .toEqual(Array.from({ length: 21 }, (_, index) => `fragment ${index}`));
+  });
+
+  it("applies backpressure when a pending batch fills behind a slow write", async () => {
+    const { storage, state, dispatcher, request } = await fixture();
+    vi.useFakeTimers();
+    const original = storage.appendEvents.bind(storage);
+    let release!: () => void;
+    const blocked = new Promise<void>(resolve => { release = resolve; });
+    const writes = vi.spyOn(storage, "appendEvents").mockImplementationOnce(async (...args) => {
+      await blocked;
+      return original(...args);
+    });
+    await request.onOfficialHarnessEvent!(fragment(request, 0));
+    await vi.advanceTimersByTimeAsync(1000);
+    for (let index = 1; index < 128; index++) await request.onOfficialHarnessEvent!(fragment(request, index));
+    let accepted = false;
+    const capacity = request.onOfficialHarnessEvent!(fragment(request, 128)).then(() => { accepted = true; });
+    await Promise.resolve();
+    expect(accepted).toBe(false);
+    expect(writes).toHaveBeenCalledTimes(1);
+    release();
+    await capacity;
+    await dispatcher.finish(state, request.invocationId, "completed");
+    expect(writes.mock.calls.map(call => call[1].length)).toEqual([1, 128]);
+    expect((await storage.readEvents(state.id)).map(event => event.seq)).toEqual(Array.from({ length: 129 }, (_, index) => index + 1));
+  });
+
+  it("reports a timer-driven audit failure at settlement instead of acknowledging completion", async () => {
+    const { storage, state, dispatcher, request } = await fixture();
+    vi.useFakeTimers();
+    const failure = new Error("fixture audit write failed");
+    vi.spyOn(storage, "appendEvents").mockRejectedValueOnce(failure);
+    await request.onOfficialHarnessEvent!(fragment(request, 1));
+    await vi.advanceTimersByTimeAsync(1000);
+    await expect(dispatcher.finish(state, request.invocationId, "completed")).rejects.toBe(failure);
+  });
+
+  it("does not keep writing a newer pending batch after the active audit write fails", async () => {
+    const { storage, state, dispatcher, request } = await fixture();
+    vi.useFakeTimers();
+    const failure = new Error("fixture active audit failure");
+    let reject!: (error: Error) => void;
+    const blocked = new Promise<never>((_resolve, fail) => { reject = fail; });
+    const writes = vi.spyOn(storage, "appendEvents").mockImplementationOnce(() => blocked);
+    await request.onOfficialHarnessEvent!(fragment(request, 1));
+    await vi.advanceTimersByTimeAsync(1000);
+    await request.onOfficialHarnessEvent!(fragment(request, 2));
+    reject(failure);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(writes).toHaveBeenCalledTimes(1);
+    await expect(dispatcher.finish(state, request.invocationId, "completed")).rejects.toBe(failure);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(writes).toHaveBeenCalledTimes(1);
+  });
+
+  it("flushes one project's lifecycle boundary and drains all remaining projects for shutdown", async () => {
+    const { storage, state, dispatcher, request } = await fixture();
+    vi.useFakeTimers();
+    const second = { ...state, id: "prj_" + "d".repeat(32) };
+    await mkdir(storage.projectDir(second.id), { recursive: true });
+    await writeFile(path.join(storage.projectDir(second.id), "events.jsonl"), "");
+    const next = { invocationId: "inv_second", agent: "worker_b" } as AgentRunRequest;
+    dispatcher.decorate({ state: second, request: next });
+    await request.onOfficialHarnessEvent!(fragment(request, 1));
+    await next.onOfficialHarnessEvent!(fragment(next, 2));
+    await dispatcher.flush(state.id);
+    expect((await storage.readEvents(state.id)).map(event => event.message)).toEqual(["fragment 1"]);
+    expect(await storage.readEvents(second.id)).toEqual([]);
+    expect(storage.hub.liveSnapshot(state.id).streams).toHaveLength(1);
+    await dispatcher.flush();
+    expect((await storage.readEvents(second.id)).map(event => event.message)).toEqual(["fragment 2"]);
+  });
+});
 
 describe("collaboration model performance", () => {
   it("persists resident tool details in the canonical envelope before retiring their live copy", async () => {

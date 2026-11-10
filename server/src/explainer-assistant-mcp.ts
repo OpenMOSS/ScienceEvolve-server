@@ -164,14 +164,21 @@ export async function openExplainerAssistantMcp(store: ExplainerAssistantStore |
         pending.add(operation);
         let result: Awaited<typeof operation>;
         try { result = await operation; } finally { pending.delete(operation); }
-        if (result.action) await onAction(result.action);
         const value = result.action ? { kind: result.action.kind, summary: result.action.summary,
           changedFields: result.action.changedFields, href: result.action.href, requestId: result.action.requestId,
           savedTask: result.action.savedTask, launches: result.action.launches,
+          ...(request.params.name === "submit_workflow_adjustment" ? { result: result.result } : {}),
           targetTaskId: result.action.targetTaskId, deletedTasks: result.action.deletedTasks,
           context: { id: result.action.context.id, revision: result.action.context.revision,
             taskId: result.action.context.taskId, projectId: result.action.context.projectId,
             canUndo: result.action.context.canUndo, deletedTaskId: result.action.context.deletedTaskId } } : result.result;
+        if (result.action) {
+          try { await onAction(result.action); }
+          catch (error) {
+            const failure = { error: { stage: "action_notification", message: redactTrace(error instanceof Error ? error.message : String(error)) }, result: value };
+            return { isError: true, structuredContent: failure, content: [{ type: "text", text: JSON.stringify(failure) }] };
+          }
+        }
         return { content: [{ type: "text", text: JSON.stringify(value) }] };
       } catch (error) {
         return { isError: true, content: [{ type: "text", text: redactTrace(error instanceof Error ? error.message : "Project Explainer tool failed") }] };

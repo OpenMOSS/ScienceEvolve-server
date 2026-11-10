@@ -37,7 +37,6 @@ npm ci --prefix harness/codex
 ```bash
 npm ci --prefix harness/dsh
 npm ci --prefix harness/pi
-npm ci --prefix "harness/claude code"
 ```
 
 如果机器上已经安装了这些 CLI，可以跳过对应安装，并在 `.env` 中配置其绝对路径。
@@ -121,7 +120,7 @@ npm run dev
 | `SCIENCEEVOLVE_DSH_TURN_IDLE_TIMEOUT_MS` | `1200000` | 普通 DSH Adapter turn 无任何原生事件时的 inactivity 窗口。 |
 | `SCIENCEEVOLVE_RESIDENT_MODEL_INACTIVITY_TIMEOUT_MS` | `1200000` | 所有 resident Harness 等待模型/provider 有效活动的公共 inactivity 窗口。 |
 | `SCIENCEEVOLVE_RESIDENT_TOOL_INACTIVITY_TIMEOUT_MS` | `7200000` | 所有 resident Harness 活跃工具无有效更新时的公共 inactivity 窗口。 |
-| `SCIENCEEVOLVE_PROTOCOL_PROXY_TIMEOUT_MS` | `1200000` | 协议代理单次上游请求的无活动超时时间；SSE 帧会重置计时。 |
+| `SCIENCEEVOLVE_PROTOCOL_PROXY_TIMEOUT_MS` | `1200000` | 上游请求无活动超时的上限；流式首段等待与非流式恢复共用等待预算。 |
 | `SCIENCEEVOLVE_INTERRUPT_FORCE_TIMEOUT_MS` | `8000` | 中断调用时，强制清理前的等待时间。 |
 | `SCIENCEEVOLVE_MAX_EVENT_HISTORY` | `10000` | 普通项目快照中保留的最大事件数；SSE 仍可恢复完整历史。 |
 | `SCIENCEEVOLVE_GITHUB_OAUTH_CLIENT_ID` | 留空 | GitHub OAuth App 的 Client ID；留空时账号库可查看，但登录入口禁用。 |
@@ -131,7 +130,13 @@ npm run dev
 
 `.env` 中不要提交真实凭据。`SCIENCEEVOLVE_DATA_DIR` 内包含网关凭据、研究资料和运行日志，也应视为敏感目录。
 
+传输预算最多取协议代理、Agent 模型无活动和常驻模型无活动期限中最小值的 90%。首个实际模型事件到达前，流式等待使用其中三分之一；传输失败后，只在剩余预算内尝试一次非流式恢复，并预留错误返回时间。选定的非流式方式仅在本次调用内保留。已有模型内容或工具调用后，代理不会重放该请求。保活消息不算模型进展。函数参数字符串交给原生 Harness 解析并让 Agent 纠正；必须承载对象的格式仍明确拒绝无法表示的参数。
+
 Agent 队列看板同时读取共享队列和 Git 项目的调度状态，按实际调用统计并行 Agent，分别显示执行中、等待调度和等待恢复。Git 项目的并发上限单独显示；历史进程记录与当前模型调用不会重复占用显示计数。
+
+协作过程记录按最多 128 条或 1 秒窗口合批，共享一次 checkpoint 保存。原生输出仍实时推送；工具和生命周期边界、回合结算、暂停或停止完成及服务关闭前会确认待写记录落盘。每个项目最多保留一个正在写入的批次和一个待写批次，待写批次满时让生产方等待。快照准备在写事务前完成，事务内重新核对文档版本与写入资格。SQLite 锁冲突只允许在原先确认的租约有效期内等待续租，不延长有效期或另行抢占租约。慢操作日志分别记录准备、SQL 更新、审计插入、视图发布和提交耗时。
+
+Linux 执行层通过进程亲缘、继承的启动标识、PID 命名空间、启动实例与出生时钟，自动追踪原生 Harness 和观察到的派生进程。共享观察任务每秒检查一次，只在启动、退出和明确交接时保存记录，不随输出片段扫描或写入。生命周期变化进入已有审计通道和私有运行清单；审计通过保留日志分批交付，内存队列有界。清理覆盖另开进程组的所属派生进程。常驻 Agent 的逻辑任务返回前，若仍有未交接的后台进程，系统向同一会话反馈具体身份，最多继续两轮清理；仍未处理则不确认任务完成。显式 `background_job` 交接继续由项目生命周期管理。`sii_defer_task` 保留未完成任务及受监控实验，不触发任务完成清理。服务恢复时重新核对保留的出生身份，再发送进程信号。
 
 ### 全局网关
 
@@ -227,13 +232,12 @@ SCIENCEEVOLVE_GITHUB_OAUTH_CALLBACK_URL=http://127.0.0.1:5173/api/github/auth/ca
 | Codex | OpenAI Responses | `harness/codex` | `SCIENCEEVOLVE_CODEX_BIN` |
 | DSH | OpenAI Chat Completions | `harness/dsh` | `SCIENCEEVOLVE_DSH_BIN` |
 | pi | OpenAI Chat Completions | `harness/pi` | `SCIENCEEVOLVE_PI_BIN` |
-| Claude Code | Anthropic Messages | `harness/claude code` | `SCIENCEEVOLVE_CLAUDE_CODE_BIN` |
 
-外部 Harness 变量建议使用可执行文件的绝对路径。也可以通过 `SCIENCEEVOLVE_HARNESS_ROOT` 指向一个包含 `codex/`、`dsh/`、`pi/` 和 `claude code/` 子目录的自定义 Harness 根目录；使用自定义根目录时仍建议显式配置 `SCIENCEEVOLVE_CODEX_BIN`。
+外部 Harness 变量建议使用可执行文件的绝对路径。也可以通过 `SCIENCEEVOLVE_HARNESS_ROOT` 指向一个包含 `codex/`、`dsh/` 和 `pi/` 子目录的自定义 Harness 根目录；使用自定义根目录时仍建议显式配置 `SCIENCEEVOLVE_CODEX_BIN`。
 
 配置完成后，可在全局网关页查看 Harness 是否可用，并用网关矩阵依次完成协议 route probe 与真实 Adapter smoke probe。两者都通过且身份缓存仍匹配当前 Gateway revision、Adapter 版本和可执行文件时，该组合显示为已验证；测试状态仅作提醒，不阻止尝试执行。更详细的内置运行时说明见 [harness/README.md](../harness/README.md)；扩展步骤见 [新增 Harness 指南](adding-a-harness.md)。
 
-Harness 的用途按 Catalog 能力分别发布，不会因为能运行工作流就自动出现在 Project Explainer 中。项目解说可在 Codex、pi 和 DSH 之间选择，默认使用 Codex；Claude Code 保留兼容数据，但不再显示为可选项。交互助手的原生 Harness 保持文件只读、Shell 和浏览器禁用，仅注入本轮专用的产品 MCP，可读取上下文、修改与保存草稿、撤销修改，以及提交现有项目的 Workflow 调整。配置推荐等独立调用仍禁用所有 MCP。切换 Harness 会重建原生会话，同时保留项目解说历史。
+Harness 的用途按 Catalog 能力分别发布，不会因为能运行工作流就自动出现在 Project Explainer 中。项目解说可在 Codex、pi 和 DSH 之间选择，默认使用 Codex。交互助手的原生 Harness 保持文件只读、Shell 和浏览器禁用，仅注入本轮专用的产品 MCP，可读取上下文、修改与保存草稿、撤销修改，以及提交现有项目的 Workflow 调整。配置推荐等独立调用仍禁用所有 MCP。切换 Harness 会重建原生会话，同时保留项目解说历史。
 
 ### Agent
 
@@ -296,7 +300,7 @@ Main 编辑后必须以 `apply_workflow` 作为本轮唯一终结控制动作。
 
 ### Skills 与 MCP
 
-所有工作流 Agent（包括 Main、Worker 和协作组中的常驻 Agent）自动获得内置 `scienceevolve-sleep` stdio MCP，适用于 Codex、Claude Code、DSH 和 pi，无需在 Agent 配置中手动添加。工具 `sleep({ "duration_ms": 1000 })` 等待指定毫秒数；与 Codex 内置 sleep 的时长范围一致，接受 1–43200000 的整数（最长 12 小时），返回请求时长和实际等待时长。等待支持 MCP 取消通知，连接关闭时也会取消；用户立即打断 Agent 时会取消等待，排队消息则按原有调度处理。Codex 的内置 sleep MCP 单独配置了足够的调用超时；只暂停当前工具调用，不改变工作流状态或结束 Agent 回合。Project Explainer 和配置推荐不注入该工具。`scienceevolve-sleep` 为保留名称，不能被自定义 MCP 覆盖。
+所有工作流 Agent（包括 Main、Worker 和协作组中的常驻 Agent）自动获得内置 `scienceevolve-sleep` stdio MCP，适用于 Codex、DSH 和 pi，无需在 Agent 配置中手动添加。工具 `sleep({ "duration_ms": 1000 })` 等待指定毫秒数；与 Codex 内置 sleep 的时长范围一致，接受 1–43200000 的整数（最长 12 小时），返回请求时长和实际等待时长。等待支持 MCP 取消通知，连接关闭时也会取消；用户立即打断 Agent 时会取消等待，排队消息则按原有调度处理。Codex 的内置 sleep MCP 单独配置了足够的调用超时；只暂停当前工具调用，不改变工作流状态或结束 Agent 回合。Project Explainer 和配置推荐不注入该工具。`scienceevolve-sleep` 为保留名称，不能被自定义 MCP 覆盖。
 
 运行 `npm run smoke:sleep-mcp -w server` 可构建并启动真实 sleep MCP 子进程，通过官方 MCP 客户端实测 1 秒和 3 秒等待、并发响应、取消、参数校验及子进程退出。此检查无需模型网关或凭据。
 
@@ -335,7 +339,7 @@ Workflow 还可定义 Project Skill 和 Project stdio MCP。Project Skill 是包
 
 ### Workspace 与成果完整性
 
-未开启 Git 协作的项目中，Main 和所有 Worker 使用 `${SCIENCEEVOLVE_DATA_DIR}/projects/<project-id>/workspaces/` 下的共享业务 Workspace 与 `Memory.md`；Session、日志和调用级临时目录仍保持隔离。Git 协作项目按组内 Workflow 使用隔离 worktree、发布与集成流程，规则见 [协作组内 Workflow（v3）](openfars-collaboration/scoped-workflow-v3.md)。旧项目的 `<agent>/shared/` 文件原地保留，不自动合并或覆盖。
+未开启 Git 协作的项目中，Main 和所有 Worker 使用 `${SCIENCEEVOLVE_DATA_DIR}/projects/<project-id>/workspaces/` 下的共享业务 Workspace 与 `Memory.md`；Session、日志和调用级临时目录仍保持隔离。Git 协作项目按组内 Workflow 使用隔离 worktree、发布与集成流程，规则见 [协作组内 Workflow（v3）](scienceevolve-collaboration/scoped-workflow-v3.md)。旧项目的 `<agent>/shared/` 文件原地保留，不自动合并或覆盖。
 
 开启新课题时可选择文件、图片或整个文件夹，也可从本机点击“打开目录”，通过 Windows 文件资源管理器、macOS Finder 或 Linux 系统文件管理器（`xdg-open`）直接向临时 `user_inputs/` 添加文件。服务需运行在图形桌面会话中；打开失败时仍可通过选择文件或文件夹上传。下方默认显示最多五个文件或顶层文件夹，可展开查看其余条目；上传完成或从文件管理器返回页面后会自动更新。文件名按服务所在系统的规则校验，重复上传和删除按实际文件系统的大小写规则处理。创建时文件进入共享 Workspace 的 `user_inputs/`，之后也可继续向该目录添加。所有 Agent 均可读取，原件作为补充资料而非自动发布的成果；单文件上限 50 MiB，单次最多 1000 个文件、总计 200 MiB。
 

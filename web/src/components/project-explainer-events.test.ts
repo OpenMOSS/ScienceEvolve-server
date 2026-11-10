@@ -30,7 +30,7 @@ describe("Explainer conversation presentation", () => {
     expect(explainerReplyProgress([quarantined, recovery, failed], false)?.phase).toBe("failed");
   });
 
-  it.each(["codex", "pi", "dsh", "claude-code", "another-harness"])("hides operational logs from %s without hiding errors or actions", harness => {
+  it.each(["codex", "pi", "dsh", "fixture-anthropic", "another-harness"])("hides operational logs from %s without hiding errors or actions", harness => {
     const messages = [event("user", "Question"), event("assistant", "Answer", { phase: "delta" }),
       event("reasoning", "Public summary"), event("tool", "get_context"), event("tool_output", "Context"),
       event("error", "Actual failure", { data: { diagnostic: true } }),

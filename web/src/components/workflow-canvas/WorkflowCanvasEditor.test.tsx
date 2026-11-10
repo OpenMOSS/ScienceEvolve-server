@@ -19,7 +19,7 @@ import { canvasEdgeId, loopExitCanvasEdgeId, normalizeCanvasLayout } from "./cor
 import { addScopedGroup, upgradeLegacyGroups } from "./core/scoped-workflow";
 import * as canvasRouter from "./core/canvas-router";
 import { WorkflowCanvasEditor, type CanvasLayoutOperationSnapshot } from "./WorkflowCanvasEditor";
-import eightAgentR7Fixture from "../../../../docs/openfars-collaboration/research/fixtures/eight-agent-v2.json";
+import eightAgentR7Fixture from "../../../../docs/scienceevolve-collaboration/research/fixtures/eight-agent-v2.json";
 
 type HarnessState = {
   orchestration: AgentOrchestrationTemplate;
@@ -907,24 +907,24 @@ describe("WorkflowCanvasEditor interactions", () => {
       apiKeyConfigured: true,
       test: {
         status: "passed", protocol: "chat-completions", model: "route-model",
-        harness: "claude-code", nativeProtocol: "anthropic-messages", routeMode: "proxy",
+        harness: "fixture-anthropic", nativeProtocol: "anthropic-messages", routeMode: "proxy",
         routeDirection: "anthropic-messages->chat-completions", probeKind: "adapter-smoke",
-        cacheKey: "claude-code-route-model", adapterVersion: "1",
-        executableFingerprint: "fixture-claude-code", gatewayRevision: 1,
+        cacheKey: "fixture-anthropic-route-model", adapterVersion: "1",
+        executableFingerprint: "fixture-fixture-anthropic", gatewayRevision: 1,
         routerCompatibilityVersion: "1"
       },
       tests: [
         {
           status: "passed", protocol: "chat-completions", model: "route-model",
-          harness: "claude-code", nativeProtocol: "anthropic-messages", routeMode: "proxy",
+          harness: "fixture-anthropic", nativeProtocol: "anthropic-messages", routeMode: "proxy",
           routeDirection: "anthropic-messages->chat-completions", probeKind: "route"
         },
         {
           status: "passed", protocol: "chat-completions", model: "route-model",
-          harness: "claude-code", nativeProtocol: "anthropic-messages", routeMode: "proxy",
+          harness: "fixture-anthropic", nativeProtocol: "anthropic-messages", routeMode: "proxy",
           routeDirection: "anthropic-messages->chat-completions", probeKind: "adapter-smoke",
-          cacheKey: "claude-code-route-model", adapterVersion: "1",
-          executableFingerprint: "fixture-claude-code", gatewayRevision: 1,
+          cacheKey: "fixture-anthropic-route-model", adapterVersion: "1",
+          executableFingerprint: "fixture-fixture-anthropic", gatewayRevision: 1,
           routerCompatibilityVersion: "1"
         }
       ],
@@ -966,13 +966,13 @@ describe("WorkflowCanvasEditor interactions", () => {
         availabilityReason: "项目内置 dsh 入口不可执行"
       },
       {
-        id: "claude-code",
-        label: "Claude Code",
+        id: "fixture-anthropic",
+        label: "Fixture Harness",
         adapterVersion: "1",
         nativeProtocol: "anthropic-messages",
         purposes: ["workflow", "explainer", "probe"],
         mode: "workflow",
-        notes: "Embedded Claude Code",
+        notes: "Embedded Fixture Harness",
         capabilities: {
           structuredEvents: true, toolResults: true, durableSession: true,
           permissionPrompts: ["workspace"], workspaceInputs: true, autoSkills: false,
@@ -995,7 +995,7 @@ describe("WorkflowCanvasEditor interactions", () => {
     expect(within(harnessSelect).getByRole("option", { name: "dsh · 不可用" })).toBeDisabled();
     expect(screen.getByText("项目内置 dsh 入口不可执行")).toHaveAttribute("role", "alert");
 
-    fireEvent.change(harnessSelect, { target: { value: "claude-code" } });
+    fireEvent.change(harnessSelect, { target: { value: "fixture-anthropic" } });
     fireEvent.change(screen.getByLabelText("idea全局网关"), { target: { value: gatewayId } });
 
     expect(screen.getByLabelText("idea model")).toHaveValue("");
@@ -1003,7 +1003,7 @@ describe("WorkflowCanvasEditor interactions", () => {
     fireEvent.change(screen.getByLabelText("idea model"), { target: { value: "route-model" } });
 
     expect(view.latest().agents.idea).toMatchObject({
-      harness: "claude-code",
+      harness: "fixture-anthropic",
       gatewayId,
       model: "route-model",
       skills: [],
@@ -1490,6 +1490,12 @@ describe("WorkflowCanvasEditor interactions", () => {
     expect(virtualExit).not.toHaveClass("is-unrelated-muted");
     expect(view.container.querySelector('[data-edge-source="main"][data-edge-target="writing"]')).toHaveClass("is-unrelated-muted");
     expect(view.container.querySelector('[data-node-id="idea"]')).not.toHaveClass("is-selected");
+    fireEvent.click(virtualExit);
+    expect(memberEdge).toHaveClass("is-selected");
+    expect(returnEdge).toHaveClass("is-selected");
+    expect(virtualExit).toHaveClass("is-selected");
+    expect(view.container.querySelectorAll(".flow-particle.is-loop-flow")).toHaveLength(3);
+    fireEvent.click(memberEdge);
     fireEvent.change(screen.getByLabelText("Loop 每批迭代数"), { target: { value: "5" } });
     expect(view.latest().orchestration.loops?.[0]?.maxIterations).toBe(5);
 

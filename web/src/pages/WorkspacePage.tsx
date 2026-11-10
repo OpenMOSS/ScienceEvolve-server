@@ -1,3 +1,5 @@
+import { artifactRelativeResourceUrl } from "../artifact-html";
+import { getArtifactHtmlPreviewUrl } from "../api";
 import {
   canonicalTraceEvent,
   isDiagnosticTraceEvent,
@@ -12,7 +14,8 @@ import {
   toolStatus,
   toolOutput,
   buildTraceEntries,
-  type AgentActivityEntry
+  type AgentActivityEntry,
+  type AgentExecutionEntry
 } from "../trace-model";
 export { buildTraceEntries } from "../trace-model";
 export type { TraceEntry } from "../trace-model";
@@ -61,6 +64,7 @@ import {
   Download,
   Eye,
   FileCode2,
+  Maximize2,
   FileText,
   Filter,
   Folder,
@@ -129,6 +133,7 @@ import { canStopProject } from "../project-status";
 import { WorkflowAdjustmentEditor } from "../components/WorkflowAdjustmentEditor";
 import { AgentToolRecommendation } from "../components/AgentToolRecommendation";
 import { ProjectAuthorizationNotice } from "../components/ProjectAuthorizationNotice";
+import { ProjectServiceFailureNotice } from "../components/ProjectServiceFailureNotice";
 import { withProjectAuthorizationWaiting } from "../lib";
 import { AgentPromptPanels } from "../components/workflow-canvas/AgentPromptPanels";
 import { cacheResource, readCachedResource } from "../resource-cache";
@@ -281,6 +286,8 @@ function artifactMediaType(artifact: Pick<Artifact, "path" | "mediaType" | "kind
       markdown: "text/markdown",
       tex: "application/x-tex",
       json: "application/json",
+      jsonl: "application/x-ndjson",
+      bib: "text/x-bibtex",
       csv: "text/csv",
       tsv: "text/tab-separated-values",
       txt: "text/plain",
@@ -335,6 +342,7 @@ function artifactPreviewKind(
   if (mediaType.startsWith("video/")) return "video";
   if (
     mediaType.startsWith("text/") ||
+    mediaType === "application/x-ndjson" ||
     mediaType.includes("javascript") ||
     mediaType.includes("typescript") ||
     mediaType.includes("x-tex") ||
@@ -1948,7 +1956,7 @@ function eventPresentation(event: AgentEvent): {
     return { title: "工具调用", icon: <TerminalSquare size={16} />, tone: "tool" };
   }
   if (canonical?.kind === "assistant.message" || canonical?.kind === "assistant.delta") {
-    return { title: "Agent 过程摘要", icon: <BrainCircuit size={16} />, tone: "neutral" };
+    return { title: "Agent 过程文字", icon: <BrainCircuit size={16} />, tone: "neutral" };
   }
   if (type === "main.assignment.queued") {
     return { title: "Main 正在评估当前结果并决定下一步", icon: <GitBranch size={16} />, tone: "decision" };
@@ -1997,11 +2005,18 @@ function eventPresentation(event: AgentEvent): {
   if (traceKind === "tool") {
     return { title: "工具调用", icon: <TerminalSquare size={16} />, tone: "tool" };
   }
-  if (type.includes("started") || type.includes("running")) {
-    return { title: "智能体开始工作", icon: <Play size={15} />, tone: "running" };
-  }
-  if (type.includes("completed") || type.includes("finished")) {
-    return { title: "阶段任务完成", icon: <CheckCircle2 size={16} />, tone: "success" };
+  const lifecycleTitles: Record<string, string> = {
+    "invocation.started": "Agent 本轮开始", "agent.started": "Agent 本轮开始",
+    "collaboration.execution.started": "成员执行开始", "agent.execution.started": "成员执行开始",
+    "invocation.completed": "Agent 本轮处理结束", "agent.completed": "Agent 本轮处理结束",
+    "collaboration.execution.completed": "成员执行结束", "agent.execution.ended": "成员执行结束",
+    "workflow.node.started": "Workflow 节点已激活", "workflow.node.completed": "Workflow 节点完成",
+    "collaboration.group.started": "协作组开始", "collaboration.group.completed": "协作组完成",
+    "session.started": "会话已建立", "iteration.started": "迭代开始",
+    "project.completed": "项目已完成", "agent.interrupted": "Agent 本轮已中断"
+  };
+  if (lifecycleTitles[type]) {
+    return { title: lifecycleTitles[type], icon: <Activity size={16} />, tone: "neutral" };
   }
   if (type.includes("tool")) {
     return { title: "工具调用", icon: <TerminalSquare size={16} />, tone: "tool" };
@@ -2026,16 +2041,16 @@ export const AgentActivityCard = memo(function AgentActivityCard({
     typeof data.cycle === "number" || typeof data.cycle === "string"
       ? String(data.cycle)
       : String(projectCycle);
-  const heading = entry.displayState === "streaming"
+  const heading = entry.contentKind === "summary" ? "可见思考摘要" : entry.displayState === "streaming"
     ? "Agent 正在输出"
     : entry.displayState === "final"
       ? "Agent 最终结果"
       : entry.displayState === "incomplete"
         ? "Agent 未完成输出"
-        : "Agent 过程摘要";
+        : "Agent 过程文字";
   const thought = entry.thought
     ? thoughtSummary(entry.thought.message)
-    : "本组工具调用前没有新的过程摘要。";
+    : "";
   return (
     <article className="trace-event trace-action-event">
       <div className="trace-axis">
@@ -2050,14 +2065,19 @@ export const AgentActivityCard = memo(function AgentActivityCard({
           {canonical?.harnessId && <span className="trace-harness-tag">{canonical.harnessId}</span>}
           {event.agent && <AgentBadge role={event.agent} subtle />}
         </div>
-        <div className="agent-action-row">
-          <section className="agent-thought-panel">
+        <div className={`agent-action-row${!thought || !entry.tools.length ? " is-single-panel" : ""}`}>
+          {thought && <section className="agent-thought-panel">
             <header>
               <BrainCircuit size={15} />
               <strong>{heading}</strong>
               {entry.displayState === "streaming" && <span className="agent-streaming-dot" />}
             </header>
-            {entry.displayState === "streaming" ? (
+            {entry.contentKind === "summary" ? (
+              <details className="agent-visible-summary">
+                <summary>阅读摘要</summary>
+                <div className="agent-message-markdown"><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeSanitize, rehypeKatex]}>{thought}</ReactMarkdown></div>
+              </details>
+            ) : entry.displayState === "streaming" ? (
               <p className="agent-streaming-text">{thought}</p>
             ) : (
               <div className="agent-message-markdown">
@@ -2075,14 +2095,13 @@ export const AgentActivityCard = memo(function AgentActivityCard({
                 可从右侧评审卡或对应“交接已保存”轨迹进入。
               </div>
             )}
-          </section>
-          <section className="agent-tools-panel">
+          </section>}
+          {entry.tools.length > 0 && <section className="agent-tools-panel">
             <header>
               <TerminalSquare size={15} />
               <strong>工具调用</strong>
               <span>{entry.tools.length}</span>
             </header>
-            {entry.tools.length ? (
               <div className="agent-tool-list">
                 {entry.tools.map((tool, index) => {
                   const status = toolStatus(tool);
@@ -2111,10 +2130,7 @@ export const AgentActivityCard = memo(function AgentActivityCard({
                   );
                 })}
               </div>
-            ) : (
-              <p className="agent-tools-empty">当前摘要后尚未调用工具。</p>
-            )}
-          </section>
+          </section>}
         </div>
       </div>
     </article>
@@ -2123,6 +2139,7 @@ export const AgentActivityCard = memo(function AgentActivityCard({
   if (previous.projectCycle !== next.projectCycle) return false;
   if (
     previous.entry.displayState !== next.entry.displayState ||
+    previous.entry.contentKind !== next.entry.contentKind ||
     previous.entry.event.seq !== next.entry.event.seq ||
     previous.entry.thought?.seq !== next.entry.thought?.seq ||
     previous.entry.thought?.message !== next.entry.thought?.message ||
@@ -2141,6 +2158,37 @@ export const AgentActivityCard = memo(function AgentActivityCard({
       before?.truncated === after?.truncated && before?.isError === after?.isError;
   });
 });
+
+function AgentExecutionCard({ entry }: { entry: AgentExecutionEntry }) {
+  const [now, setNow] = useState(Date.now());
+  const active = entry.state === "waiting" || entry.state === "processing";
+  useEffect(() => {
+    if (!active) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [active]);
+  const titles = {
+    waiting: "Agent 本轮开始", processing: "Agent 正在处理", completed: "Agent 本轮处理结束",
+    failed: "Agent 本轮执行失败", interrupted: "Agent 本轮已中断", incomplete: "Agent 本轮处理未完成"
+  };
+  const agent = entry.event.agent ?? entry.event.agentId;
+  const task = entry.updates.map(event => traceDataString(event, "assignedTask")).find(Boolean);
+  const reason = traceDataString(entry.event, "reason") || traceDataString(entry.event, "triggerReason");
+  const duration = Math.max(0, Math.round(((active ? now : Date.parse(entry.updatedAt)) - Date.parse(entry.event.ts)) / 1000));
+  return <article className={`trace-event trace-execution trace-${entry.state}`}>
+    <div className="trace-axis"><span><Activity size={16} /></span><i /></div>
+    <div className="trace-body">
+      <div className="trace-meta"><time>{formatClock(entry.event.ts)}</time><span>最近活动 {formatClock(entry.updatedAt)}</span>
+        {Number.isFinite(duration) && <span>{duration} 秒</span>}{agent && <AgentBadge role={agent} subtle />}</div>
+      <div className="trace-title-row"><strong>{titles[entry.state]}</strong></div>
+      {task && <p>{task}</p>}
+      {reason && <p>唤醒原因：{reason}</p>}
+      {entry.updates.length > 0 && <details className="trace-execution-details"><summary>本轮执行记录 · {entry.updates.length}</summary>
+        {entry.updates.map(event => <p key={event.seq}><time>{formatClock(event.ts)}</time> · {event.type}{event.message && ` · ${event.message}`}</p>)}
+      </details>}
+    </div>
+  </article>;
+}
 
 const EventCard = memo(function EventCard({ event, projectCycle }: { event: AgentEvent; projectCycle: number }) {
   const presentation = eventPresentation(event);
@@ -2625,7 +2673,7 @@ export const TraceView = memo(function TraceView({
                   projectCycle={project.cycle}
                   key={entry.id}
                 />
-              ) : (
+              ) : entry.kind === "execution" ? <AgentExecutionCard entry={entry} key={entry.id} /> : (
                 <EventCard
                   event={entry.event}
                   projectCycle={project.cycle}
@@ -2680,6 +2728,8 @@ function ArtifactViewer({
   loading,
   error,
   onClose,
+  onExpand,
+  expanded = false,
   onVariantChange
 }: {
   projectId: string;
@@ -2687,6 +2737,8 @@ function ArtifactViewer({
   loading: boolean;
   error: string;
   onClose?: () => void;
+  onExpand?: () => void;
+  expanded?: boolean;
   onVariantChange?: (artifact: Artifact) => void;
 }) {
   const [mode, setMode] = useState<"preview" | "source">("preview");
@@ -2787,6 +2839,7 @@ function ArtifactViewer({
             {copied ? <Check size={16} /> : <Clipboard size={16} />}
           </button>
           <button onClick={download} title="下载产物"><Download size={16} /></button>
+          {onExpand && <button onClick={onExpand} title={expanded ? "还原阅读" : "放大阅读"}><Maximize2 size={16} /></button>}
           {onClose && (
             <button onClick={onClose} title="关闭预览"><X size={17} /></button>
           )}
@@ -2799,11 +2852,12 @@ function ArtifactViewer({
               remarkPlugins={[remarkGfm, remarkMath]}
               rehypePlugins={[rehypeSanitize, rehypeKatex]}
               components={{
-                a: ({ children, ...props }) => (
-                  <a {...props} target="_blank" rel="noreferrer">
+                a: ({ children, href, title }) => (
+                  <a href={href ? artifactRelativeResourceUrl(projectId, artifact, href) : href} title={title} target="_blank" rel="noreferrer">
                     {children}
                   </a>
-                )
+                ),
+                img: ({ src, alt, title }) => <img src={src ? artifactRelativeResourceUrl(projectId, artifact, src) : src} alt={alt} title={title} />
               }}
             >
               {artifact.content}
@@ -2816,7 +2870,7 @@ function ArtifactViewer({
         ) : previewKind === "pdf" ? (
           <iframe title={artifact.name} src={resourceUrl} className="artifact-media-frame" />
         ) : previewKind === "html" ? (
-          <iframe title={artifact.name} src={resourceUrl} className="artifact-media-frame" sandbox="allow-same-origin" />
+          <iframe title={artifact.name} src={hasContent ? getArtifactHtmlPreviewUrl(projectId, artifact) : undefined} className="artifact-media-frame" />
         ) : previewKind === "audio" ? (
           <div className="artifact-media-preview"><audio controls src={resourceUrl} /></div>
         ) : previewKind === "video" ? (
@@ -2937,6 +2991,7 @@ function ArtifactsView({
     if (artifactPreviewKind(artifact) !== "markdown" &&
         artifactPreviewKind(artifact) !== "json" &&
         artifactPreviewKind(artifact) !== "csv" &&
+        artifactPreviewKind(artifact) !== "html" &&
         artifactPreviewKind(artifact) !== "text") {
       setContentError("");
       setSelected(artifact);
@@ -3163,6 +3218,7 @@ export function FinalResultsView({
   const selection = projectResultSelection(project);
   const items = displayItems(selection);
   const resultItemsKey = JSON.stringify(items);
+  const hasFiles = items.length > 0;
   const publishedFallback = !project.display && !!selection;
   const [expandedSections, setExpandedSections] = useState({
     summary: true,
@@ -3175,6 +3231,132 @@ export function FinalResultsView({
   const [selectedArtifact, setSelectedArtifact] = useState<Artifact | ArtifactContent>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [readingExpanded, setReadingExpanded] = useState(false);
+  const readerRef = useRef<HTMLDivElement>(null);
+  const readingSourceRef = useRef<string>();
+  readingSourceRef.current = selectedArtifact ? `${projectId}:${artifactKey(selectedArtifact)}` : undefined;
+  const readingTextRef = useRef(false);
+  readingTextRef.current = !!selectedArtifact && ["markdown", "json", "csv", "text"].includes(artifactPreviewKind(selectedArtifact));
+  const readingPositionRef = useRef<{
+    source?: string; outer: HTMLElement; document: HTMLElement; outerTop: number; documentTop: number;
+    offset: number; innerScrolls: boolean; height: number; text: boolean; closingOffset?: number;
+  }>();
+  const closeReading = () => {
+    const position = readingPositionRef.current;
+    const documentPanel = readerRef.current?.querySelector<HTMLElement>(".artifact-document");
+    if (position && documentPanel && readingTextRef.current) {
+      if (position.source !== readingSourceRef.current) {
+        Object.assign(position, { source: readingSourceRef.current, text: true, offset: 0,
+          documentTop: 0, innerScrolls: false, outerTop: 0 });
+      }
+      position.document = documentPanel;
+      position.closingOffset = documentPanel.scrollTop;
+    }
+    setReadingExpanded(false);
+  };
+  const toggleReading = () => {
+    if (readingExpanded) { closeReading(); return; }
+    const reader = readerRef.current;
+    const outer = reader?.closest<HTMLElement>(".final-results-view");
+    const documentPanel = reader?.querySelector<HTMLElement>(".artifact-document");
+    if (reader && outer && documentPanel) {
+      readingPositionRef.current = {
+        source: readingSourceRef.current, outer, document: documentPanel, outerTop: outer.scrollTop, documentTop: documentPanel.scrollTop,
+        offset: documentPanel.scrollTop + Math.max(0, outer.getBoundingClientRect().top - documentPanel.getBoundingClientRect().top),
+        innerScrolls: documentPanel.scrollHeight > documentPanel.clientHeight,
+        height: reader.closest("section")?.getBoundingClientRect().height ?? reader.getBoundingClientRect().height,
+        text: readingTextRef.current
+      };
+    }
+    setReadingExpanded(true);
+  };
+
+  useEffect(() => setReadingExpanded(false), [projectId, hasFiles]);
+
+  useEffect(() => {
+    if (!readingExpanded || !readerRef.current) return;
+    const reader = readerRef.current;
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    const inactiveElements: { element: HTMLElement; inert: boolean }[] = [];
+    for (let child: HTMLElement = reader; child.parentElement; child = child.parentElement) {
+      for (const sibling of child.parentElement.children) {
+        if (sibling !== child && sibling instanceof HTMLElement) {
+          inactiveElements.push({ element: sibling, inert: sibling.inert });
+          sibling.inert = true;
+        }
+      }
+      if (child.parentElement === document.body) break;
+    }
+    document.body.style.overflow = "hidden";
+    reader.focus({ preventScroll: true });
+    const position = readingPositionRef.current;
+    if (position?.text && position.source === readingSourceRef.current) position.document.scrollTop = position.offset;
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        closeReading();
+      } else if (event.key === "Tab") {
+        const controls = [...reader.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), iframe, [tabindex="0"]'
+        )].filter(element => !element.closest("[hidden]"));
+        const first = controls[0];
+        const last = controls.at(-1);
+        if (event.shiftKey && (document.activeElement === first || document.activeElement === reader)) {
+          event.preventDefault();
+          (last ?? reader).focus();
+        } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === reader)) {
+          event.preventDefault();
+          (first ?? reader).focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    const frameDocuments = new Set<Document>();
+    const onFrameKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") onKeyDown(event);
+      if (event.key !== "Tab" || event.shiftKey || event.defaultPrevented) return;
+      const frameDocument = event.currentTarget as Document;
+      const controls = [...frameDocument.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]')]
+        .filter(element => !element.closest("[hidden]"));
+      const readerControls = [...reader.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), iframe, [tabindex="0"]')];
+      if ((!controls.length || frameDocument.activeElement === controls.at(-1)) &&
+        frameDocument.defaultView?.frameElement === readerControls.at(-1)) {
+        event.preventDefault();
+        (readerControls[0] ?? reader).focus();
+      }
+    };
+    const bindFrame = (frame: HTMLIFrameElement) => {
+      const frameDocument = frame.contentDocument;
+      if (!frameDocument || frameDocuments.has(frameDocument)) return;
+      frameDocuments.add(frameDocument);
+      frameDocument.addEventListener("keydown", onFrameKeyDown);
+    };
+    const onFrameLoad = (event: Event) => {
+      if (event.target instanceof HTMLIFrameElement) bindFrame(event.target);
+    };
+    reader.querySelectorAll("iframe").forEach(bindFrame);
+    reader.addEventListener("load", onFrameLoad, true);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      reader.removeEventListener("load", onFrameLoad, true);
+      for (const frameDocument of frameDocuments) frameDocument.removeEventListener("keydown", onFrameKeyDown);
+      document.body.style.overflow = previousOverflow;
+      for (const { element, inert } of inactiveElements) element.inert = inert;
+      const returnFocus = previousFocus instanceof HTMLElement && previousFocus.isConnected
+        ? previousFocus : reader.querySelector<HTMLButtonElement>('[title="放大阅读"]');
+      returnFocus?.focus({ preventScroll: true });
+      if (position) {
+        const sameText = position.text && position.source === readingSourceRef.current;
+        const offset = position.closingOffset ?? position.offset;
+        if (sameText) position.document.scrollTop = position.innerScrolls ? offset : position.documentTop;
+        const documentStart = position.outer.scrollTop + position.document.getBoundingClientRect().top - position.outer.getBoundingClientRect().top;
+        position.outer.scrollTop = sameText && !position.innerScrolls && offset !== position.offset
+          ? documentStart + offset : position.outerTop;
+      }
+    };
+  }, [readingExpanded]);
 
   useEffect(() => {
     setSelectedItem(current => items.find(item => item.agent === current?.agent && item.path === current.path &&
@@ -3192,7 +3374,7 @@ export function FinalResultsView({
     if (!selectedItem) return;
     const artifact = displayItemArtifact(selectedItem);
     const previewKind = artifactPreviewKind(artifact);
-    if (!["markdown", "json", "csv", "text"].includes(previewKind)) {
+    if (!["markdown", "json", "csv", "html", "text"].includes(previewKind)) {
       setSelectedArtifact(artifact);
       return;
     }
@@ -3210,15 +3392,18 @@ export function FinalResultsView({
     return () => {
       active = false;
     };
-  }, [
-    projectId,
-    selectedItem?.agent,
-    selectedItem?.path,
-    selectedItem?.artifactId,
-    selectedItem?.commitSha
-  ]);
+  }, [projectId, selectedItem]);
 
-  const handoff = project.latestHandoff ?? acceptedGitHandoff(project);
+  const lastCompletedNode = project.git?.enabled && project.status === "completed"
+    ? (project.nodeRuns ?? []).filter(node => node.status === "completed" && Number.isFinite(Date.parse(node.completedAt ?? "")))
+      .sort((left, right) => Date.parse(right.completedAt!) - Date.parse(left.completedAt!))[0]
+    : undefined;
+  const finalMainNode = lastCompletedNode?.node.kind === "agent" && lastCompletedNode.node.agentId === SYSTEM_CONTROLLER_AGENT
+    ? lastCompletedNode : undefined;
+  const mainOutput = finalMainNode?.output;
+  const handoff = typeof mainOutput === "string" && mainOutput.trim() && finalMainNode?.completedAt
+    ? { agent: SYSTEM_CONTROLLER_AGENT, markdown: mainOutput, excerpt: mainOutput.replace(/\s+/g, " ").trim().slice(0, 240), updatedAt: finalMainNode.completedAt }
+    : project.latestHandoff ?? acceptedGitHandoff(project);
   const hasResult = Boolean(handoff || items.length || project.displayError);
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections((current) => ({
@@ -3307,7 +3492,8 @@ export function FinalResultsView({
           {publishedFallback && <p className="final-result-warning" role="status">尚未指定最终展示清单，以下显示项目已发布的成果文件。</p>}
 
           {items.length > 0 && (
-            <section className={`final-result-files ${expandedSections.files ? "expanded" : "collapsed"}`}>
+            <section className={`final-result-files ${expandedSections.files ? "expanded" : "collapsed"}`}
+              style={readingExpanded ? { minHeight: readingPositionRef.current?.height } : undefined}>
               <button
                 type="button"
                 className="final-result-section-head final-result-section-toggle"
@@ -3322,14 +3508,20 @@ export function FinalResultsView({
                 <small>{items.length} 个{publishedFallback ? "已发布成果" : "最终结果"}文件</small>
               </button>
               {expandedSections.files && (
-                <div className="final-result-section-body final-result-files-body">
+                <div ref={readerRef} className={`final-result-section-body final-result-files-body${readingExpanded ? " is-expanded-reader" : ""}`}
+                  role={readingExpanded ? "dialog" : undefined} aria-modal={readingExpanded ? true : undefined}
+                  aria-label={readingExpanded ? "最终结果放大阅读" : undefined} tabIndex={readingExpanded ? -1 : undefined}>
+                  {readingExpanded && <div className="final-result-reader-head">
+                    <strong>最终结果</strong>
+                    <button type="button" className="button" onClick={closeReading} aria-label="关闭放大阅读"><X size={17} />关闭</button>
+                  </div>}
                   <div className="final-result-file-tabs" role="tablist" aria-label="最终结果文件">
                     {items.map((item, index) => (
                       <button
                         type="button"
                         key={item.artifactId ?? `${item.agent}:${item.path}`}
                         className={(selectedItem?.artifactId ?? `${selectedItem?.agent}:${selectedItem?.path}`) === (item.artifactId ?? `${item.agent}:${item.path}`) ? "active" : ""}
-                        onClick={() => setSelectedItem(item)}
+                        onClick={() => setSelectedItem({ ...item })}
                         role="tab"
                         aria-selected={(selectedItem?.artifactId ?? `${selectedItem?.agent}:${selectedItem?.path}`) === (item.artifactId ?? `${item.agent}:${item.path}`)}
                       >
@@ -3343,6 +3535,8 @@ export function FinalResultsView({
                     artifact={selectedArtifact}
                     loading={loading}
                     error={error}
+                    onExpand={toggleReading}
+                    expanded={readingExpanded}
                   />
                 </div>
               )}
@@ -4741,6 +4935,11 @@ export function WorkspacePage({
     [project, timelineEvents]
   );
   const totalEventCount = eventStream.totalEvents ?? events.length;
+  const workflowAdjustmentEventRevision = useMemo(() => events.reduce((latest, event) => {
+    const source = typeof event.data?.sourceType === "string" ? event.data.sourceType : event.type;
+    return source.startsWith("workflow.adjustment.") || event.type === "workflow.reconfigured"
+      ? Math.max(latest, event.seq) : latest;
+  }, 0), [events]);
   const recentOperationalEvents = useMemo(
     () => events.slice(-DEFAULT_TRACE_DISPLAY_LIMIT),
     [events]
@@ -4957,8 +5156,7 @@ export function WorkspacePage({
     setArtifactOffset(0);
     setArtifactHasMore(false);
     void loadProject();
-    void loadArtifactSummary();
-  }, [loadArtifactSummary, loadProject]);
+  }, [loadProject]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -4996,9 +5194,9 @@ export function WorkspacePage({
   // Refresh the open browser as well, including files written between events.
   const publishedArtifactKey = JSON.stringify(project?.artifacts ?? []);
   useEffect(() => {
-    if (publishedArtifactKeyRef.current !== undefined && publishedArtifactKeyRef.current !== publishedArtifactKey) scheduleArtifactSummaryRefresh();
+    if (tab === "artifacts" && publishedArtifactKeyRef.current !== undefined && publishedArtifactKeyRef.current !== publishedArtifactKey) scheduleArtifactSummaryRefresh();
     publishedArtifactKeyRef.current = publishedArtifactKey;
-  }, [publishedArtifactKey, scheduleArtifactSummaryRefresh]);
+  }, [publishedArtifactKey, scheduleArtifactSummaryRefresh, tab]);
   useEffect(() => {
     if (tab !== "artifacts") return;
     void loadArtifactSummary();
@@ -5062,13 +5260,13 @@ export function WorkspacePage({
     if (unseen.some(isProjectSnapshotRefreshEvent)) {
       scheduleProjectRefresh();
     }
-    if (unseen.some((event) => {
+    if (tab === "artifacts" && unseen.some((event) => {
       const type = event.type.toLowerCase();
       return type.includes("artifact") || type.includes("file");
     })) {
       scheduleArtifactSummaryRefresh();
     }
-  }, [events, scheduleArtifactSummaryRefresh, scheduleProjectRefresh]);
+  }, [events, scheduleArtifactSummaryRefresh, scheduleProjectRefresh, tab]);
 
   useEffect(() => {
     processedEventSeqRef.current = 0;
@@ -5314,7 +5512,7 @@ export function WorkspacePage({
             <h1>{project.title}</h1>
             <span>
               <StatusBadge status={project.status} phase={project.phase} runtime={project.runtime} />
-              <small>更新于 {formatRelativeTime(project.updatedAt)}</small>
+              <small title="项目资料和运行统计的最近更新时间">记录更新于 {formatRelativeTime(project.updatedAt)}</small>
               <code>{project.id}</code>
             </span>
           </div>
@@ -5407,7 +5605,7 @@ export function WorkspacePage({
           </span>
           {project.runtime?.primaryActivity && (
             <span title={project.runtime.primaryActivity.invocationId}>
-              <small>活动调用</small>
+              <small>{["running", "pausing", "interrupting", "cancelling"].includes(project.status) ? "活动调用" : "保留调用"}</small>
               <strong>
                 {project.runtime.primaryActivity.invocationId.slice(0, 12)}
                 {project.runtime.activityStartedAt
@@ -5593,6 +5791,7 @@ export function WorkspacePage({
         </section>
       )}
 
+      <ProjectServiceFailureNotice project={project} />
       <ProjectAuthorizationNotice project={project} />
       {mainRecoveryRequired && (
         <section
@@ -5862,7 +6061,9 @@ export function WorkspacePage({
           )}
         </section>
 
-        <AgentCallGraph project={project} events={timelineEvents} harnesses={workflowHarnessCatalog} runtime={workflowRuntime} />
+        <AgentCallGraph project={project} events={timelineEvents} harnesses={workflowHarnessCatalog} runtime={workflowRuntime}
+          hasOlder={eventStream.timelineHasOlder} historyLoading={eventStream.timelineHistoryLoading}
+          historyError={eventStream.timelineHistoryError} onLoadOlder={eventStream.loadOlderTimeline} />
 
         <ContextPanel
           project={performanceProject}
@@ -5915,7 +6116,7 @@ export function WorkspacePage({
           onApply={applyAgentConfigs}
         />
       )}
-      {workflowAdjustmentOpen && <WorkflowAdjustmentEditor key={project.id} project={project} eventRevision={totalEventCount} gateways={recommendationGateways}
+      {workflowAdjustmentOpen && <WorkflowAdjustmentEditor key={project.id} project={project} eventRevision={workflowAdjustmentEventRevision} gateways={recommendationGateways}
         harnesses={workflowHarnessCatalog} skills={skillOptions} mcpDirectory={mcpDirectory} onAddSkill={addSkillCandidate} onClose={() => setWorkflowAdjustmentOpen(false)} />}
       {groupEditorOpen && project.git?.enabled && (
         <CollaborationGroupEditor

@@ -189,10 +189,13 @@ describe("scoped Agent PR delivery integration", () => {
     const report = database.scopedAgentReport(input.projectId, input.executionId, input.ownershipEpoch)!;
     database.bindScopedAgentReportHead({ ...input, headSha: SOURCE });
     const integrator = new ScopedAgentDeliveryIntegrator(database, git, { agentOwnsGit: true });
-    await expect(integrator.integrate(input)).rejects.toThrow(/explicitly call github_create_pr/);
+    expect(await integrator.integrate(input)).toMatchObject({ status: "completed", completion: {
+      execution: { status: "completed" }, route: { kind: "activate", activation: { targetNodeId: "G_next" } }
+    } });
+    expect(database.projectState(input.projectId).scopedAgentMerges).toEqual([]);
     expect(git.createPullRequest).not.toHaveBeenCalled();
     expect(git.mergePullRequest).not.toHaveBeenCalled();
-    expect(database.scopedExecution(input.projectId, worker.id)?.status).toBe("integrating");
+    expect(database.scopedExecution(input.projectId, worker.id)?.status).toBe("completed");
     expect(report.headSha).toBeUndefined();
   });
 

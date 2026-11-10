@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_AGENT_ORCHESTRATION, DEFAULT_AGENTS } from "../../lib";
+import { DEFAULT_RESEARCH_WORKFLOW, defaultResearchAgents } from "../../default-research-preset";
 import type { AgentEvent, Project } from "../../types";
 import { adaptWorkflowToCanvas } from "./core/canvas-adapter";
 import { addScopedGroup, upgradeLegacyGroups } from "./core/scoped-workflow";
@@ -432,10 +433,10 @@ describe("live workflow canvas", () => {
       workflow.input.edges.push({ kind: "parallel", target: "new-ref" });
       workflow.routes["new-ref"] = [{ target: "finish", kind: "strong" }];
       push("research"); await tick();
-      expect(card("input").style.left).toBe("120px"); // Main supersedes a local drag.
       expect(card("input")).toHaveClass("is-runtime-moving");
       expect(card("new-ref")).toHaveClass("is-runtime-added");
       expect(doc.querySelector('path.workflow-edge[data-source="input"][data-target="new-ref"]')).toHaveClass("is-runtime-added");
+      await vi.waitFor(() => expect(card("input").style.left).toBe("120px"), { timeout: 2000, interval: 30 });
       // Main can remove a node during a gesture without leaving a dangling route.
       card("new-ref").dispatchEvent(new win.MouseEvent("mousedown", { bubbles: true, button: 0, clientX: 300, clientY: 200 }));
       workflow.nodes = workflow.nodes.filter((node) => node.nodeId !== "new-ref");
@@ -446,6 +447,35 @@ describe("live workflow canvas", () => {
       win.dispatchEvent(new win.MouseEvent("mouseup", { clientX: 400, clientY: 400 }));
       expect(doc.querySelector('[data-node="new-ref"]')).toBeNull();
       expect(doc.querySelector('path[data-target="new-ref"], path[data-source="new-ref"]')).toBeNull();
+    } finally { win.close(); }
+  });
+
+  it("preserves a node's arrival animation across playback pause and clears it on completion", async () => {
+    const { JSDOM } = createRequire(import.meta.url)("jsdom");
+    const read = (file: string) => readFileSync(resolve(process.cwd(), "public/workflow-canvas-demo", file), "utf8");
+    const dom = new JSDOM(read("index.html"), { url: "http://localhost/workflow-canvas-demo/index.html?runtime=1&project=live-topic", runScripts: "outside-only", pretendToBeVisual: true });
+    const win = dom.window;
+    try {
+      Object.defineProperty(win.HTMLElement.prototype, "offsetWidth", { configurable: true, get() { return 194; } });
+      Object.defineProperty(win.HTMLElement.prototype, "offsetHeight", { configurable: true, get() { return 110; } });
+      win.eval(read("runtime-bootstrap.js")); win.eval(read("app.js")); win.eval(read("runtime.js"));
+      const snapshot = { ...structuredClone(buildLiveCanvasSnapshot(propsFor())), playback: { index: 0, playing: true, reset: true, revision: 1 } };
+      const push = () => win.dispatchEvent(new win.MessageEvent("message", { origin: win.location.origin, source: win.parent,
+        data: { type: "scienceevolve.workflow.runtime.snapshot", snapshot } }));
+      push();
+      snapshot.workflow.nodes.push({ ...snapshot.workflow.nodes.find(node => node.id === "writing")!, id: "new-node", name: "New Agent", x: 1000 });
+      snapshot.nodeStates["new-node"] = "waiting"; snapshot.nodeLabels["new-node"] = "等待";
+      snapshot.playback = { index: 1, playing: true, reset: false, revision: 2 }; push();
+      const card = win.document.querySelector('[data-node="new-node"]')!;
+      expect(card).toHaveClass("is-runtime-added");
+      snapshot.playback.playing = false; push();
+      expect(card).toHaveClass("is-runtime-added");
+      expect(win.document.documentElement).toHaveClass("runtime-playback-paused");
+      const completed = new win.Event("animationend", { bubbles: true });
+      Object.defineProperty(completed, "animationName", { value: "demo-node-arrive" }); card.dispatchEvent(completed);
+      expect(card).not.toHaveClass("is-runtime-added");
+      snapshot.playback.playing = true; push();
+      expect(card).not.toHaveClass("is-runtime-added");
     } finally { win.close(); }
   });
 
@@ -477,6 +507,61 @@ describe("live workflow canvas", () => {
         expect(particle).toHaveClass("is-related-flow");
         expect(particle).toHaveClass(path.dataset.source === "writing" ? "is-outgoing-flow" : "is-incoming-flow");
       }
+    } finally { win.close(); }
+  });
+
+  it.each(["ASCII", "中文"])("animates every highlighted edge of a selected node's %s Loop in the runtime page", async names => {
+    const { JSDOM } = createRequire(import.meta.url)("jsdom");
+    const read = (file: string) => readFileSync(resolve(process.cwd(), "public/workflow-canvas-demo", file), "utf8");
+    const dom = new JSDOM(read("index.html"), { url: "http://localhost/workflow-canvas-demo/index.html?runtime=1&project=live-topic", runScripts: "outside-only", pretendToBeVisual: true });
+    const win = dom.window;
+    try {
+      Object.defineProperty(win.HTMLElement.prototype, "offsetWidth", { configurable: true, get() { return 194; } });
+      Object.defineProperty(win.HTMLElement.prototype, "offsetHeight", { configurable: true, get() { return 110; } });
+      win.eval(read("runtime-bootstrap.js")); win.eval(read("app.js")); win.eval(read("runtime.js"));
+      const p = structuredClone(project);
+      p.orchestration.routes.idea = [{ target: "execution", kind: "strong" }];
+      p.orchestration.routes.execution = [{ target: "writing", kind: "strong" }];
+      p.orchestration.routes.writing = [{ target: "idea", kind: "strong" }];
+      p.orchestration.loops = [{ id: "evidence", from: "writing", to: "idea", maxIterations: 2, exitTo: "review" }];
+      if (names === "中文") {
+        p.orchestration = structuredClone(DEFAULT_RESEARCH_WORKFLOW);
+        p.agents = defaultResearchAgents();
+        p.currentAgent = "证据复核员";
+      }
+      const loop = p.orchestration.loops![0]!;
+      const originalLoops = structuredClone(p.orchestration.loops);
+      const snapshot = structuredClone(buildLiveCanvasSnapshot(propsFor(p, [])));
+      snapshot.selectedNodeId = loop.to;
+      snapshot.workflow.edges.forEach(edge => { edge.runtimeState = "configured"; });
+      win.dispatchEvent(new win.MessageEvent("message", { origin: win.location.origin, source: win.parent,
+        data: { type: "scienceevolve.workflow.runtime.snapshot", snapshot } }));
+      await new Promise(resolve => setTimeout(resolve, 60));
+      const loopEdges = snapshot.workflow.edges.filter(edge => edge.loop?.id === loop.id);
+      expect(loopEdges).toHaveLength(names === "中文" ? 3 : 4);
+      const paths = Array.from(win.document.querySelectorAll("path.workflow-edge")) as SVGPathElement[];
+      expect(new Set(paths.map(path => path.id)).size).toBe(paths.length);
+      for (const edge of loopEdges) {
+        const path = win.document.querySelector(`path.workflow-edge[data-edge="${edge.id}"]`);
+        expect(path).toHaveClass("is-related-highlight");
+        const particle = (Array.from(win.document.querySelectorAll(".flow-particle")) as SVGGElement[]).find(item => item.dataset.flowEdge === edge.id);
+        expect(particle).toBeDefined();
+        expect(particle!.querySelector("mpath")).toHaveAttribute("href", `#${path!.id}`);
+        expect(win.document.getElementById(particle!.querySelector("mpath")!.getAttribute("href")!.slice(1))).toBe(path);
+      }
+      const exit = loopEdges.find(edge => edge.loop?.role === "exit")!;
+      const hit = win.document.querySelector(`[data-edge-hit="${exit.id}"]`)!;
+      hit.dispatchEvent(new win.MouseEvent("mousedown", { bubbles: true, button: 0 }));
+      await new Promise(resolve => win.requestAnimationFrame(resolve));
+      for (const edge of loopEdges) {
+        expect(win.document.querySelector(`path.workflow-edge[data-edge="${edge.id}"]`)).toHaveClass("is-selected");
+      }
+      const originalParticle = win.document.querySelector(`[data-flow-edge="${exit.id}"]`);
+      win.dispatchEvent(new win.MessageEvent("message", { origin: win.location.origin, source: win.parent,
+        data: { type: "scienceevolve.workflow.runtime.snapshot", snapshot } }));
+      await new Promise(resolve => setTimeout(resolve, 60));
+      expect(win.document.querySelector(`[data-flow-edge="${exit.id}"]`)).toBe(originalParticle);
+      expect(p.orchestration.loops).toEqual(originalLoops);
     } finally { win.close(); }
   });
 

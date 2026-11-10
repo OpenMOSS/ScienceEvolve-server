@@ -46,7 +46,8 @@ import {
   updateSavedResearchTask,
   updateAgentConfigPreset
 } from "../api";
-import { AgentIcon, Button, ErrorPanel } from "../components/Common";
+import { AgentIcon, Button, ErrorPanel, PageLoader } from "../components/Common";
+import { DEFAULT_RESEARCH_WORKFLOW, defaultResearchAgents } from "../default-research-preset";
 import { CreateSkillDialog } from "../components/CreateSkillDialog";
 import { ConfigRecommendation } from "../components/ConfigRecommendation";
 import { useExplainerDraftBridge } from "../components/ProjectExplainerAssistant";
@@ -76,7 +77,6 @@ import {
   orchestrationWithoutGit,
   constrainAgentConfigToHarness,
   createBlankWorkflow,
-  DEFAULT_AGENT_ORCHESTRATION,
   DEFAULT_AGENTS,
   DEFAULT_MODELS,
   gatewayCombinationTestState,
@@ -199,7 +199,6 @@ function AgentConfigCard({
   const testedModelOptions = selectedGateway
     ? gatewayModelTestOptions(selectedGateway, selectedHarnessId, harnesses)
     : [];
-  const failedModelOptions = testedModelOptions.filter((option) => option.test.status === "failed");
   const nativeProtocol = selectedHarness?.nativeProtocol;
   const combinationTest = selectedGateway && config.model.trim() && selectedGateway.models.includes(config.model)
     ? gatewayCombinationTestState(
@@ -311,11 +310,6 @@ function AgentConfigCard({
             </select>
             <ChevronDown size={15} />
           </div>
-          {selectedHarness && !selectedHarness.available && (
-            <small className="field-error harness-availability-error" role="alert">
-              {selectedHarness.availabilityReason ?? "服务端未找到该 Harness 的可执行入口"}
-            </small>
-          )}
         </label>
         <label className="field">
           <span><Globe2 size={14} />全局网关</span>
@@ -344,13 +338,6 @@ function AgentConfigCard({
             <strong>{selectedGateway ? protocolLabel(selectedGateway.protocol) : "选择网关后显示"}</strong>
             <small>{selectedGateway && nativeProtocol && nativeProtocol !== selectedGateway.protocol ? `自动路由：${protocolLabel(nativeProtocol)} → ${protocolLabel(selectedGateway.protocol)}` : selectedGateway && nativeProtocol ? "直连" : selectedGateway ? "Harness 目录待确认" : "尚未推导"}</small>
           </div>
-          {combinationTest?.status !== undefined && combinationTest.status !== "passed" && (
-            <small className="field-error gateway-combination-error" role="alert">
-              {combinationTest.status === "failed"
-                ? `当前 Harness / 网关 / model 组合验证失败${combinationTest.error ? `：${combinationTest.error}` : ""}；仍可启动，但运行可能失败。`
-                : "当前 Harness / 网关 / model 组合尚未验证；仍可启动，但运行可能失败。"}
-            </small>
-          )}
           {connectionTestError && <small className="field-error gateway-combination-error" role="alert">连通性测试失败：{connectionTestError}</small>}
         </div>
         <label className="field">
@@ -424,11 +411,6 @@ function AgentConfigCard({
             )}
             <ChevronDown size={15} />
           </div>
-          {failedModelOptions.length > 0 && (
-            <small className="field-error gateway-disabled-models">
-              以下 model 验证失败，仍可选择并启动：{failedModelOptions.map(({ model, test }) => `${model}${test.error ? `（${test.error}）` : ""}`).join("；")}
-            </small>
-          )}
         </label>
         {(reasoningOptions.length > 0 || config.gatewayReasoningOption) && <label className="field">
           <span>
@@ -719,11 +701,11 @@ export function NewProjectPage({
   const projectFileInputRef = useRef<HTMLInputElement>(null);
   const projectFolderInputRef = useRef<HTMLInputElement | null>(null);
   const [agents, setAgents] = useState<AgentsConfig>(() =>
-    cloneAgentsConfig(cachedTask?.agents ?? DEFAULT_AGENTS)
+    cloneAgentsConfig(cachedTask?.agents ?? defaultResearchAgents())
   );
   const [orchestration, setOrchestration] =
     useState<AgentOrchestrationTemplate>(() =>
-      cloneAgentOrchestration(cachedTask?.orchestration ?? DEFAULT_AGENT_ORCHESTRATION)
+      cloneAgentOrchestration(cachedTask?.orchestration ?? DEFAULT_RESEARCH_WORKFLOW)
     );
   const [skillDefinitions, setSkillDefinitions] = useState<ProjectSkillDefinitions>(() => structuredClone(cachedTask?.skillDefinitions ?? {}));
   const [mcpDefinitions, setMcpDefinitions] = useState<ProjectMcpDefinitions>(() => structuredClone(cachedTask?.mcpDefinitions ?? {}));
@@ -766,6 +748,7 @@ export function NewProjectPage({
   }, [editingTask]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [startRequested, setStartRequested] = useState(false);
   const [touched, setTouched] = useState(false);
   const [canvasEditorOpen, setCanvasEditorOpen] = useState(false);
   const [gitEnabled, setGitEnabled] = useState(cachedTask?.git?.enabled ?? false);
@@ -795,7 +778,7 @@ export function NewProjectPage({
 
   useEffect(() => {
     let mounted = true;
-    const beforeRefresh = JSON.stringify(latestLoadingDraft.current);
+    const beforeRefresh = latestLoadingDraft.current;
     let currentCatalog: Catalog | undefined;
     void Promise.allSettled([
       getCatalog().then(catalog => { currentCatalog = catalog; return catalog; }),
@@ -805,23 +788,28 @@ export function NewProjectPage({
         // The selected draft is usable independently of slower resource and
         // account directories. Later responses must not reset manual edits.
         setEditingTask(task);
-        if (cachedTask && JSON.stringify(latestLoadingDraft.current) !== beforeRefresh) {
+        const unchanged = (key: keyof typeof beforeRefresh) => !cachedTask ||
+          JSON.stringify(latestLoadingDraft.current[key]) === JSON.stringify(beforeRefresh[key]);
+        if (Object.keys(beforeRefresh).some(key => !unchanged(key as keyof typeof beforeRefresh)))
           setSaveTaskNotice("已保留你在后台刷新期间的草稿编辑。");
-          return task;
+        if (unchanged("title")) { setTitle(task.title); setWorkflowName(task.title); }
+        if (unchanged("requirement")) setRequirement(task.requirement);
+        // The graph and its Agent/resource references form one configuration.
+        // Unrelated title/account edits must not prevent its revalidation.
+        if (["agents", "orchestration", "skillDefinitions", "mcpDefinitions"].every(key => unchanged(key as keyof typeof beforeRefresh))) {
+          setAgents(currentCatalog
+            ? applyCatalogDefaultHarness(cloneAgentsConfig(task.agents), currentCatalog.harnesses ?? [], currentCatalog.defaultHarnessId)
+            : cloneAgentsConfig(task.agents));
+          applyAssistantWorkflow(task.orchestration, false);
+          setSkillDefinitions(structuredClone(task.skillDefinitions ?? {}));
+          setMcpDefinitions(structuredClone(task.mcpDefinitions ?? {}));
         }
-        setTitle(task.title);
-        setWorkflowName(task.title);
-        setRequirement(task.requirement);
-        setAgents(currentCatalog
-          ? applyCatalogDefaultHarness(cloneAgentsConfig(task.agents), currentCatalog.harnesses ?? [], currentCatalog.defaultHarnessId)
-          : cloneAgentsConfig(task.agents));
-        applyAssistantWorkflow(task.orchestration, false);
-        setSkillDefinitions(structuredClone(task.skillDefinitions ?? {}));
-        setMcpDefinitions(structuredClone(task.mcpDefinitions ?? {}));
-        setGitEnabled(task.git?.enabled ?? false);
-        setGithubAccountId(task.git?.enabled ? task.git.accountId : undefined);
-        setGitRepositoryName(task.git?.enabled ? task.git.repositoryName ?? "" : "");
-        setGitRepositoryVisibility(task.git?.enabled ? task.git.repositoryVisibility ?? "private" : "private");
+        if (unchanged("git")) {
+          setGitEnabled(task.git?.enabled ?? false);
+          setGithubAccountId(task.git?.enabled ? task.git.accountId : undefined);
+          setGitRepositoryName(task.git?.enabled ? task.git.repositoryName ?? "" : "");
+          setGitRepositoryVisibility(task.git?.enabled ? task.git.repositoryVisibility ?? "private" : "private");
+        }
         setSelectedPresetId("saved-task");
         setSavedTaskLoadError("");
         return task;
@@ -1030,7 +1018,7 @@ export function NewProjectPage({
       return;
     }
     const preset = configPresets.find((item) => item.id === presetId);
-    const presetAgents = cloneAgentsConfig(preset?.agents ?? DEFAULT_AGENTS);
+    const presetAgents = cloneAgentsConfig(preset?.agents ?? defaultResearchAgents());
     setAgents(presetId === "default"
       ? applyCatalogDefaultGateway(
           applyCatalogDefaultHarness(presetAgents, harnesses, defaultHarnessId),
@@ -1040,7 +1028,7 @@ export function NewProjectPage({
       : applyCatalogDefaultHarness(presetAgents, harnesses, defaultHarnessId));
     setOrchestration(
       cloneAgentOrchestration(
-        preset?.orchestration ?? DEFAULT_AGENT_ORCHESTRATION
+        preset?.orchestration ?? DEFAULT_RESEARCH_WORKFLOW
       )
     );
     setSkillDefinitions(structuredClone(preset?.skillDefinitions ?? {}));
@@ -1100,19 +1088,19 @@ export function NewProjectPage({
   const agentsValid = orchestration.agents.every(
     (definition) => agents[definition.name]?.model.trim()
   );
-  const runtimeConfigErrors = agentRuntimeConfigurationErrors(
+  const runtimeConfigErrors = runtimeCatalogState === "ready" ? agentRuntimeConfigurationErrors(
     orchestration,
     agents,
     gateways,
     harnesses,
     runtimeCatalogState === "ready"
-  );
-  const runtimeConfigWarnings = agentRuntimeConfigurationWarnings(
+  ) : [];
+  const runtimeConfigWarnings = runtimeCatalogState === "ready" ? agentRuntimeConfigurationWarnings(
     orchestration,
     agents,
     gateways,
     harnesses
-  );
+  ) : [];
   const orchestrationError = agentOrchestrationError(orchestration, gitEnabled);
   const projectReferenceError = useMemo(() => {
     for (const definition of orchestration.agents) {
@@ -1138,31 +1126,34 @@ export function NewProjectPage({
   const repositoryConfigurationReady = !gitEnabled || !repositoryNameError;
   const canSaveDraft = titleValid && requirementValid && agentsValid && collaborationGitReady &&
     repositoryConfigurationReady && !projectReferenceError;
-  const runtimeCatalogBlocker = runtimeCatalogState === "ready"
+  const runtimeCatalogNotice = runtimeCatalogState === "ready"
     ? catalogDefaultHarnessId(harnesses, defaultHarnessId)
       ? gateways.length > 0
         ? ""
         : "运行目录已加载，但服务端没有可用的全局网关。"
       : "运行目录已加载，但服务端没有可用的 Workflow Harness。"
     : runtimeCatalogState === "loading"
-      ? "运行目录仍在加载，暂不能启动项目。"
+      ? "运行目录仍在加载，本地配置尚未完成检查。"
       : runtimeCatalogState === "invalid"
-        ? `运行目录尚未就绪，暂不能启动项目：${runtimeCatalogError}`
-        : `运行目录加载失败，暂不能启动项目：${runtimeCatalogError}`;
+        ? `运行目录尚未就绪：${runtimeCatalogError}`
+        : `运行目录加载失败：${runtimeCatalogError}`;
   const startValidationErrors = [...new Set([
     savedTaskLoadError && `已保存任务加载失败：${savedTaskLoadError}`,
     !titleValid && "请输入项目名称",
     !requirementValid && "课题方向与具体要求至少需要 10 个字符",
-    runtimeCatalogBlocker,
-    orchestrationError && `Workflow：${orchestrationError}`,
     projectReferenceError,
-    !collaborationGitReady && "当前 Workflow 包含协作组，请先启用 Git 机制",
-    !githubAccountReady && "请选择一个授权正常的 GitHub 账号",
     repositoryNameError && `Git 仓库名称：${repositoryNameError}`,
     inputBusy && "课题附件正在上传或读取，请等待完成后再次启动",
     inputError && `课题附件：${inputError}`,
-    ...orchestration.agents.filter(definition => !agents[definition.name]?.model.trim()).map(definition => `${definition.name} 尚未选择模型`),
-    ...runtimeConfigErrors
+    ...orchestration.agents.filter(definition => !agents[definition.name]?.model.trim()).map(definition => `${definition.name} 尚未选择模型`)
+  ].filter((message): message is string => Boolean(message)))];
+  const startNotices = [...new Set([
+    runtimeCatalogNotice,
+    orchestrationError && `Workflow：${orchestrationError}`,
+    !collaborationGitReady && "当前 Workflow 包含协作组，请先启用 Git 机制",
+    gitEnabled && githubAccountsLoading ? "GitHub 账号目录仍在加载。" : !githubAccountReady && "请选择一个授权正常的 GitHub 账号",
+    ...runtimeConfigErrors,
+    ...runtimeConfigWarnings
   ].filter((message): message is string => Boolean(message)))];
   const requirementLength = requirement.trim().length;
 
@@ -1424,16 +1415,18 @@ export function NewProjectPage({
     });
   };
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
+  const submit = async (event?: FormEvent, force = false) => {
+    event?.preventDefault();
     if (submitting || savingTask || savingConfig) return;
     setTouched(true);
     if (startValidationErrors.length) {
       setSubmitError(`启动前检查未通过：${startValidationErrors.join("；")}`);
       return;
     }
-    setSubmitting(true);
     setSubmitError("");
+    if (!force && startNotices.length) { setStartRequested(true); return; }
+    setStartRequested(false);
+    setSubmitting(true);
     try {
       if (inputFiles.length) {
         if (inputFiles.length > 1000) throw new Error("最多上传 1000 个文件");
@@ -1749,7 +1742,7 @@ export function NewProjectPage({
       if (selectedPresetId === id) {
         const fallback = remaining.find((item) => item.id === "default") ?? remaining[0];
         setSelectedPresetId(fallback?.id ?? "default");
-        const fallbackAgents = cloneAgentsConfig(fallback?.agents ?? DEFAULT_AGENTS);
+        const fallbackAgents = cloneAgentsConfig(fallback?.agents ?? defaultResearchAgents());
         setAgents(fallback?.id === "default"
           ? applyCatalogDefaultGateway(
               applyCatalogDefaultHarness(fallbackAgents, harnesses, defaultHarnessId),
@@ -1757,7 +1750,7 @@ export function NewProjectPage({
               gateways
             )
           : applyCatalogDefaultHarness(fallbackAgents, harnesses, defaultHarnessId));
-        setOrchestration(cloneAgentOrchestration(fallback?.orchestration ?? DEFAULT_AGENT_ORCHESTRATION));
+        setOrchestration(cloneAgentOrchestration(fallback?.orchestration ?? DEFAULT_RESEARCH_WORKFLOW));
         setSkillDefinitions(structuredClone(fallback?.skillDefinitions ?? {}));
         setMcpDefinitions(structuredClone(fallback?.mcpDefinitions ?? {}));
         setWorkflowName(fallback?.name ?? "未命名流程");
@@ -1793,7 +1786,7 @@ export function NewProjectPage({
     onBack();
   };
 
-  const assistant = useExplainerDraftBridge({ active: active && !skillsLoading && !submitting && !savedTaskLoadError,
+  const assistant = useExplainerDraftBridge({ active: active && !skillsLoading && !submitting && !savedTaskLoadError && (!savedTaskId || Boolean(editingTask)),
     key: savedTaskId ?? "new", taskId: editingTask?.id,
     draft: { title, requirement, agents, orchestration, git: { enabled: gitEnabled, ...(gitEnabled ? { provider: "github" as const,
       accountId: githubAccountId, repositoryName: gitRepositoryName, repositoryVisibility: gitRepositoryVisibility } : {}) },
@@ -1812,6 +1805,9 @@ export function NewProjectPage({
       else setEditingTask(undefined);
     }
   });
+
+  if (savedTaskId && !editingTask && !taskDeleted && !savedTaskLoadError)
+    return <PageLoader label="正在读取草稿 Workflow…" />;
 
   return (
     <main className="new-project-page">
@@ -2047,12 +2043,6 @@ export function NewProjectPage({
                 structureId={workflowStructureId}
               />
             </div>
-            {orchestrationError && (
-              <div className="inline-warning orchestration-error">
-                <CircleHelp size={16} />
-                {orchestrationError}
-              </div>
-            )}
           </section>
 
           {canvasEditorOpen && (
@@ -2132,9 +2122,6 @@ export function NewProjectPage({
                 />
               </div>
             )}
-            {gitEnabled && !githubAccountReady && !githubAccountsLoading && <div className="inline-warning" role="alert"><AlertTriangle size={16} />请选择一个授权正常的 GitHub 账号后再启动项目。</div>}
-            {gitEnabled && repositoryNameError && <div className="inline-warning" role="alert"><AlertTriangle size={16} />{repositoryNameError}</div>}
-            {gitRequiredByCollaborations && !gitEnabled && <div className="inline-warning" role="alert"><AlertTriangle size={16} />当前 Workflow 包含协作组，请先启用 Git 机制再保存或启动。</div>}
           </section>
 
           <section className="form-section">
@@ -2216,24 +2203,6 @@ export function NewProjectPage({
                 Skills 暂时不可用：{skillsWarning}。仍可编辑并保存研究任务副本。
               </div>
             )}
-            {runtimeConfigErrors.length > 0 && (
-              <div className="inline-warning runtime-preflight-errors" role="alert">
-                <AlertTriangle size={16} />
-                <span>
-                  <strong>启动前配置检查未通过</strong>
-                  {runtimeConfigErrors.map((error) => <small key={error}>{error}</small>)}
-                </span>
-              </div>
-            )}
-            {runtimeConfigWarnings.length > 0 && (
-              <div className="inline-warning runtime-preflight-warnings" role="alert">
-                <AlertTriangle size={16} />
-                <span>
-                  <strong>网关连接验证未通过，允许启动</strong>
-                  {runtimeConfigWarnings.map((warning) => <small key={warning}>{warning}</small>)}
-                </span>
-              </div>
-            )}
             <div className="agent-config-list">
               {orchestration.agents.map((definition, index) => {
                 const template = definition.template ?? "general";
@@ -2297,9 +2266,15 @@ export function NewProjectPage({
           </section>
 
           {submitError && <ErrorPanel title="项目启动失败" message={submitError} />}
-          {!submitError && runtimeCatalogBlocker && (
-            <div className="inline-warning" role={runtimeCatalogState === "loading" ? "status" : "alert"}>
-              {runtimeCatalogBlocker} 仍可保存研究任务副本，稍后再启动。
+          {startRequested && startNotices.length > 0 && !submitError && (
+            <div className="launch-advisory" role="status">
+              <strong>启动前提示</strong>
+              {startNotices.map(notice => <p key={notice}>{notice}</p>)}
+              <div className="launch-advisory-actions">
+                <Button type="button" variant="ghost" onClick={() => setStartRequested(false)}>取消</Button>
+                <Button type="button" variant="secondary" disabled={submitting || savingTask || savingConfig || inputBusy}
+                  onClick={() => void submit(undefined, true)}>强制启动</Button>
+              </div>
             </div>
           )}
           {saveTaskError && (

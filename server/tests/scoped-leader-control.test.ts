@@ -120,6 +120,16 @@ describe("formally scoped Leader management", () => {
     expect(database.scopedGroupPlan("p", "run-G")?.tasks[0]?.assignment).toBe("The actual new plan");
   });
 
+  it("counts management supplements across historical recovery keys without granting an unknown route a fresh allowance", async () => {
+    const { database } = await fixture();
+    for (const [key, purpose] of [["old-recovery-one", "plan"], ["old-recovery-two", "plan"], ["unknown-route", "route"]])
+      database.appendEvent({ projectId: "p", agentId: "review", type: "scoped.management.mechanism_repair.requested",
+        payload: { groupRunId: "run-G", repairScopeKey: key, purpose, attempt: 1 } });
+    expect(database.scopedManagementRepairCount("p", "stable-plan", { groupRunId: "run-G", agentId: "review", purpose: "plan" })).toBe(2);
+    expect(database.scopedManagementRepairCount("p", "stable-route", {
+      groupRunId: "run-G", agentId: "review", purpose: "route", sourceArrivalRequestId: "retained-arrival" })).toBe(3);
+  });
+
   it("preserves mechanism repair counts across a different management epoch and database restart", async () => {
     const { database, authority, options } = await fixture();
     const repairScopeKey = "same-original-management-task";
@@ -626,7 +636,7 @@ describe("durable scoped workflow adjustment publication", () => {
   }
 
   it.each([false, true])("rechecks a retained native Harness before scoped final acceptance and stopped recovery (global=%s)", async globalMain => {
-    const f = await adjustmentFixture(true, globalMain); f.input.configuration.agents.idea.harness = "claude-code";
+    const f = await adjustmentFixture(true, globalMain); f.input.configuration.agents.idea.harness = "dsh";
     f.stage(); const before = f.database.workflowAdjustmentCurrent("p"), original = f.database.workflowAdjustment("p", f.requestId)!;
     f.database.recordAgentNativeSessionBinding({ projectId: "p", agentId: "idea", invocationId: "original-before-scoped-apply",
       runtimePath: join(f.root, "runtime", "original-idea"), worktreePath: join(f.root, "worktrees", "idea"),

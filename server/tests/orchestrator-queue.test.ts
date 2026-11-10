@@ -164,19 +164,19 @@ describe("Orchestrator agent-role queues", () => {
     const a = await orchestrator.createProject(input("Pending experiment A"));
     await waitUntil(() => runner.requests.has(a.id));
     const b = await orchestrator.createProject(input("Independent task B"));
-    await waitUntil(() => orchestrator.getQueueSnapshot().worker.queued.some(item => item.projectId === b.id));
+    await waitUntil(async () => (await orchestrator.getQueueSnapshot()).worker.queued.some(item => item.projectId === b.id));
     try {
       const original = runner.requests.get(a.id)!;
       await original.onExperimentWait!(true);
       await waitUntil(() => runner.requests.has(b.id));
       expect(await orchestrator.getProject(a.id)).toMatchObject({ status: "running", phase: "idea:awaiting-experiment-result", currentAgent: "idea", activeInvocationId: original.invocationId });
-      expect(orchestrator.getQueueSnapshot().worker.activeProjectIds).toEqual([b.id]);
+      expect((await orchestrator.getQueueSnapshot()).worker.activeProjectIds).toEqual([b.id]);
       const continuation = original.onExperimentWait!(false);
-      await waitUntil(() => orchestrator.getQueueSnapshot().worker.queued.some(item => item.projectId === a.id));
+      await waitUntil(async () => (await orchestrator.getQueueSnapshot()).worker.queued.some(item => item.projectId === a.id));
       expect(runner.starts.filter(item => item.projectId === a.id)).toHaveLength(1);
       await orchestrator.cancel(b.id);
       await continuation;
-      expect(orchestrator.getQueueSnapshot().worker.activeProjectIds).toEqual([a.id]);
+      expect((await orchestrator.getQueueSnapshot()).worker.activeProjectIds).toEqual([a.id]);
       expect(await orchestrator.getProject(a.id)).toMatchObject({ status: "running", phase: "idea:running", activeInvocationId: original.invocationId });
       expect((await storage.readEvents(a.id)).map(event => event.type)).toEqual(expect.arrayContaining(["agent.experiment.waiting", "agent.experiment.resumed"]));
     } finally {
@@ -184,7 +184,7 @@ describe("Orchestrator agent-role queues", () => {
       await Promise.all([orchestrator.waitForIdle(a.id), orchestrator.waitForIdle(b.id)]);
       await orchestrator.shutdown();
     }
-    expect(orchestrator.getQueueSnapshot().worker.activeProjectIds).toEqual([]);
+    expect((await orchestrator.getQueueSnapshot()).worker.activeProjectIds).toEqual([]);
   });
 
   it("releases Main's slot when startup persistence fails before invocation cleanup", async () => {
@@ -213,14 +213,14 @@ describe("Orchestrator agent-role queues", () => {
 
     await waitUntil(() => runner.starts.some((start) => start.projectId === project.id));
     expect(storage.failed).toBe(true);
-    expect(orchestrator.getQueueSnapshot().main.activeProjectIds).toEqual([project.id]);
+    expect((await orchestrator.getQueueSnapshot()).main.activeProjectIds).toEqual([project.id]);
     expect((await storage.readEvents(project.id)).some((event) =>
       event.message.includes("already owns or awaits the main agent slot")
     )).toBe(false);
 
     await orchestrator.cancel(project.id);
     await orchestrator.waitForIdle(project.id);
-    expect(orchestrator.getQueueSnapshot().main.activeProjectIds).toEqual([]);
+    expect((await orchestrator.getQueueSnapshot()).main.activeProjectIds).toEqual([]);
     await orchestrator.shutdown();
   });
 
@@ -242,9 +242,9 @@ describe("Orchestrator agent-role queues", () => {
     const projectB = await orchestrator.createProject(input("Queue project B"));
 
     await waitUntil(
-      () =>
-        orchestrator
-          .getQueueSnapshot()
+      async () =>
+        (await orchestrator
+          .getQueueSnapshot())
           .worker.queued.some((item) => item.projectId === projectB.id)
     );
     const queuedB = await orchestrator.getProject(projectB.id);
@@ -259,7 +259,7 @@ describe("Orchestrator agent-role queues", () => {
       queuePosition: 1,
       runs: 0
     });
-    expect(orchestrator.getQueueSnapshot().worker).toMatchObject({
+    expect((await orchestrator.getQueueSnapshot()).worker).toMatchObject({
       activeProjectIds: [projectA.id],
       queued: [{ projectId: projectB.id, position: 1 }]
     });
@@ -274,9 +274,9 @@ describe("Orchestrator agent-role queues", () => {
       orchestrator.resume(projectB.id)
     ]);
     await waitUntil(
-      () =>
-        orchestrator
-          .getQueueSnapshot()
+      async () =>
+        (await orchestrator
+          .getQueueSnapshot())
           .worker.queued.some((item) => item.projectId === projectB.id)
     );
     expect(
@@ -294,8 +294,8 @@ describe("Orchestrator agent-role queues", () => {
     expect(runner.maxActive.get("idea")).toBe(1);
     expect(runner.active.get("idea")).toBe(1);
     expect(runner.active.get("main")).toBe(1);
-    expect(orchestrator.getQueueSnapshot().worker.activeProjectIds).toEqual([projectB.id]);
-    expect(orchestrator.getQueueSnapshot().main.activeProjectIds).toEqual([projectA.id]);
+    expect((await orchestrator.getQueueSnapshot()).worker.activeProjectIds).toEqual([projectB.id]);
+    expect((await orchestrator.getQueueSnapshot()).main.activeProjectIds).toEqual([projectA.id]);
 
     await Promise.all([
       orchestrator.cancel(projectA.id),
@@ -307,14 +307,14 @@ describe("Orchestrator agent-role queues", () => {
     ]);
     expect((await orchestrator.getProject(projectA.id))?.status).toBe("cancelled");
     expect((await orchestrator.getProject(projectB.id))?.status).toBe("cancelled");
-    expect(orchestrator.getQueueSnapshot().worker).toMatchObject({
+    expect((await orchestrator.getQueueSnapshot()).worker).toMatchObject({
       capacity: 1,
       activeProjectIds: [],
       queued: [],
       activeTasks: [],
       recoveringTasks: []
     });
-    expect(orchestrator.getQueueSnapshot().main).toMatchObject({
+    expect((await orchestrator.getQueueSnapshot()).main).toMatchObject({
       capacity: 1,
       activeProjectIds: [],
       queued: [],
@@ -374,7 +374,7 @@ describe("Orchestrator agent-role queues", () => {
       currentAgent: undefined,
       activeInvocationId: undefined
     });
-    expect(orchestrator.getQueueSnapshot().worker).toMatchObject({
+    expect((await orchestrator.getQueueSnapshot()).worker).toMatchObject({
       activeProjectIds: [waitingBeforeRestart.id],
       queued: [{ projectId: activeBeforeRestart.id, position: 1 }]
     });
@@ -417,15 +417,15 @@ describe("Orchestrator agent-role queues", () => {
       );
     }
 
-    await waitUntil(() => {
-      const idea = orchestrator.getQueueSnapshot().worker;
+    await waitUntil(async () => {
+      const idea = (await orchestrator.getQueueSnapshot()).worker;
       return (
         idea.activeProjectIds.length === 10 &&
         idea.queued.length === 1 &&
         runner.starts.length === 10
       );
     });
-    const idea = orchestrator.getQueueSnapshot().worker;
+    const idea = (await orchestrator.getQueueSnapshot()).worker;
     expect(idea.capacity).toBe(10);
     expect(idea.activeProjectIds).toEqual(
       projects.slice(0, 10).map((project) => project.id)
@@ -441,7 +441,7 @@ describe("Orchestrator agent-role queues", () => {
     await Promise.all(
       projects.map((project) => orchestrator.waitForIdle(project.id))
     );
-    expect(orchestrator.getQueueSnapshot().worker).toMatchObject({
+    expect((await orchestrator.getQueueSnapshot()).worker).toMatchObject({
       capacity: 10,
       activeProjectIds: [],
       queued: [],
@@ -499,8 +499,8 @@ describe("Orchestrator agent-role queues", () => {
 
     expect(paused.status).toBe("paused");
     expect(
-      orchestrator
-        .getQueueSnapshot()
+      (await orchestrator
+        .getQueueSnapshot())
         .worker.queued.some((item) => item.projectId === retrying.id)
     ).toBe(false);
     expect(runner.starts).toEqual([{ projectId: active.id, agent: "idea" }]);

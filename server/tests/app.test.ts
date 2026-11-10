@@ -31,6 +31,17 @@ import type {
   TraceSink
 } from "../src/types.js";
 
+it("returns 503 and the original service failure when collaboration cannot write", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-health-")); temporaryRoots.push(root);
+  const eventHub = new EventHub(), storage = new ProjectStorage(root, eventHub); await storage.initialize();
+  let health: { status: "ready" | "unavailable"; code?: string; failedAt?: string } = { status: "ready" };
+  const app = createApp({ orchestrator: {} as Orchestrator, storage, eventHub, skills: testSkillCatalog(),
+    config: { modelSuggestions: [], maxEventHistory: 2 }, runtimeHealth: () => health });
+  expect((await request(app).get("/api/health").expect(200)).body.status).toBe("ok");
+  health = { status: "unavailable", code: "WRITER_LEASE_STALE", failedAt: "2026-11-03T12:26:32.762Z" };
+  expect((await request(app).get("/api/health").expect(503)).body).toMatchObject({ status: "unavailable", collaboration: health });
+});
+
 const temporaryRoots: string[] = [];
 const AGENT_NAMES = ["main", "idea", "execution", "writing", "review"] as const;
 const builtinSkillRoot = fileURLToPath(
@@ -823,6 +834,12 @@ describe("HTTP API", () => {
       };
       expect(history.events).toHaveLength(1);
       expect(history.events[0].seq).toBeLessThan(bootstrap.events[0].seq);
+      const timelineResponse = await fetch(`${base}/api/projects/${projectId}/events/history?before=${bootstrap.lastSeq + 1}&limit=1&view=timeline`);
+      expect(timelineResponse.status).toBe(200);
+      const timeline = await timelineResponse.json() as { events: Array<{ message: string }> };
+      expect(timeline.events).toHaveLength(1); expect(timeline.events[0].message).toBe("");
+      const invalidView = await fetch(`${base}/api/projects/${projectId}/events/history?before=1&view=invalid`);
+      expect(invalidView.status).toBe(400);
 
       const invalidModelUpdate = await fetch(
         `${base}/api/projects/${projectId}/agents/models`,
