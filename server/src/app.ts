@@ -29,6 +29,7 @@ import {
   type ProjectExplainerRecommendationPort
 } from "./project-explainer.js";
 import { AgentConfigPresetStore } from "./agent-config-presets.js";
+import { ensureGatewayReasoningDiscovery } from "./gateway-store-compat.js";
 import { SavedTaskLauncher, savedTaskProjectInput, savedTaskLaunchSchema } from "./saved-task-launcher.js";
 import { parseWorkflowImport } from "./workflow-import.js";
 import { ConfigRecommendationError, configRecommendationInputSchema, type ConfigRecommendationPort } from "./config-recommendations.js";
@@ -156,7 +157,7 @@ export interface AppDependencies {
 export function createApp(dependencies: AppDependencies) {
   const { orchestrator, storage, eventHub, skills, config } =
     dependencies;
-  const gatewayStore = dependencies.gatewayStore ?? new GatewayStore(storage.root);
+  const gatewayStore = ensureGatewayReasoningDiscovery(dependencies.gatewayStore ?? new GatewayStore(storage.root));
   const githubAccounts = dependencies.githubAccounts ?? new GitHubAccountStore(storage.root);
   const configPresets =
     dependencies.configPresets ?? new AgentConfigPresetStore(storage.root);
