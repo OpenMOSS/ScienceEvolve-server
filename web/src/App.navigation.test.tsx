@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -55,21 +55,43 @@ vi.mock("./pages/WorkspacePage", () => ({
   </main>
 }));
 
+async function openResource(_user: ReturnType<typeof userEvent.setup>, name: string) {
+  fireEvent.click(await screen.findByRole("button", { name: "资源" }));
+  return screen.findByRole("link", { name });
+}
+
+vi.mock("./pages/AgentPresetManagementPage", () => ({
+  AgentPresetManagementPage: () => <main><h1>Agent 配置预设</h1></main>
+}));
+
 describe("gateway navigation", () => {
   beforeEach(() => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({
+      matches: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn()
+    })));
     window.history.replaceState(null, "", "#/projects");
+  });
+
+  it("opens Agent presets from the resources menu", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await openResource(user, "Agent 配置预设"));
+    expect(await screen.findByRole("heading", { name: "Agent 配置预设" })).toBeVisible();
+    expect(window.location.hash).toBe("#/agent-presets");
   });
 
   it("returns to the new project editor with all unsaved fields intact", async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "发起新课题" }));
+    await user.click(await screen.findByRole("button", { name: "发起新课题" }));
     const title = await screen.findByRole("textbox", { name: "项目名称" });
     await user.type(title, "未保存的课题");
     await user.type(screen.getByRole("textbox", { name: "课题方向与具体要求" }), "研究内容草稿");
 
-    await user.click(screen.getByRole("button", { name: "全局网关库" }));
+    await user.click(await openResource(user, "全局网关库"));
     expect(await screen.findByRole("heading", { name: "全局网关库" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "返回项目" }));
 
@@ -82,12 +104,12 @@ describe("gateway navigation", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "编辑已保存任务" }));
+    await user.click(await screen.findByRole("button", { name: "编辑已保存任务" }));
     const title = await screen.findByRole("textbox", { name: "项目名称" });
     await user.clear(title);
     await user.type(title, "尚未保存的修改");
 
-    await user.click(screen.getByRole("button", { name: "全局网关库" }));
+    await user.click(await openResource(user, "全局网关库"));
     await user.click(await screen.findByRole("button", { name: "返回项目" }));
 
     await waitFor(() => expect(window.location.hash).toBe("#/saved-tasks/task%2Fone/edit"));
@@ -98,11 +120,11 @@ describe("gateway navigation", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "发起新课题" }));
+    await user.click(await screen.findByRole("button", { name: "发起新课题" }));
     const title = await screen.findByRole("textbox", { name: "项目名称" });
     await user.type(title, "等待选择 GitHub 账号的课题");
 
-    await user.click(screen.getByRole("button", { name: "GitHub 账号" }));
+    await user.click(screen.getByRole("link", { name: "GitHub 账号" }));
     expect(await screen.findByRole("heading", { name: "GitHub 账号库" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "返回项目" }));
 
@@ -115,7 +137,7 @@ describe("gateway navigation", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "全局网关库" }));
+    await user.click(await openResource(user, "全局网关库"));
     await user.click(await screen.findByRole("button", { name: "返回项目" }));
 
     expect(await screen.findByRole("heading", { name: "项目首页" })).toBeInTheDocument();
@@ -127,9 +149,9 @@ describe("gateway navigation", () => {
     render(<App />);
 
     const draft = "正在构思的快速研究任务说明";
-    await user.type(screen.getByRole("textbox", { name: "研究任务需求" }), draft);
+    await user.type(await screen.findByRole("textbox", { name: "研究任务需求" }), draft);
 
-    await user.click(screen.getByRole("button", { name: "全局网关库" }));
+    await user.click(await openResource(user, "全局网关库"));
     await user.click(await screen.findByRole("button", { name: "返回项目" }));
     expect(await screen.findByRole("textbox", { name: "研究任务需求" })).toHaveValue(draft);
 
@@ -137,7 +159,7 @@ describe("gateway navigation", () => {
     await user.click(await screen.findByRole("button", { name: "返回项目列表" }));
     expect(await screen.findByRole("textbox", { name: "研究任务需求" })).toHaveValue(draft);
 
-    await user.click(screen.getByRole("button", { name: "发起新课题" }));
+    await user.click(await screen.findByRole("button", { name: "发起新课题" }));
     await user.click(await screen.findByRole("button", { name: "返回项目" }));
     expect(await screen.findByRole("textbox", { name: "研究任务需求" })).toHaveValue(draft);
   });

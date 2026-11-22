@@ -43,6 +43,13 @@ import type {
   SavedResearchTask
 } from "../types";
 import { classifyProjectStatus, ProjectListPage } from "./ProjectListPage";
+import { AgentPresetManagementPage } from "./AgentPresetManagementPage";
+
+function openQuickTask() {
+  const trigger = screen.getByRole("button", { name: "快速开始" });
+  fireEvent.click(trigger);
+}
+
 import { cacheProjectOverview, readCachedProjectOverview } from "../project-overview-cache";
 import { cacheResource } from "../resource-cache";
 import {
@@ -225,7 +232,7 @@ describe("ProjectListPage task overview", () => {
     createdAt: "2026-10-28T08:00:00Z", updatedAt: "2026-10-28T08:00:00Z" };
 
   it("refreshes the saved drafts themselves when the assistant publishes a new draft", async () => {
-    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    render(<ProjectListPage view="saved-tasks" onCreate={vi.fn()} onOpen={vi.fn()} />);
     await waitFor(() => expect(getSavedResearchTasks).toHaveBeenCalledOnce());
     vi.mocked(getSavedResearchTasks).mockResolvedValue([generatedTask]);
     act(() => { window.dispatchEvent(new Event("openfars:saved-tasks-changed")); });
@@ -236,7 +243,7 @@ describe("ProjectListPage task overview", () => {
   it("renders cached drafts while a returning page revalidates in the background", () => {
     cacheResource("saved-tasks", [generatedTask]);
     vi.mocked(getSavedResearchTasks).mockImplementation(() => new Promise(() => undefined));
-    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    render(<ProjectListPage view="saved-tasks" onCreate={vi.fn()} onOpen={vi.fn()} />);
     expect(screen.getByText(generatedTask.title)).toBeVisible();
   });
 
@@ -246,7 +253,7 @@ describe("ProjectListPage task overview", () => {
     const task = { ...generatedTask, agents };
     vi.mocked(getSavedResearchTasks).mockResolvedValue([task]);
     vi.mocked(createProject).mockRejectedValue(new Error("服务端无法启动 retired-harness"));
-    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    render(<ProjectListPage view="saved-tasks" onCreate={vi.fn()} onOpen={vi.fn()} />);
     const library = screen.getByRole("region", { name: "已保存科研任务" });
     const start = await within(library).findByRole("button", { name: `启动任务 ${task.title}` });
     expect(within(library).queryByText(/retired-harness/)).not.toBeInTheDocument();
@@ -275,7 +282,7 @@ describe("ProjectListPage task overview", () => {
       git: { enabled: true, provider: "github" as const, accountId: GITHUB_ACCOUNT_ID } };
     cacheResource("saved-tasks", [task]);
     vi.mocked(getSavedResearchTasks).mockResolvedValue([task]);
-    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    render(<ProjectListPage view="saved-tasks" onCreate={vi.fn()} onOpen={vi.fn()} />);
     const library = screen.getByRole("region", { name: "已保存科研任务" });
     expect(within(library).queryByText(/所选全局网关不存在|授权正常的 GitHub 账号|启动前检查未通过/)).not.toBeInTheDocument();
     expect(within(library).queryByRole("alert")).not.toBeInTheDocument();
@@ -290,6 +297,8 @@ describe("ProjectListPage task overview", () => {
   });
 
   beforeEach(() => {
+    HTMLDialogElement.prototype.showModal ??= function () { this.setAttribute("open", ""); };
+    HTMLDialogElement.prototype.close ??= function () { this.removeAttribute("open"); this.dispatchEvent(new Event("close")); };
     vi.mocked(getProjectFolders).mockReset().mockResolvedValue([]);
     vi.mocked(createProjectFolder).mockReset();
     vi.mocked(renameProjectFolder).mockReset();
@@ -502,7 +511,8 @@ describe("ProjectListPage task overview", () => {
     const first = render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
     await screen.findByRole("heading", { name: project.title });
     expect(screen.queryByRole("heading", { name: "从一个例子开始" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "导入 SDK workflow.json" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "快速开始" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "导入 SDK workflow.json" })).not.toBeInTheDocument();
     await waitFor(() => expect(readCachedProjectList()?.projects).toHaveLength(1));
     first.unmount();
 
@@ -802,12 +812,14 @@ describe("ProjectListPage task overview", () => {
     }
     const user = userEvent.setup();
     render(<DraftHost />);
+    openQuickTask();
 
     const draft = "这段快速任务说明尚未保存";
     await user.type(screen.getByRole("textbox", { name: "研究任务需求" }), draft);
     await user.click(screen.getByRole("button", { name: "切换页面" }));
     expect(screen.queryByRole("textbox", { name: "研究任务需求" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "切换页面" }));
+    openQuickTask();
     expect(screen.getByRole("textbox", { name: "研究任务需求" })).toHaveValue(draft);
   });
 
@@ -828,7 +840,9 @@ describe("ProjectListPage task overview", () => {
     vi.mocked(getSavedResearchTasks).mockResolvedValue([savedTask]);
     const user = userEvent.setup();
 
-    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    const page = (view: "projects" | "saved-tasks" = "projects") => <ProjectListPage view={view} onCreate={vi.fn()} onOpen={vi.fn()} />;
+    const { rerender } = render(page());
+    openQuickTask();
 
     const input = await screen.findByPlaceholderText(
       "描述研究问题、数据约束、评价指标和期望产物…"
@@ -840,12 +854,16 @@ describe("ProjectListPage task overview", () => {
     expect(screen.getByRole("button", { name: "提交并继续" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "提交并继续" }));
     expect(within(quickForm!).getByText("运行目录加载失败：运行目录服务超时").closest('[role="status"]')).toHaveClass("launch-advisory");
+    fireEvent.click(screen.getByRole("button", { name: "关闭快速发起" }));
+    rerender(page("saved-tasks"));
     const savedStart = await screen.findByRole("button", { name: `启动任务 ${savedTask.title}` });
     expect(savedStart).toBeEnabled();
     await user.click(savedStart);
     expect(within(screen.getByRole("region", { name: "已保存科研任务" })).getByText("运行目录加载失败：运行目录服务超时").closest('[role="status"]'))
       .toHaveClass("launch-advisory");
 
+    rerender(page());
+    openQuickTask();
     await user.click(screen.getByRole("button", { name: "保存研究任务副本" }));
 
     await waitFor(() => expect(createSavedResearchTask).toHaveBeenCalledTimes(1));
@@ -862,6 +880,7 @@ describe("ProjectListPage task overview", () => {
     });
 
     render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    openQuickTask();
 
     fireEvent.change(screen.getByRole("textbox", { name: "研究任务需求" }), { target: { value: "运行目录为空时允许显式尝试启动。" } });
     await act(async () => {});
@@ -907,14 +926,17 @@ describe("ProjectListPage task overview", () => {
       agentPrompts: {}
     });
 
-    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    const page = (view: "projects" | "saved-tasks" = "projects") => <ProjectListPage view={view} onCreate={vi.fn()} onOpen={vi.fn()} />;
+    const { rerender } = render(page());
+    openQuickTask();
 
-    await screen.findByRole("button", { name: `启动任务 ${savedTask.title}` });
     expect(screen.queryByText(/服务端没有可用的全局网关/)).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole("textbox", { name: "研究任务需求" }), { target: { value: savedTask.requirement } });
     expect(screen.getByRole("button", { name: "提交并继续" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "提交并继续" }));
-    expect(screen.getByText(/运行目录已加载，但服务端没有可用的全局网关。/).closest('[role="status"]')).toHaveClass("launch-advisory");
+    expect((await screen.findByText(/运行目录已加载，但服务端没有可用的全局网关。/)).closest('[role="status"]')).toHaveClass("launch-advisory");
+    fireEvent.click(screen.getByRole("button", { name: "关闭快速发起" }));
+    rerender(page("saved-tasks"));
     const savedStart = await screen.findByRole("button", { name: `启动任务 ${savedTask.title}` });
     expect(savedStart).toBeEnabled();
     fireEvent.click(savedStart);
@@ -944,13 +966,9 @@ describe("ProjectListPage task overview", () => {
     });
     const onEditSavedTask = vi.fn();
     const user = userEvent.setup();
-    render(
-      <ProjectListPage
-        onCreate={vi.fn()}
-        onOpen={vi.fn()}
-        onEditSavedTask={onEditSavedTask}
-      />
-    );
+    const page = (view: "projects" | "saved-tasks" = "projects") => <ProjectListPage view={view} onCreate={vi.fn()} onOpen={vi.fn()} onEditSavedTask={onEditSavedTask} />;
+    const { rerender } = render(page());
+    openQuickTask();
 
     const quickInput = screen.getByPlaceholderText(
       "描述研究问题、数据约束、评价指标和期望产物…"
@@ -967,6 +985,9 @@ describe("ProjectListPage task overview", () => {
         git: { enabled: false }
       })
     );
+    expect(screen.queryByRole("region", { name: "已保存科研任务" })).toBeNull();
+    expect(screen.getByRole("link", { name: "已保存任务" })).toHaveAttribute("href", "#/saved-tasks");
+    rerender(page("saved-tasks"));
     expect(
       screen.getByRole("region", { name: "已保存科研任务" })
     ).toHaveTextContent(savedTask.title);
@@ -1155,6 +1176,7 @@ describe("ProjectListPage task overview", () => {
     const onOpen = vi.fn();
     const user = userEvent.setup();
     render(<ProjectListPage onCreate={vi.fn()} onOpen={onOpen} />);
+    openQuickTask();
 
     const input = await screen.findByPlaceholderText(
       "描述研究问题、数据约束、评价指标和期望产物…"
@@ -1185,6 +1207,7 @@ describe("ProjectListPage task overview", () => {
     });
     const user = userEvent.setup();
     render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    openQuickTask();
 
     await user.click(
       await screen.findByRole("button", { name: "高级配置" })
@@ -1252,6 +1275,7 @@ describe("ProjectListPage task overview", () => {
     });
     const user = userEvent.setup();
     render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    openQuickTask();
 
     await user.selectOptions(
       await screen.findByLabelText("快速启动 Agent 配置"),
@@ -1260,7 +1284,6 @@ describe("ProjectListPage task overview", () => {
     expect(
       screen.getByRole("option", { name: /高思考实验配置/ })
     ).toBeInTheDocument();
-    expect(screen.getByText("1 个 MCP 绑定")).toBeInTheDocument();
     await user.type(
       screen.getByPlaceholderText("描述研究问题、数据约束、评价指标和期望产物…"),
       "使用保存的完整智能体配置运行新的可复现实验研究任务"
@@ -1283,6 +1306,7 @@ describe("ProjectListPage task overview", () => {
     vi.mocked(createProject).mockResolvedValue({ ...project, id: "prj_click_to_validate" });
     const user = userEvent.setup();
     render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    openQuickTask();
     await screen.findByRole("option", { name: "系统默认配置" });
     const start = screen.getByRole("button", { name: "提交并继续" });
     expect(start).toBeEnabled();
@@ -1301,6 +1325,7 @@ describe("ProjectListPage task overview", () => {
     vi.mocked(createProject).mockResolvedValue({ ...project, id: "prj_quick_git_without_group" });
     const user = userEvent.setup();
     render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    openQuickTask();
     await screen.findByRole("option", { name: "系统默认配置" });
     const gitSwitch = screen.getByRole("switch", { name: "快速发起启用 Git 机制" });
     await user.click(gitSwitch);
@@ -1352,7 +1377,9 @@ describe("ProjectListPage task overview", () => {
     vi.mocked(getAgentConfigPresets).mockResolvedValue([defaultPreset, preset]);
     vi.mocked(createProject).mockResolvedValue({ ...project, id: "prj_scoped_start" });
     const user = userEvent.setup();
-    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    const page = (view: "projects" | "saved-tasks" = "projects") => <ProjectListPage view={view} onCreate={vi.fn()} onOpen={vi.fn()} />;
+    const { rerender } = render(page());
+    rerender(page("saved-tasks"));
     const start = await screen.findByRole("button", { name: `启动任务 ${savedTask.title}` });
     await waitFor(() => expect(start).toBeEnabled());
     expect(screen.getByRole("button", { name: `启动任务 ${incomplete.title}` })).toBeEnabled();
@@ -1361,6 +1388,8 @@ describe("ProjectListPage task overview", () => {
     expect(vi.mocked(createProject).mock.calls[0]![0]).toMatchObject({
       title: savedTask.title, orchestration, git: savedTask.git
     });
+    rerender(page());
+    openQuickTask();
     await user.selectOptions(screen.getByLabelText("快速启动 Agent 配置"), preset.id);
     const gitSwitch = screen.getByRole("switch", { name: "快速发起启用 Git 机制" });
     await user.click(gitSwitch);
@@ -1376,7 +1405,28 @@ describe("ProjectListPage task overview", () => {
     });
   });
 
-  it("imports an SDK visualization in the home preset library without changing the quick task", async () => {
+  it("creates and edits reusable presets through the Workflow editor", async () => {
+    const created = { ...defaultPreset, id: "cfg_custom", builtin: false, name: "材料研究" };
+    const updated = { ...created, name: "材料研究修订" };
+    vi.mocked(createAgentConfigPreset).mockResolvedValueOnce(created);
+    vi.mocked(updateAgentConfigPreset).mockResolvedValueOnce(updated);
+    render(<AgentPresetManagementPage onBack={vi.fn()} />);
+    await screen.findByRole("button", { name: "复制并编辑 系统默认配置" });
+    fireEvent.click(screen.getByRole("button", { name: "新建预设" }));
+    const editor = screen.getByRole("dialog", { name: "新建 Agent 配置" });
+    fireEvent.change(within(editor).getByRole("textbox", { name: "工作流名称" }), { target: { value: created.name } });
+    fireEvent.click(within(editor).getByRole("button", { name: "保存流程" }));
+    fireEvent.click(await screen.findByRole("button", { name: `编辑配置 ${created.name}` }));
+    expect(createAgentConfigPreset).toHaveBeenCalledWith(expect.objectContaining({ name: created.name, agents: expect.objectContaining({ main: expect.any(Object) }) }));
+
+    const edit = screen.getByRole("dialog", { name: "编辑 Agent 配置" });
+    fireEvent.change(within(edit).getByRole("textbox", { name: "工作流名称" }), { target: { value: updated.name } });
+    fireEvent.click(within(edit).getByRole("button", { name: "保存流程" }));
+    expect(await screen.findByRole("button", { name: `编辑配置 ${updated.name}` })).toBeVisible();
+    expect(updateAgentConfigPreset).toHaveBeenCalledWith(created.id, expect.objectContaining({ name: updated.name }));
+  });
+
+  it("imports an SDK visualization in the dedicated preset library", async () => {
     const imported: AgentConfigPreset = {
       ...structuredClone(defaultPreset), id: "cfg_sdk_preview", name: "SDK preview", builtin: false,
       importSource: { filename: "workflow.json", text: "{\"sdk\":true}", notices: [] }
@@ -1384,11 +1434,8 @@ describe("ProjectListPage task overview", () => {
     imported.agents.idea.skills = ["./skills/not-installed"];
     imported.agents.idea.harness = "codex";
     vi.mocked(importAgentConfigPreset).mockResolvedValue(imported);
-    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
-    await screen.findByRole("option", { name: "系统默认配置" });
-    const brief = screen.getByPlaceholderText("描述研究问题、数据约束、评价指标和期望产物…");
-    fireEvent.change(brief, { target: { value: "Keep the current research task" } });
-    const library = screen.getByRole("complementary", { name: "已有 Agent 配置" });
+    render(<AgentPresetManagementPage onBack={vi.fn()} />);
+    const library = await screen.findByRole("region", { name: "已有 Agent 配置" });
     expect(within(library).getByRole("button", { name: "导入 SDK workflow.json" })).toBeInTheDocument();
     fireEvent.change(within(library).getByLabelText("导入 SDK Workflow 文件"), { target: { files: [new File(["{\"sdk\":true}"], "workflow.json")] } });
     const dialog = await screen.findByRole("dialog", { name: "查看 Workflow：SDK preview" });
@@ -1399,9 +1446,6 @@ describe("ProjectListPage task overview", () => {
     expect(within(harnessSelect).getByRole("option", { name: "Codex" })).toBeInTheDocument();
     expect(within(dialog).queryByText(/该历史 Harness 当前未注册/)).not.toBeInTheDocument();
     expect(within(dialog).getByText("{\"sdk\":true}")).toBeInTheDocument();
-    expect(screen.getByLabelText("快速启动 Agent 配置")).toHaveValue("default");
-    expect(screen.getByRole("option", { name: "SDK preview" })).toBeInTheDocument();
-    expect(brief).toHaveValue("Keep the current research task");
     expect(createProject).not.toHaveBeenCalled();
     expect(createAgentConfigPreset).not.toHaveBeenCalled();
     fireEvent.click(within(dialog).getByRole("button", { name: "关闭 Workflow 预览" }));
@@ -1416,17 +1460,15 @@ describe("ProjectListPage task overview", () => {
     };
     vi.mocked(getAgentConfigPresets).mockResolvedValue([defaultPreset, imported]);
     vi.mocked(importAgentConfigPreset).mockRejectedValue(new Error("orchestration.input.target：未知 Agent"));
-    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    render(<AgentPresetManagementPage onBack={vi.fn()} />);
     await screen.findByRole("button", { name: "查看 Workflow Saved SDK" });
     expect(getAgentConfigPresets).toHaveBeenCalledWith(true);
-    expect(screen.getByRole("option", { name: "Saved SDK" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "重命名配置 Saved SDK" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "下载配置 Saved SDK" }));
     expect(downloadWorkflowSource).toHaveBeenCalledWith(imported);
     fireEvent.change(screen.getByLabelText("导入 SDK Workflow 文件"), { target: { files: [new File(["{}"], "bad.json")] } });
     expect(await screen.findByText("orchestration.input.target：未知 Agent")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "查看 Workflow Saved SDK" })).toBeInTheDocument();
-    expect(screen.getByLabelText("快速启动 Agent 配置")).toHaveValue("default");
     expect(createProject).not.toHaveBeenCalled();
   });
 
@@ -1444,6 +1486,7 @@ describe("ProjectListPage task overview", () => {
     vi.mocked(getAgentConfigPresets).mockResolvedValue([defaultPreset, imported]);
     vi.mocked(createProject).mockResolvedValue({ ...project, id: "prj_sdk_run" });
     render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    openQuickTask();
     await screen.findByRole("option", { name: "SDK run" });
     // Exercise the saved-flow entry as well as the dropdown selection.
     fireEvent.click(screen.getByRole("button", { name: "打开 Workflow 画布编辑器" }));
@@ -1488,6 +1531,7 @@ describe("ProjectListPage task overview", () => {
     vi.mocked(getCatalog).mockImplementation(() => new Promise((resolve) => { resolveCatalog = resolve; }));
     vi.mocked(getAgentConfigPresets).mockResolvedValue([defaultPreset, imported]);
     render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    openQuickTask();
     await screen.findByRole("option", { name: "SDK other" });
     fireEvent.change(screen.getByLabelText("快速启动 Agent 配置"), { target: { value: imported.id } });
     await act(async () => { resolveCatalog(catalog); });
@@ -1523,16 +1567,11 @@ describe("ProjectListPage task overview", () => {
     };
     vi.mocked(saveProjectAgentConfigPreset).mockResolvedValue(exportedPreset);
     const user = userEvent.setup();
-    const { container } = render(
+    const view = render(
       <ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />
     );
 
-    const quickTaskCard = container.querySelector(".quick-task-section");
-    const configLibrary = screen.getByRole("complementary", {
-      name: "已有 Agent 配置"
-    });
-    expect(quickTaskCard).not.toContainElement(configLibrary);
-    expect(configLibrary.parentElement).toHaveClass("quick-task-row");
+    expect(screen.queryByRole("region", { name: "已有 Agent 配置" })).not.toBeInTheDocument();
 
     await user.click(
       await screen.findByRole("button", {
@@ -1560,7 +1599,10 @@ describe("ProjectListPage task overview", () => {
     expect(
       screen.getByText(`${customTitle} 已保存到配置库`)
     ).toBeInTheDocument();
-    expect(screen.getByText(`来源：${project.title}`)).toBeInTheDocument();
+    view.unmount();
+    vi.mocked(getAgentConfigPresets).mockResolvedValue([defaultPreset, exportedPreset]);
+    render(<AgentPresetManagementPage onBack={vi.fn()} />);
+    expect(await screen.findByText(`来源：${project.title}`)).toBeInTheDocument();
     expect(screen.getByText("1 个 MCP 绑定")).toBeInTheDocument();
 
     await user.click(
@@ -1620,6 +1662,7 @@ describe("ProjectListPage task overview", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const user = userEvent.setup();
     render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    openQuickTask();
 
     const presetSelect = await screen.findByLabelText("快速启动 Agent 配置");
     await user.selectOptions(presetSelect, reusablePreset.id);
@@ -1684,6 +1727,7 @@ describe("ProjectListPage task overview", () => {
     });
     const user = userEvent.setup();
     render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    openQuickTask();
 
     const input = screen.getByPlaceholderText("描述研究问题、数据约束、评价指标和期望产物…");
     await user.type(input, "验证快速入口可以在显示 Harness 检查结果后强制提交。 ");
@@ -1715,7 +1759,7 @@ describe("ProjectListPage task overview", () => {
     };
     vi.mocked(getSavedResearchTasks).mockResolvedValue([savedTask]);
 
-    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    render(<ProjectListPage view="saved-tasks" onCreate={vi.fn()} onOpen={vi.fn()} />);
 
     const start = await screen.findByRole("button", { name: `启动任务 ${savedTask.title}` });
     expect(start).toBeEnabled();
@@ -1760,7 +1804,9 @@ describe("ProjectListPage task overview", () => {
     vi.mocked(getSavedResearchTasks).mockResolvedValue([savedTask]);
     vi.mocked(createProject).mockResolvedValue(project);
     const user = userEvent.setup();
-    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    const page = (view: "projects" | "saved-tasks" = "projects") => <ProjectListPage view={view} onCreate={vi.fn()} onOpen={vi.fn()} />;
+    const { rerender } = render(page());
+    openQuickTask();
 
     const quickInput = screen.getByRole("textbox", { name: "研究任务需求" });
     await user.type(quickInput, "即使网关验证失败，也允许尝试启动快速任务。");
@@ -1772,6 +1818,8 @@ describe("ProjectListPage task overview", () => {
     await user.click(within(quickInput.closest("form")!).getByRole("button", { name: "强制启动" }));
     await waitFor(() => expect(createProject).toHaveBeenCalledTimes(1));
 
+    fireEvent.click(screen.getByRole("button", { name: "关闭快速发起" }));
+    rerender(page("saved-tasks"));
     const savedStart = screen.getByRole("button", { name: `启动任务 ${savedTask.title}` });
     expect(savedStart).not.toBeDisabled();
     expect(within(screen.getByRole("region", { name: "已保存科研任务" })).queryByText(/网关尚未通过/)).not.toBeInTheDocument();

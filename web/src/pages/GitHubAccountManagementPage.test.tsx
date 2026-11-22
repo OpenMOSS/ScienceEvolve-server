@@ -6,6 +6,7 @@ import {
   getGitHubRepositoryStatus,
   getProjects,
   setDefaultGitHubAccount,
+  setupGitHubOAuth,
   startGitHubAuthorization,
   startGitHubRepositoryDeletionAuthorization,
   previewGitHubRepositoryDeletion,
@@ -22,6 +23,7 @@ vi.mock("../api", () => ({
   getGitHubRepositoryStatus: vi.fn(),
   getProjects: vi.fn(),
   setDefaultGitHubAccount: vi.fn(),
+  setupGitHubOAuth: vi.fn(),
   startGitHubAuthorization: vi.fn(),
   startGitHubRepositoryDeletionAuthorization: vi.fn(),
   previewGitHubRepositoryDeletion: vi.fn(),
@@ -126,7 +128,17 @@ describe("GitHubAccountManagementPage", () => {
     vi.mocked(getGitHubAccounts).mockResolvedValue({ accounts: [], oauthConfigured: false });
     render(<GitHubAccountManagementPage onBack={vi.fn()} />);
     expect(await screen.findByText("GitHub OAuth 尚未配置")).toBeVisible();
-    expect(screen.getByRole("button", { name: "登录新账号" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "配置 GitHub OAuth" })).toBeEnabled();
+    vi.mocked(setupGitHubOAuth).mockResolvedValueOnce(undefined);
+    fireEvent.click(screen.getByRole("button", { name: "配置 GitHub OAuth" }));
+    fireEvent.change(screen.getByLabelText("Client ID"), { target: { value: "fixture-id" } });
+    fireEvent.change(screen.getByLabelText("Client Secret"), { target: { value: "fixture-secret" } });
+    fireEvent.change(screen.getByLabelText("部署设置码"), { target: { value: "a".repeat(64) } });
+    fireEvent.submit(screen.getByRole("form", { name: "GitHub OAuth 配置" }));
+    expect(await screen.findByRole("button", { name: "登录新账号" })).toBeEnabled();
+    expect(setupGitHubOAuth).toHaveBeenCalledWith(expect.objectContaining({
+      clientId: "fixture-id", callbackUrl: expect.stringMatching(/\/api\/github\/auth\/callback$/)
+    }));
   });
 
   it("manages multiple account identities without displaying credentials", async () => {

@@ -1,5 +1,4 @@
 import {
-  type ChangeEvent,
   type FormEvent,
   useCallback,
   useEffect,
@@ -18,8 +17,6 @@ import {
   CircleStop,
   Clock3,
   Coins,
-  Database,
-  Download,
   Eye,
   Folder,
   FolderPlus,
@@ -38,8 +35,8 @@ import {
   Sparkles,
   TimerReset,
   Trash2,
-  Upload,
-  Users
+  Users,
+  X
 } from "lucide-react";
 import {
   archiveProjects,
@@ -52,8 +49,6 @@ import {
   deleteArchivedProjects,
   deleteSavedResearchTask,
   downloadAgentConfigPreset,
-  downloadWorkflowSource,
-  importAgentConfigPreset,
   getAgentConfigPresets,
   getCatalog,
   getGitHubAccounts,
@@ -77,7 +72,8 @@ import {
   ErrorPanel,
   OverallProgressBar,
   PageLoader,
-  StatusBadge
+  StatusBadge,
+  TextArea
 } from "../components/Common";
 import { SaveAgentConfigDialog } from "../components/SaveAgentConfigDialog";
 import { ProjectStopDialog } from "../components/ProjectStopDialog";
@@ -89,7 +85,6 @@ import { canArchiveProject, canStopProject, isStoppedProject } from "../project-
 import { OrchestrationTemplateEditor } from "../components/OrchestrationTemplateEditor";
 import { GitHubAccountSelector } from "../components/GitHubAccountSelector";
 import { WorkflowCanvasEditor } from "../components/WorkflowCanvasEditor";
-import { WorkflowPresetPreview } from "../components/WorkflowPresetPreview";
 import {
   agentMeta,
   normalizeAgentOrchestration,
@@ -371,6 +366,7 @@ function ProjectCard({
         </label>
       )}
       <button type="button" className="project-card" onClick={onOpen}>
+        <h3>{project.title}</h3>
         <div className="project-card-top">
           <StatusBadge status={project.status} phase={project.phase} runtime={project.runtime} />
           {project.archivedAt && (
@@ -387,11 +383,6 @@ function ProjectCard({
               : "启动时间未记录"}
           </span>
         </div>
-        <div className="project-task-id">
-          <span>任务 ID</span>
-          <code>{project.id}</code>
-        </div>
-        <h3>{project.title}</h3>
         <p className="project-requirement">
           {project.requirement || "该项目尚未补充研究需求。"}
         </p>
@@ -498,241 +489,247 @@ function ProjectCard({
           </span>
         </div>
       </button>
-      <label className="project-folder-strip">
-        <Folder size={16} aria-hidden="true" />
-        <span>文件夹</span>
-        <select aria-label={`项目 ${project.title} 所属文件夹`} value={folderId ?? ""}
-          disabled={!folders || folderBusy} onChange={event => onMoveToFolder(event.target.value || null)}>
-          <option value="">{folders ? "未分类" : "正在加载分类…"}</option>
-          {folders?.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
-        </select>
-      </label>
-      {waitingForUser && project.userIntervention && (
-        <div className="project-user-intervention-strip">
-          <span>
-            <MessageSquareText size={18} />
-            <span>
-              <strong>需要用户介入</strong>
-              <small>{project.userIntervention.message}</small>
-            </span>
-          </span>
-          <Button
-            variant="primary"
-            icon={<ArrowRight size={15} />}
-            onClick={onOpen}
-          >
-            查看并回复
-          </Button>
+      <div className="project-card-management">
+        <div className="project-task-id">
+          <span>任务 ID</span>
+          <code title={project.id}>{project.id}</code>
         </div>
-      )}
-      <ProjectServiceFailureNotice project={project} compact />
-      <ProjectAuthorizationNotice project={project} compact />
-      {mainRecoveryRequired && (
-        <div className="project-main-recovery-strip" role="alert">
-          <span>
-            <AlertTriangle size={18} />
+        <label className="project-folder-strip">
+          <Folder size={16} aria-hidden="true" />
+          <span>文件夹</span>
+          <select aria-label={`项目 ${project.title} 所属文件夹`} value={folderId ?? ""}
+            disabled={!folders || folderBusy} onChange={event => onMoveToFolder(event.target.value || null)}>
+            <option value="">{folders ? "未分类" : "正在加载分类…"}</option>
+            {folders?.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
+          </select>
+        </label>
+        {waitingForUser && project.userIntervention && (
+          <div className="project-user-intervention-strip">
             <span>
-              <strong>Main 自动重试后仍未成功</strong>
-              <small>恢复时继续原持久 thread，不修改项目配置。</small>
+              <MessageSquareText size={18} />
+              <span>
+                <strong>需要用户介入</strong>
+                <small>{project.userIntervention.message}</small>
+              </span>
             </span>
-          </span>
-          <Button
-            variant="primary"
-            icon={<RefreshCw size={15} />}
-            loading={lifecycleAction === "resume"}
-            disabled={Boolean(lifecycleAction) || archiving || Boolean(project.archivedAt)}
-            onClick={() => void changeLifecycle("resume")}
-          >
-            恢复 Main
-          </Button>
-        </div>
-      )}
-      {gatewayRecoveryRequired && (
-        <div className="project-main-recovery-strip" role="alert">
-          <span>
-            <AlertTriangle size={18} />
-            <span>
-              <strong>网关工具参数连续异常</strong>
-              <small>已自动更换一次 Session；重试会保留项目上下文与现有成果。</small>
-            </span>
-          </span>
-          <Button
-            variant="primary"
-            icon={<RefreshCw size={15} />}
-            loading={lifecycleAction === "resume"}
-            disabled={Boolean(lifecycleAction) || archiving || Boolean(project.archivedAt)}
-            onClick={() => void changeLifecycle("resume")}
-          >
-            重新尝试
-          </Button>
-        </div>
-      )}
-      {!mainRecoveryRequired && !gatewayRecoveryRequired && <div
-        className="project-config-strip"
-        role="group"
-        aria-label={`项目 ${project.id} Agent 配置`}
-      >
-        <span>
-          <Settings2 size={17} />
-          <span>
-            <strong>完整 Agent 配置</strong>
-            <small>
-              {configSaveNotice ||
-                "保存 Prompt、Skills、MCP、模型、思考深度与运行参数"}
-            </small>
-          </span>
-        </span>
-        <Button
-          variant="secondary"
-          icon={<Save size={15} />}
-          onClick={() => setSaveConfigOpen(true)}
-          aria-label={`保存项目 ${project.id} 的 Agent 配置`}
-        >
-          保存配置
-        </Button>
-      </div>}
-      {(canPause || canStart || canStop) && (
-        <div
-          className={`project-lifecycle-strip ${
-            project.status === "interrupted"
-              ? "recover"
-              : canPause
-                ? "pause"
-                : "start"
-          }`}
-          role="group"
-          aria-label={`项目 ${project.id} 运行控制`}
-        >
-          <span>
-            {project.status === "interrupted" ? (
-              <TimerReset size={17} />
-            ) : canPause ? (
-              <Pause size={17} />
-            ) : (
-              <Play size={17} />
-            )}
-            <span>
-              <strong>
-                {stopped
-                  ? "项目已停止"
-                  : project.status === "interrupted"
-                  ? `已保存到 ${displayAgentName(project.queuedAgent)} 断点`
-                  : canPause
-                    ? project.currentAgent
-                      ? "项目正在运行"
-                      : "项目正在等待调度"
-                    : project.status === "pausing"
-                      ? "项目正在安全暂停"
-                      : project.status === "interrupting"
-                        ? "项目正在中断"
-                      : "项目已暂停"}
-              </strong>
-              <small>
-                {stopped
-                  ? "可恢复原项目，或归档保留执行记录"
-                  : project.status === "interrupted"
-                  ? "启动后重新运行该 Agent 并继续全流程"
-                  : canPause
-                    ? project.currentAgent
-                      ? "暂停将在当前 Agent 到达安全边界后生效"
-                      : "暂停后将从当前 Agent 队列中撤出"
-                    : project.status === "pausing"
-                      ? "启动可撤销暂停并继续当前科研流程"
-                      : !canStart
-                        ? "可停止当前项目并保留已有轨迹与产物"
-                      : "启动后从保存状态继续科研流程"}
-              </small>
-            </span>
-          </span>
-          <div className="project-lifecycle-actions">
-          {(canPause || canStart) && <Button
-            variant={canPause ? "secondary" : "primary"}
-            icon={
-              project.status === "interrupted" ? (
-                <TimerReset size={15} />
-              ) : canPause ? (
-                <Pause size={15} />
-              ) : (
-                <Play size={15} />
-              )
-            }
-            loading={lifecycleAction === "pause" || lifecycleAction === "resume"}
-            disabled={Boolean(lifecycleAction) || archiving}
-            onClick={() =>
-              void changeLifecycle(canPause ? "pause" : "resume")
-            }
-            aria-label={`${canPause ? "暂停" : "启动"}项目 ${project.id}`}
-          >
-            {canPause
-              ? "暂停项目"
-              : project.status === "interrupted"
-                ? "启动并恢复"
-                : "启动项目"}
-          </Button>}
-          {canStop && <Button
-            variant="danger"
-            icon={<CircleStop size={15} />}
-            loading={lifecycleAction === "cancel"}
-            disabled={Boolean(lifecycleAction) || archiving}
-            onClick={() => setStopOpen(true)}
-            aria-label={`停止项目 ${project.id}`}
-          >停止项目</Button>}
+            <Button
+              variant="primary"
+              icon={<ArrowRight size={15} />}
+              onClick={onOpen}
+            >
+              查看并回复
+            </Button>
           </div>
-        </div>
-      )}
-      {!project.archivedAt && project.status === "paused" && !project.git?.enabled && (
-        <small className="project-archive-hint">当前为暂停状态；如需归档，请先停止项目并等待停止完成。</small>
-      )}
-      {!project.archivedAt && ["cancelling", "stopping"].includes(project.status) && (
-        <small className="project-archive-hint">正在终止智能体并保存现场；停止完成后才可归档。</small>
-      )}
-      {(project.archivedAt || canArchiveProject(project)) && (
-        <div className="project-archive-strip">
-          <span>
-            {project.archivedAt ? <ArchiveRestore size={17} /> : <Archive size={17} />}
+        )}
+        <ProjectServiceFailureNotice project={project} compact />
+        <ProjectAuthorizationNotice project={project} compact />
+        {mainRecoveryRequired && (
+          <div className="project-main-recovery-strip" role="alert">
             <span>
-              <strong>{project.archivedAt ? "项目已归档" : project.status === "completed" ? "项目已完成，可安全归档" : stopped ? "项目已停止，可安全归档" : "项目已暂停，可归档保留现场"}</strong>
+              <AlertTriangle size={18} />
+              <span>
+                <strong>Main 自动重试后仍未成功</strong>
+                <small>恢复时继续原持久 thread，不修改项目配置。</small>
+              </span>
+            </span>
+            <Button
+              variant="primary"
+              icon={<RefreshCw size={15} />}
+              loading={lifecycleAction === "resume"}
+              disabled={Boolean(lifecycleAction) || archiving || Boolean(project.archivedAt)}
+              onClick={() => void changeLifecycle("resume")}
+            >
+              恢复 Main
+            </Button>
+          </div>
+        )}
+        {gatewayRecoveryRequired && (
+          <div className="project-main-recovery-strip" role="alert">
+            <span>
+              <AlertTriangle size={18} />
+              <span>
+                <strong>网关工具参数连续异常</strong>
+                <small>已自动更换一次 Session；重试会保留项目上下文与现有成果。</small>
+              </span>
+            </span>
+            <Button
+              variant="primary"
+              icon={<RefreshCw size={15} />}
+              loading={lifecycleAction === "resume"}
+              disabled={Boolean(lifecycleAction) || archiving || Boolean(project.archivedAt)}
+              onClick={() => void changeLifecycle("resume")}
+            >
+              重新尝试
+            </Button>
+          </div>
+        )}
+        {!mainRecoveryRequired && !gatewayRecoveryRequired && <div
+          className="project-config-strip"
+          role="group"
+          aria-label={`项目 ${project.id} Agent 配置`}
+        >
+          <span>
+            <Settings2 size={17} />
+            <span>
+              <strong>完整 Agent 配置</strong>
               <small>
-                {project.archivedAt
-                  ? `归档于 ${formatRelativeTime(project.archivedAt)}`
-                  : "归档只会从默认列表隐藏，不会删除轨迹与产物"}
+                {configSaveNotice ||
+                  "保存 Prompt、Skills、MCP、模型、思考深度与运行参数"}
               </small>
             </span>
           </span>
-          {!batchMode && (
-            <div className="project-archive-actions">
-              <Button
-                variant="secondary"
-                icon={project.archivedAt ? <ArchiveRestore size={15} /> : <Archive size={15} />}
-                loading={archiving}
-                disabled={Boolean(lifecycleAction)}
-                onClick={() => void archive()}
-              >
-                {project.archivedAt ? "取消归档" : "归档项目"}
-              </Button>
-              {project.archivedAt && (
-                <Button
-                  variant="danger"
-                  icon={<Trash2 size={15} />}
-                  onClick={onDelete}
-                >
-                  永久删除
-                </Button>
+          <Button
+            variant="secondary"
+            icon={<Save size={15} />}
+            onClick={() => setSaveConfigOpen(true)}
+            aria-label={`保存项目 ${project.id} 的 Agent 配置`}
+          >
+            保存配置
+          </Button>
+        </div>}
+        {(canPause || canStart || canStop) && (
+          <div
+            className={`project-lifecycle-strip ${
+              project.status === "interrupted"
+                ? "recover"
+                : canPause
+                  ? "pause"
+                  : "start"
+            }`}
+            role="group"
+            aria-label={`项目 ${project.id} 运行控制`}
+          >
+            <span>
+              {project.status === "interrupted" ? (
+                <TimerReset size={17} />
+              ) : canPause ? (
+                <Pause size={17} />
+              ) : (
+                <Play size={17} />
               )}
+              <span>
+                <strong>
+                  {stopped
+                    ? "项目已停止"
+                    : project.status === "interrupted"
+                    ? `已保存到 ${displayAgentName(project.queuedAgent)} 断点`
+                    : canPause
+                      ? project.currentAgent
+                        ? "项目正在运行"
+                        : "项目正在等待调度"
+                      : project.status === "pausing"
+                        ? "项目正在安全暂停"
+                        : project.status === "interrupting"
+                          ? "项目正在中断"
+                        : "项目已暂停"}
+                </strong>
+                <small>
+                  {stopped
+                    ? "可恢复原项目，或归档保留执行记录"
+                    : project.status === "interrupted"
+                    ? "启动后重新运行该 Agent 并继续全流程"
+                    : canPause
+                      ? project.currentAgent
+                        ? "暂停将在当前 Agent 到达安全边界后生效"
+                        : "暂停后将从当前 Agent 队列中撤出"
+                      : project.status === "pausing"
+                        ? "启动可撤销暂停并继续当前科研流程"
+                        : !canStart
+                          ? "可停止当前项目并保留已有轨迹与产物"
+                        : "启动后从保存状态继续科研流程"}
+                </small>
+              </span>
+            </span>
+            <div className="project-lifecycle-actions">
+            {(canPause || canStart) && <Button
+              variant={canPause ? "secondary" : "primary"}
+              icon={
+                project.status === "interrupted" ? (
+                  <TimerReset size={15} />
+                ) : canPause ? (
+                  <Pause size={15} />
+                ) : (
+                  <Play size={15} />
+                )
+              }
+              loading={lifecycleAction === "pause" || lifecycleAction === "resume"}
+              disabled={Boolean(lifecycleAction) || archiving}
+              onClick={() =>
+                void changeLifecycle(canPause ? "pause" : "resume")
+              }
+              aria-label={`${canPause ? "暂停" : "启动"}项目 ${project.id}`}
+            >
+              {canPause
+                ? "暂停项目"
+                : project.status === "interrupted"
+                  ? "启动并恢复"
+                  : "启动项目"}
+            </Button>}
+            {canStop && <Button
+              variant="danger"
+              icon={<CircleStop size={15} />}
+              loading={lifecycleAction === "cancel"}
+              disabled={Boolean(lifecycleAction) || archiving}
+              onClick={() => setStopOpen(true)}
+              aria-label={`停止项目 ${project.id}`}
+            >停止项目</Button>}
             </div>
-          )}
-        </div>
-      )}
-      {lifecycleError && (
-        <span className="project-lifecycle-error" role="alert">
-          {lifecycleError}
-        </span>
-      )}
-      {archiveError && (
-        <span className="project-archive-error" role="alert">
-          {archiveError}
-        </span>
-      )}
+          </div>
+        )}
+        {!project.archivedAt && project.status === "paused" && !project.git?.enabled && (
+          <small className="project-archive-hint">当前为暂停状态；如需归档，请先停止项目并等待停止完成。</small>
+        )}
+        {!project.archivedAt && ["cancelling", "stopping"].includes(project.status) && (
+          <small className="project-archive-hint">正在终止智能体并保存现场；停止完成后才可归档。</small>
+        )}
+        {(project.archivedAt || canArchiveProject(project)) && (
+          <div className="project-archive-strip">
+            <span>
+              {project.archivedAt ? <ArchiveRestore size={17} /> : <Archive size={17} />}
+              <span>
+                <strong>{project.archivedAt ? "项目已归档" : project.status === "completed" ? "项目已完成，可安全归档" : stopped ? "项目已停止，可安全归档" : "项目已暂停，可归档保留现场"}</strong>
+                <small>
+                  {project.archivedAt
+                    ? `归档于 ${formatRelativeTime(project.archivedAt)}`
+                    : "归档只会从默认列表隐藏，不会删除轨迹与产物"}
+                </small>
+              </span>
+            </span>
+            {!batchMode && (
+              <div className="project-archive-actions">
+                <Button
+                  variant="secondary"
+                  icon={project.archivedAt ? <ArchiveRestore size={15} /> : <Archive size={15} />}
+                  loading={archiving}
+                  disabled={Boolean(lifecycleAction)}
+                  onClick={() => void archive()}
+                >
+                  {project.archivedAt ? "取消归档" : "归档项目"}
+                </Button>
+                {project.archivedAt && (
+                  <Button
+                    variant="danger"
+                    icon={<Trash2 size={15} />}
+                    onClick={onDelete}
+                  >
+                    永久删除
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        {lifecycleError && (
+          <span className="project-lifecycle-error" role="alert">
+            {lifecycleError}
+          </span>
+        )}
+        {archiveError && (
+          <span className="project-archive-error" role="alert">
+            {archiveError}
+          </span>
+        )}
+      </div>
       {stopOpen && <ProjectStopDialog
         title={project.title}
         loading={lifecycleAction === "cancel"}
@@ -751,178 +748,6 @@ function ProjectCard({
         />
       )}
     </article>
-  );
-}
-
-function ConfigPresetLibrary({
-  presets,
-  harnesses,
-  gateways,
-  onImport,
-  onDownload,
-  onDelete,
-  onRename
-}: {
-  presets: AgentConfigPreset[];
-  harnesses: HarnessCatalogEntry[];
-  gateways: GatewayRecord[];
-  onImport: (filename: string, text: string) => Promise<AgentConfigPreset>;
-  onDownload: (preset: AgentConfigPreset) => void;
-  onDelete: (preset: AgentConfigPreset) => Promise<void>;
-  onRename: (preset: AgentConfigPreset, name: string) => Promise<void>;
-}) {
-  const [deletingId, setDeletingId] = useState("");
-  const [renamingId, setRenamingId] = useState("");
-  const [deleteError, setDeleteError] = useState("");
-  const importInput = useRef<HTMLInputElement>(null);
-  const [importing, setImporting] = useState(false);
-  const [importError, setImportError] = useState("");
-  const [preview, setPreview] = useState<AgentConfigPreset>();
-
-  const importWorkflow = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file || importing) return;
-    setImportError("");
-    if (!/\.json$/i.test(file.name) || file.size > 1_000_000) {
-      setImportError("请选择不超过 1 MB 的 workflow.json 文件");
-      return;
-    }
-    setImporting(true);
-    try {
-      const text = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(new Error("读取 workflow.json 失败"));
-        reader.onload = () => resolve(String(reader.result ?? ""));
-        reader.readAsText(file, "utf-8");
-      });
-      setPreview(await onImport(file.name, text));
-    } catch (error) {
-      setImportError(error instanceof Error ? error.message : "导入 Workflow 失败");
-    } finally {
-      setImporting(false);
-    }
-  };
-
-  const deletePreset = async (preset: AgentConfigPreset) => {
-    if (preset.builtin) return;
-    const confirmed = window.confirm(
-      preset.importSource
-        ? `确定删除 SDK Workflow“${preset.name}”吗？只删除已导入的可视化记录，不影响原始文件或任何课题。`
-        : `确定删除配置“${preset.name}”吗？\n\n这是 Workflow 配置。配置删除后，已经使用它的项目副本不受影响，但将无法再更新或覆盖该配置；如需继续保存为可复用配置，请使用“另存为新配置”。`
-    );
-    if (!confirmed) return;
-    setDeletingId(preset.id);
-    setDeleteError("");
-    try {
-      await onDelete(preset);
-      if (preview?.id === preset.id) setPreview(undefined);
-    } catch (error) {
-      setDeleteError(
-        error instanceof Error ? error.message : "删除配置失败，请稍后重试。"
-      );
-    } finally {
-      setDeletingId("");
-    }
-  };
-
-  const renamePreset = async (preset: AgentConfigPreset) => {
-    if (preset.builtin || renamingId) return;
-    const name = window.prompt("重命名 Workflow 配置", preset.name)?.trim();
-    if (!name || name === preset.name) return;
-    setRenamingId(preset.id);
-    setDeleteError("");
-    try {
-      await onRename(preset, name);
-    } catch (error) {
-      setDeleteError(error instanceof Error ? error.message : "重命名配置失败，请稍后重试。");
-    } finally {
-      setRenamingId("");
-    }
-  };
-
-  return (
-    <aside className="config-preset-library" aria-label="已有 Agent 配置">
-      <header>
-        <span>
-          <Database size={16} />
-          Agent 配置预设
-        </span>
-        <small>{presets.length} 项</small>
-      </header>
-      <div className="workflow-library-import">
-        <button type="button" className="button button-secondary" disabled={importing} onClick={() => importInput.current?.click()}>
-          <Upload size={15} />{importing ? "正在导入…" : "导入 SDK workflow.json"}
-        </button>
-        <input ref={importInput} className="workflow-json-file-input" type="file" accept=".json,application/json" aria-label="导入 SDK Workflow 文件" onChange={(event) => void importWorkflow(event)} />
-        <small>导入后可预览原文，也可在快速发起中载入副本并配置网页网关。</small>
-        {importError && <span className="config-preset-delete-error" role="alert">{importError}</span>}
-      </div>
-      <div className="config-preset-library-list">
-        {presets.length ? (
-          presets.map((preset) => {
-            const agentCount = preset.orchestration.agents.length;
-            const pathCount = 1 + Object.values(preset.orchestration.routes ?? {}).reduce((total, routes) => total + routes.length, 0);
-            const mcpAssignmentCount = Object.values(preset.agents).reduce((total, config) => total + config.mcpServers.length, 0);
-            return (
-              <article key={preset.id}>
-                <div>
-                  <strong title={preset.name}>{preset.name} {preset.builtin && <em className="config-preset-builtin">系统默认</em>}</strong>
-                  {preset.importSource && <small>SDK 导入 · 原文保留</small>}
-                  <small>{agentCount} 个 Agent · {pathCount} 条路径</small>
-                  <small>{mcpAssignmentCount} 个 MCP 绑定</small>
-                  <small>更新时间：{preset.updatedAt ? formatRelativeTime(preset.updatedAt) : "系统内置"}</small>
-                  {!preset.builtin && <small>来源：{preset.importSource?.filename ?? preset.sourceProjectTitle ?? preset.sourceProjectId ?? "未知项目"}</small>}
-                </div>
-                <div className="config-preset-actions">
-                  <button type="button" onClick={() => setPreview(preset)} aria-label={`查看 Workflow ${preset.name}`} title="查看 Workflow"><Eye size={15} /></button>
-                  <button
-                    type="button"
-                    onClick={() => preset.importSource ? downloadWorkflowSource(preset) : onDownload(preset)}
-                    aria-label={`下载配置 ${preset.name}`}
-                    title="下载 JSON"
-                  >
-                    <Download size={15} />
-                  </button>
-                  {!preset.builtin && (
-                    <>
-                      {!preset.importSource && <button
-                        type="button"
-                        onClick={() => void renamePreset(preset)}
-                        disabled={Boolean(deletingId || renamingId)}
-                        aria-label={`重命名配置 ${preset.name}`}
-                        title="重命名配置"
-                      >
-                        <Pencil size={15} />
-                      </button>}
-                    <button
-                      type="button"
-                      className="config-preset-delete"
-                      onClick={() => void deletePreset(preset)}
-                      disabled={Boolean(deletingId)}
-                      aria-label={`删除配置 ${preset.name}`}
-                      title="删除配置"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                    </>
-                  )}
-                </div>
-              </article>
-            );
-          })
-        ) : (
-          <p>暂无已保存配置</p>
-        )}
-      </div>
-      {deleteError && (
-        <span className="config-preset-delete-error" role="alert">
-          {deleteError}
-        </span>
-      )}
-      <small>保存与下载相互独立；下载不会修改配置库。</small>
-      {preview && <WorkflowPresetPreview preset={preview} harnesses={harnesses} gateways={gateways} onClose={() => setPreview(undefined)} />}
-    </aside>
   );
 }
 
@@ -997,11 +822,6 @@ function SavedResearchTaskLibrary({
   return (
     <section className="saved-task-library" aria-label="已保存科研任务">
       <div className="saved-task-library-heading">
-        <div>
-          <span className="section-kicker">Reusable research briefs</span>
-          <h2>保存任务</h2>
-          <p>保存任务内容与完整 Agent 配置，按需修改并作为新课题再次启动。</p>
-        </div>
         <span className="saved-task-count">
           <Save size={15} /> {tasks.length} 项
         </span>
@@ -1214,7 +1034,7 @@ function SavedResearchTaskLibrary({
         <EmptyState
           icon={<Save size={25} />}
           title="还没有保存任务"
-          description="可在快速发起区或新课题页面保存任务副本，不会立即启动 Agent。"
+          description="可从「新建课题」保存任务副本。"
         />
       )}
     </section>
@@ -1365,11 +1185,13 @@ export function ProjectListPage({
   onCreate,
   onOpen,
   onEditSavedTask,
+  view = "projects",
   quickDraft
 }: {
   onCreate: () => void;
   onOpen: (id: string) => void;
   onEditSavedTask?: (id: string) => void;
+  view?: "projects" | "saved-tasks";
   quickDraft?: {
     requirement: string;
     onRequirementChange: (value: string) => void;
@@ -1424,6 +1246,8 @@ export function ProjectListPage({
   const [workflowSaveRevision, setWorkflowSaveRevision] = useState(0);
   const [quickSaveNotice, setQuickSaveNotice] = useState("");
   const [quickCanvasOpen, setQuickCanvasOpen] = useState(false);
+  const quickTaskDialog = useRef<HTMLDialogElement>(null);
+  const closeQuickTask = () => quickTaskDialog.current?.close();
   const [quickGitEnabled, setQuickGitEnabled] = useState(false);
   const [githubAccounts, setGithubAccounts] = useState<GitHubAccountRecord[]>([]);
   const [githubAccountsLoading, setGithubAccountsLoading] = useState(true);
@@ -1990,7 +1814,7 @@ export function ProjectListPage({
         task,
         ...current.filter((item) => item.id !== task.id)
       ]);
-      setQuickSaveNotice(`“${task.title}”已保存，可在下方任务列表中编辑或启动。`);
+      setQuickSaveNotice(`“${task.title}”已保存，可在「已保存任务」中编辑或启动。`);
       setWorkflowSaveRevision((revision) => revision + 1);
     } catch (reason) {
       setQuickError(
@@ -2335,6 +2159,48 @@ export function ProjectListPage({
     if (hasProjectSnapshot && overview) cacheProjectOverview(overview);
   }, [hasProjectSnapshot, overview]);
 
+  useEffect(() => {
+    if (view === "saved-tasks" && document.scrollingElement) document.scrollingElement.scrollTop = 0;
+  }, [view]);
+
+  if (view === "saved-tasks") {
+    return <main className="gateway-management-page saved-tasks-page">
+      <header className="gateway-management-hero">
+        <a className="button button-ghost" href="#/projects">返回项目</a>
+        <div><h1>已保存任务</h1></div>
+        <Button variant="primary" icon={<Plus size={16} />} onClick={onCreate}>新建课题</Button>
+      </header>
+      <SavedResearchTaskLibrary
+        tasks={savedTasks}
+        loading={savedTasksLoading}
+        warning={savedTasksWarning}
+        startNoticesForTask={savedTaskStartNotices}
+        onEdit={(task) => onEditSavedTask?.(task.id)}
+        onDelete={async (task) => {
+          await deleteSavedResearchTask(task.id);
+          setSavedTasks((current) =>
+            current.filter((item) => item.id !== task.id)
+          );
+        }}
+        onStart={async (task) => {
+          const project = await createProject({
+            sourceSavedTaskId: task.id,
+            title: task.title,
+            requirement: task.requirement,
+            agents: cloneAgentsConfig(task.agents),
+            orchestration: cloneAgentOrchestration(task.orchestration),
+            git: task.git ?? { enabled: false },
+            ...projectResourcesPayload(task.skillDefinitions, task.mcpDefinitions)
+          });
+          publishProjectMutation((current) => [project, ...current.filter((item) => item.id !== project.id)]);
+          await load(false);
+          return project;
+        }}
+        onOpenProject={onOpen}
+      />
+    </main>;
+  }
+
   return (
     <main className="projects-page">
       <section className="projects-hero">
@@ -2350,6 +2216,7 @@ export function ProjectListPage({
           <p>
             编排任意通用 Worker。每一步有迹可循，流程根据全局证据安排下一步、用户介入或结束。
           </p>
+          <div className="hero-project-actions">
           <Button
             variant="primary"
             icon={<Plus size={18} />}
@@ -2358,6 +2225,11 @@ export function ProjectListPage({
           >
             发起新课题
           </Button>
+          <Button variant="secondary" icon={<Send size={16} />} onClick={() => quickTaskDialog.current?.showModal()} aria-haspopup="dialog">
+            快速开始
+          </Button>
+          <a className="button button-secondary" href="#/saved-tasks"><Save size={16} aria-hidden="true" />已保存任务</a>
+          </div>
         </div>
         <div className="hero-system-card" aria-hidden="true">
           <div className="orbit orbit-one" />
@@ -2421,12 +2293,19 @@ export function ProjectListPage({
         </div>
       </section>
 
-      <div className="quick-task-row">
+      <dialog ref={quickTaskDialog} className="quick-task-dialog" aria-labelledby="quick-task-title"
+        onClose={() => { setQuickCanvasOpen(false); setQuickAdvancedOpen(false); setQuickNewConfigDialogOpen(false); setQuickSaveMenuOpen(false); }}
+        onCancel={event => {
+          if (quickNewConfigDialogOpen) { event.preventDefault(); setQuickNewConfigDialogOpen(false); }
+          else if (quickAdvancedOpen) { event.preventDefault(); setQuickAdvancedOpen(false); }
+          else if (quickCanvasOpen) { event.preventDefault(); setQuickCanvasOpen(false); }
+        }}>
         <section className="quick-task-section">
           <div className="quick-task-copy">
-            <span className="section-kicker">Continuous intake</span>
-            <h2>快速发起研究任务</h2>
-            <p>直接描述需求并选择 Agent 配置预设；提交后可继续输入下一条。</p>
+            <div className="quick-task-dialog-heading">
+              <h2 id="quick-task-title">快速开始</h2>
+              <button type="button" className="icon-button" onClick={closeQuickTask} aria-label="关闭快速发起"><X size={18} /></button>
+            </div>
             <span className="quick-default-note">
               <Users size={15} />
               {quickPreset?.name ?? "系统默认配置"} · {quickOrchestration.agents.length} 个科研智能体
@@ -2516,7 +2395,8 @@ export function ProjectListPage({
             {quickGitEnabled && <GitHubAccountSelector accounts={githubAccounts} selectedAccountId={quickGithubAccountId} loading={githubAccountsLoading} onChange={(accountId) => { setQuickGithubAccountId(accountId); setQuickError(""); }} />}
             <label>
               <span className="sr-only">研究任务需求</span>
-              <textarea
+              <TextArea
+                className="research-prompt-field"
                 value={quickRequirement}
                 onChange={(event) => {
                   setQuickRequirement(event.target.value);
@@ -2611,58 +2491,6 @@ export function ProjectListPage({
             )}
           </form>
         </section>
-        <ConfigPresetLibrary
-          presets={configPresets}
-          harnesses={harnesses}
-          gateways={gateways}
-          onImport={async (filename, text) => {
-            const imported = await importAgentConfigPreset(filename, text);
-            setConfigPresets((current) => [imported, ...current.filter((item) => item.id !== imported.id)]);
-            return imported;
-          }}
-          onDownload={downloadAgentConfigPreset}
-          onRename={async (preset, name) => {
-            const updated = await updateAgentConfigPreset(preset.id, {
-              name,
-              agents: cloneAgentsConfig(preset.agents),
-              orchestration: cloneAgentOrchestration(preset.orchestration),
-              ...projectResourcesPayload(preset.skillDefinitions, preset.mcpDefinitions)
-            });
-            setConfigPresets((current) => current.map((item) => item.id === updated.id ? updated : item));
-            setQuickSaveNotice(`${updated.name} 已重命名`);
-          }}
-          onDelete={async (preset) => {
-            await deleteAgentConfigPreset(preset.id);
-            setConfigPresets((current) =>
-              current.filter((item) => item.id !== preset.id)
-            );
-            setQuickPresetId((current) =>
-              current === preset.id ? "default" : current
-            );
-            if (quickPresetId === preset.id) {
-              const defaultPreset = configPresets.find(
-                (item) => item.id === "default"
-              );
-              setQuickOrchestration(
-                cloneAgentOrchestration(
-                  defaultPreset?.orchestration ??
-                    DEFAULT_RESEARCH_WORKFLOW
-                )
-              );
-              setQuickSkillDefinitions(structuredClone(defaultPreset?.skillDefinitions ?? {}));
-              setQuickMcpDefinitions(structuredClone(defaultPreset?.mcpDefinitions ?? {}));
-              const fallbackAgents = cloneAgentsConfig(defaultPreset?.agents ?? defaultResearchAgents());
-              setQuickAgents(defaultPreset
-                ? applyCatalogDefaultGateway(
-                    applyCatalogDefaultHarness(fallbackAgents, harnesses, defaultHarnessId),
-                    catalogGatewayRef.current?.defaultGatewayId ?? defaultGatewayId,
-                    catalogGatewayRef.current?.gateways ?? gateways
-                  )
-                : fallbackAgents);
-            }
-          }}
-        />
-      </div>
 
       {quickCanvasOpen && (
         <div className="workflow-canvas-dialog" role="dialog" aria-modal="true" aria-label="编辑快速发起 Workflow">
@@ -2757,34 +2585,7 @@ export function ProjectListPage({
         </div>
       )}
 
-      <SavedResearchTaskLibrary
-        tasks={savedTasks}
-        loading={savedTasksLoading}
-        warning={savedTasksWarning}
-        startNoticesForTask={savedTaskStartNotices}
-        onEdit={(task) => onEditSavedTask?.(task.id)}
-        onDelete={async (task) => {
-          await deleteSavedResearchTask(task.id);
-          setSavedTasks((current) =>
-            current.filter((item) => item.id !== task.id)
-          );
-        }}
-        onStart={async (task) => {
-          const project = await createProject({
-            sourceSavedTaskId: task.id,
-            title: task.title,
-            requirement: task.requirement,
-            agents: cloneAgentsConfig(task.agents),
-            orchestration: cloneAgentOrchestration(task.orchestration),
-            git: task.git ?? { enabled: false },
-            ...projectResourcesPayload(task.skillDefinitions, task.mcpDefinitions)
-          });
-          publishProjectMutation((current) => [project, ...current.filter((item) => item.id !== project.id)]);
-          await load(false);
-          return project;
-        }}
-        onOpenProject={onOpen}
-      />
+      </dialog>
 
       <QueueBoard
         queue={queue}

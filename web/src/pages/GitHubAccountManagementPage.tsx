@@ -23,6 +23,7 @@ import {
   getGitHubRepositoryStatus,
   getProjects,
   setDefaultGitHubAccount,
+  setupGitHubOAuth,
   startGitHubAuthorization,
   startGitHubRepositoryDeletionAuthorization,
   verifyGitHubAccount
@@ -120,6 +121,10 @@ export function GitHubAccountManagementPage({ onBack }: { onBack: () => void }) 
   }, []);
 
   const repositoryProjects = projects.filter((project) => project.git?.repository);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [setupBusy, setSetupBusy] = useState(false);
+  const [setupError, setSetupError] = useState("");
+  const callbackUrl = new URL("api/github/auth/callback", window.location.href).href;
 
   useEffect(() => {
     void load();
@@ -236,18 +241,52 @@ export function GitHubAccountManagementPage({ onBack }: { onBack: () => void }) 
         <Button
           variant="primary"
           icon={connecting ? <LoaderCircle className="spin" size={16} /> : <LogIn size={16} />}
-          onClick={() => void connect()}
-          disabled={connecting || !oauthConfigured}
+          onClick={() => oauthConfigured ? void connect() : setSetupOpen(true)}
+          disabled={connecting || oauthConfigured === undefined}
         >
-          {connecting ? "等待 GitHub…" : "登录新账号"}
+          {connecting ? "等待 GitHub…" : oauthConfigured === false ? "配置 GitHub OAuth" : "登录新账号"}
         </Button>
       </header>
 
       {oauthConfigured === false && (
         <div className="github-account-setup" role="status">
           <CircleAlert size={18} />
-          <span><strong>GitHub OAuth 尚未配置</strong><small>请在 Server 设置 Client ID、Client Secret 与 Callback URL 后重启服务。</small></span>
+          <span><strong>GitHub OAuth 尚未配置</strong></span>
         </div>
+      )}
+      {setupOpen && oauthConfigured === false && (
+        <form className="github-oauth-setup-form" aria-label="GitHub OAuth 配置" onSubmit={async event => {
+          event.preventDefault();
+          if (setupBusy) return;
+          const form = event.currentTarget;
+          const fields = new FormData(form);
+          setSetupBusy(true);
+          setSetupError("");
+          try {
+            await setupGitHubOAuth({
+              clientId: String(fields.get("clientId")), clientSecret: String(fields.get("clientSecret")),
+              callbackUrl, setupCode: String(fields.get("setupCode"))
+            });
+            form.reset();
+            setOauthConfigured(true);
+            setSetupOpen(false);
+            setNotice("GitHub OAuth 已配置，可以登录新账号");
+          } catch (reason) {
+            setSetupError(reason instanceof Error ? reason.message : "GitHub OAuth 配置保存失败");
+          } finally {
+            setSetupBusy(false);
+          }
+        }}>
+          <label>Callback URL<input readOnly value={callbackUrl} onFocus={event => event.currentTarget.select()} /></label>
+          <label>Client ID<input name="clientId" autoComplete="off" required maxLength={200} /></label>
+          <label>Client Secret<input name="clientSecret" type="password" autoComplete="off" required maxLength={512} /></label>
+          <label>部署设置码<input name="setupCode" type="password" autoComplete="off" required minLength={32} maxLength={256} /></label>
+          {setupError && <p role="alert">{setupError}</p>}
+          <div>
+            <Button type="button" variant="ghost" disabled={setupBusy} onClick={() => { setSetupOpen(false); setSetupError(""); }}>取消</Button>
+            <Button type="submit" variant="primary" loading={setupBusy} disabled={setupBusy}>保存 OAuth 配置</Button>
+          </div>
+        </form>
       )}
       {error && <ErrorPanel title="GitHub 账号操作失败" message={error} />}
       {notice && <div className="github-account-notice" role="status"><CheckCircle2 size={16} />{notice}</div>}
@@ -297,7 +336,10 @@ export function GitHubAccountManagementPage({ onBack }: { onBack: () => void }) 
           <Github size={34} />
           <strong>尚未登录 GitHub 账号</strong>
           <p>启用 Git 机制前，需要先登录至少一个能够创建个人私有仓库的账号。</p>
-          <Button variant="primary" icon={<LogIn size={16} />} disabled={!oauthConfigured || connecting} onClick={() => void connect()}>登录 GitHub</Button>
+          <Button variant="primary" icon={<LogIn size={16} />} disabled={oauthConfigured === undefined || connecting}
+            onClick={() => oauthConfigured ? void connect() : setSetupOpen(true)}>
+            {oauthConfigured === false ? "配置 OAuth" : "登录 GitHub"}
+          </Button>
         </section>
       )}
 
