@@ -84,8 +84,8 @@ describe("non-Git serial workflow journal foundation", () => {
   });
 
   it("retains the exact accepted proposal and status across close/reopen and repeated acceptance", async () => {
-    const f = await fixture(), input = f.main(), first = f.database.stageSerialMainWorkflowAdjustment(input), writerLease = f.database.writerLease();
-    f.database.close(); const reopened = CollaborationStateDatabase.open({ ...f.options, writerLease }); stores.push(reopened);
+    const f = await fixture(), input = f.main(), first = f.database.stageSerialMainWorkflowAdjustment(input);
+    f.database.close(); const reopened = CollaborationStateDatabase.open(f.options); stores.push(reopened);
     expect(reopened.stageSerialMainWorkflowAdjustment(input)).toMatchObject({ replay: true, record: first.record });
     expect(f.publish(first.record.requestId, reopened)).toMatchObject({ status: "applied", workflowRevision: 2 });
     const events = reopened.eventsAfter("sdk", 0, 1000);

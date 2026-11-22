@@ -1,7 +1,10 @@
+import { legacyWriterFixture, openUpgradedFixture } from "./helpers/legacy-writer-fixture.js";
 import { COLLABORATION_STATE_SCHEMA_VERSION } from "../src/collaboration-state/contracts.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { execFile } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { Worker } from "node:worker_threads";
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
+import type { WriterOwner } from "../src/collaboration-state/writer-owner.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -15,41 +18,50 @@ import { mergeAgentConfigs, normalizeAgentOrchestrationTemplate } from "../src/v
 import { WORKFLOW_ADJUSTMENT_STALE_MESSAGE, validateWorkflowAdjustmentSnapshot, workflowAdjustmentChanges, workflowAdjustmentsConflict, type SubmitUserWorkflowAdjustmentInput } from "../src/workflow-adjustments.js";
 
 const roots: string[] = [], stores: CollaborationStateDatabase[] = [];
-afterEach(async () => { stores.splice(0).forEach(store => store.close()); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { stores.splice(0).reverse().forEach(store => store.close()); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical) : value && typeof value === "object"
   ? Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, canonical(item)])) : value;
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
 
-async function concurrentWorkflowWorkers(worker: string, config: string, operations: string[]): Promise<any[]> {
-  const running: Array<{ child: ReturnType<typeof execFile>; result: Promise<string> }> = [];
+async function concurrentWorkflowWorkers(database: CollaborationStateDatabase, worker: string, config: string, operations: string[]): Promise<any[]> {
+  const owner = Reflect.get(database, "owner") as WriterOwner;
+  const register = pathToFileURL(createRequire(import.meta.url).resolve("tsx/esm/api")).href;
+  const entry = new URL("data:text/javascript," + encodeURIComponent(
+    `const {register}=await import(${JSON.stringify(register)}); register(); await import(${JSON.stringify(pathToFileURL(worker).href)});`));
+  const running: Array<{ child: Worker; result: Promise<string> }> = [];
   try {
     for (const operation of operations) {
       let ready!: () => void, rejectReady!: (error: Error) => void, announced = false;
       const opened = new Promise<void>((resolve, reject) => { ready = resolve; rejectReady = reject; });
-      let child!: ReturnType<typeof execFile>;
-      const result = new Promise<string>((resolve, reject) => {
-        child = execFile(process.execPath, ["--import", "tsx", worker, config, operation], {
-          cwd: fileURLToPath(new URL("../../", import.meta.url)), timeout: 15_000
-        }, (error, stdout) => error ? reject(error) : resolve(stdout));
-      });
-      result.catch(() => undefined);
-      let output = "";
+      const attachment = database.writerOwnerAttachment();
+      let child: Worker;
+      try { child = new Worker(entry, { argv: [worker, config, operation], stdin: true, stdout: true, stderr: true, workerData: { attachment } }); }
+      catch (error) { owner.detachTerminatedWorker(attachment); throw error; }
+      let output = "", stderr = "", failure: Error | undefined;
       child.stdout!.on("data", data => { output += String(data); if (!announced && output.startsWith("ready\n")) { announced = true; ready(); } });
-      child.once("error", rejectReady);
-      child.once("close", () => { if (!announced) rejectReady(new Error("Workflow worker closed before its database was ready")); });
-      running.push({ child, result });
-      await opened;
+      child.stderr!.on("data", data => { stderr += String(data); });
+      const timer = setTimeout(() => { failure = new Error("Concurrent workflow Worker timed out"); void child.terminate(); }, 15_000);
+      const result = new Promise<string>((resolve, reject) => {
+        child.once("error", error => { failure = error; rejectReady(error); });
+        child.once("exit", code => {
+          clearTimeout(timer); owner.detachTerminatedWorker(attachment);
+          if (!announced) rejectReady(failure ?? new Error(`Workflow Worker exited before readiness: ${stderr}`));
+          if (failure || code !== 0) reject(failure ?? new Error(`Workflow Worker exited (${code}): ${stderr}`));
+          else resolve(output);
+        });
+      });
+      result.catch(() => undefined); running.push({ child, result }); await opened;
     }
     for (const entry of running) entry.child.stdin!.end("go\n");
     return await Promise.all(running.map(entry => entry.result.then(output => JSON.parse(output.slice("ready\n".length)))));
-  } finally { for (const entry of running) if (entry.child.exitCode === null) entry.child.kill(); }
+  } finally { await Promise.all(running.map(async entry => { await entry.child.terminate(); await entry.result.catch(() => {}); })); }
 }
 
 async function fixture(allowMain = true, initialized = true) {
   const root = await mkdtemp(join(tmpdir(), "openfars-adjustment-journal-")); roots.push(root);
   const clock = { now: 1_000_000 };
   const options = { databasePath: join(root, "state.sqlite"), serviceId: "test", hostId: "test", topology: "single-host" as const,
-    instanceId: "original-writer", leaseDurationMs: 30_000, now: () => clock.now };
+    instanceId: "original-writer", now: () => clock.now };
   const database = CollaborationStateDatabase.open(options); stores.push(database);
   const orchestration = cloneAgentOrchestrationTemplate(); orchestration.allowMainReconfiguration = allowMain;
   database.createProject({ projectId: "p", workflowRevision: 1, workflowSnapshot: orchestration, git: { enabled: true, status: "ready" }, workerCapacity: 4 });
@@ -127,15 +139,16 @@ describe("durable shared workflow adjustment journal", () => {
     expect(database.workflowAdjustmentCurrent("p").version).toEqual(request.base);
   });
 
-  it.each([1, 2, 3])("serializes a legacy claim against actual independent-process user publication (%s)", async () => {
+  it.each([1, 2, 3])("serializes a legacy claim against actual independent-Worker user publication (%s)", async () => {
     const f = await legacyGroupFixture(), { database, root, options } = f; f.launch(); f.assign(["idea"]);
     const request = f.input(), claim = f.claimInput();
     const worker = join(root, "legacy-claim-publication.mjs"), config = join(root, "legacy-claim-publication.json");
     await writeFile(config, JSON.stringify({ options: { ...options, now: undefined, writerLease: database.writerLease() }, request, claim }));
     await writeFile(worker, `import { readFileSync } from "node:fs";
 import { CollaborationStateDatabase } from ${JSON.stringify(new URL("../src/collaboration-state/store.ts", import.meta.url).href)};
+import { workerData } from "node:worker_threads";
 const { options, request, claim } = JSON.parse(readFileSync(process.argv[2], "utf8"));
-const database = CollaborationStateDatabase.open({ ...options, now: () => 1000000 });
+const database = CollaborationStateDatabase.open({ ...options, now: () => 1000000, writerOwner: workerData.attachment });
 process.stdout.write("ready\\n"); await new Promise(resolve => process.stdin.once("data", resolve));
 try {
   let result;
@@ -146,7 +159,7 @@ try {
   process.stdout.write(JSON.stringify(result));
 } finally { database.close(); }
 `);
-    const [claimed, publication] = await concurrentWorkflowWorkers(worker, config, ["claim", "publish"]);
+    const [claimed, publication] = await concurrentWorkflowWorkers(database, worker, config, ["claim", "publish"]);
     const record = database.workflowAdjustments("p")[0], projection = database.projectState("p");
     expect(publication.status).toBe(record.status); expect(record.base).toEqual(request.base); expect(record.proposal).toEqual(request.proposal);
     if (claimed.error) { expect(claimed.error).toBe("WORKFLOW_ADJUSTMENT_PENDING"); expect(projection.executions).toEqual([]); }
@@ -274,7 +287,7 @@ try {
   it("recovers the same legacy launch and held FIFO from durable facts on a new database connection", async () => {
     const f = await legacyGroupFixture(), { database } = f; f.launch(); f.assign(["idea"]);
     const request = f.input(); database.submitUserWorkflowAdjustment(request);
-    const recovered = CollaborationStateDatabase.open({ ...f.options, writerLease: database.writerLease() }); stores.push(recovered);
+    const recovered = CollaborationStateDatabase.open(f.options); stores.push(recovered);
     const before = recovered.projectState("p");
     expect(() => recovered.claimNextTask(f.claimInput())).toThrow(expect.objectContaining({ code: "WORKFLOW_ADJUSTMENT_PENDING" }));
     expect(recovered.projectState("p")).toEqual(before);
@@ -360,7 +373,7 @@ try {
 
   it("requires the exact explicit replacement and atomically keeps only one current user request across connections", async () => {
     const { database, input, options } = await fixture(); database.submitUserWorkflowAdjustment(input());
-    const another = CollaborationStateDatabase.open({ ...options, writerLease: database.writerLease() }); stores.push(another);
+    const another = CollaborationStateDatabase.open({ ...options, writerLease: database.writerLease(), writerOwner: database.writerOwnerAttachment() }); stores.push(another);
     const next = input("user-two");
     expect(() => another.submitUserWorkflowAdjustment(next)).toThrow("已有一条待应用修改，本次提交将覆盖它");
     expect(() => another.submitUserWorkflowAdjustment({ ...next, replacesRequestId: "wrong" })).toThrow();
@@ -391,22 +404,23 @@ try {
     expect(database.projectState("p").revision).toBe(revision);
   });
 
-  it("serializes two actual processes replacing the same user request, accepting only one complete snapshot", async () => {
+  it("serializes two actual Workers replacing the same user request, accepting only one complete snapshot", async () => {
     const { database, options, input, root } = await fixture(); database.submitUserWorkflowAdjustment(input());
     const worker = join(root, "replace.mjs"), config = join(root, "worker.json");
     await writeFile(config, JSON.stringify({ options: { ...options, now: undefined, writerLease: database.writerLease() },
       requests: ["window-one", "window-two"].map(id => ({ ...input(id), replacesRequestId: "user-one" })) }));
     await writeFile(worker, `import { readFileSync } from "node:fs";
 import { CollaborationStateDatabase } from ${JSON.stringify(new URL("../src/collaboration-state/store.ts", import.meta.url).href)};
+import { workerData } from "node:worker_threads";
 const { options, requests } = JSON.parse(readFileSync(process.argv[2], "utf8"));
-const database = CollaborationStateDatabase.open({ ...options, now: () => 1000000 });
+const database = CollaborationStateDatabase.open({ ...options, now: () => 1000000, writerOwner: workerData.attachment });
 process.stdout.write("ready\\n"); await new Promise(resolve => process.stdin.once("data", resolve));
 try { const result = database.submitUserWorkflowAdjustment(requests[Number(process.argv[3])]);
   process.stdout.write(JSON.stringify({ accepted: true, requestId: result.record.requestId }));
 } catch (error) { process.stdout.write(JSON.stringify({ accepted: false, code: error.code })); }
 finally { database.close(); }
 `);
-    const outcomes = await concurrentWorkflowWorkers(worker, config, ["0", "1"]);
+    const outcomes = await concurrentWorkflowWorkers(database, worker, config, ["0", "1"]);
     expect(outcomes.filter(result => result.accepted)).toHaveLength(1);
     expect(outcomes.find(result => !result.accepted).code).toBe("WORKFLOW_ADJUSTMENT_CONFLICT");
     const records = database.workflowAdjustments("p"), active = records.filter(record => record.status === "pending");
@@ -624,20 +638,21 @@ describe("user workflow publication consumes the immutable shared journal", () =
     expect(database.projectState("p")).toEqual(before); expect(database.eventsAfter("p", 0, 1000)).toEqual(events);
   });
 
-  it("serializes user publication and withdrawal in actual separate processes with one immutable terminal result", async () => {
+  it("serializes user publication and withdrawal in actual separate Workers with one immutable terminal result", async () => {
     const { database, input, options, root } = await fixture(false), request = input(); database.submitUserWorkflowAdjustment(request);
     const prepared = prepare(database), worker = join(root, "user-publication-race.mjs"), config = join(root, "user-publication-race.json");
     await writeFile(config, JSON.stringify({ options: { ...options, now: undefined, writerLease: database.writerLease() }, token: prepared.validationToken }));
     await writeFile(worker, `import { readFileSync } from "node:fs";
 import { CollaborationStateDatabase } from ${JSON.stringify(new URL("../src/collaboration-state/store.ts", import.meta.url).href)};
+import { workerData } from "node:worker_threads";
 const { options, token } = JSON.parse(readFileSync(process.argv[2], "utf8"));
-const database = CollaborationStateDatabase.open({ ...options, now: () => 1000000 });
+const database = CollaborationStateDatabase.open({ ...options, now: () => 1000000, writerOwner: workerData.attachment });
 process.stdout.write("ready\\n"); await new Promise(resolve => process.stdin.once("data", resolve));
 try { const result = process.argv[3] === "publish" ? database.publishUserWorkflowAdjustment("p", "user-one", token)
   : database.withdrawWorkflowAdjustment({ projectId: "p", requestId: "user-one", operationId: "user-publication-race" });
   process.stdout.write(JSON.stringify(result)); } finally { database.close(); }
 `);
-    const [publication, withdrawal] = await concurrentWorkflowWorkers(worker, config, ["publish", "withdraw"]);
+    const [publication, withdrawal] = await concurrentWorkflowWorkers(database, worker, config, ["publish", "withdraw"]);
     const record = database.workflowAdjustments("p")[0]; expect(["applied", "withdrawn"]).toContain(record.status);
     expect(publication.status).toBe(record.status); expect(withdrawal.record.status).toBe(record.status);
     expect(withdrawal.withdrawn).toBe(record.status === "withdrawn");
@@ -647,7 +662,7 @@ try { const result = process.argv[3] === "publish" ? database.publishUserWorkflo
     expect(record.base).toEqual(request.base); expect(record.proposal).toEqual(request.proposal);
   });
 
-  it("serializes a new Git preparation against user submission and publication in actual separate processes", async () => {
+  it("serializes a new Git preparation against user submission and publication in actual separate Workers", async () => {
     const { database, input, options, root } = await fixture(false);
     const graph = cloneAgentOrchestrationTemplate(); graph.schemaVersion = 3;
     graph.collaborations = [{ id: "G", displayName: "G", memberAgentIds: [], renamePolicy: "editable" }];
@@ -665,8 +680,9 @@ try { const result = process.argv[3] === "publish" ? database.publishUserWorkflo
     await writeFile(config, JSON.stringify({ options: { ...options, now: undefined, writerLease: database.writerLease() }, request, activation }));
     await writeFile(worker, `import { readFileSync } from "node:fs";
 import { CollaborationStateDatabase } from ${JSON.stringify(new URL("../src/collaboration-state/store.ts", import.meta.url).href)};
+import { workerData } from "node:worker_threads";
 const { options, request, activation } = JSON.parse(readFileSync(process.argv[2], "utf8"));
-const database = CollaborationStateDatabase.open({ ...options, now: () => 1000000 });
+const database = CollaborationStateDatabase.open({ ...options, now: () => 1000000, writerOwner: workerData.attachment });
 process.stdout.write("ready\\n"); await new Promise(resolve => process.stdin.once("data", resolve));
 try {
   let result;
@@ -677,7 +693,7 @@ try {
   process.stdout.write(JSON.stringify(result));
 } finally { database.close(); }
 `);
-    const [prepared, published] = await concurrentWorkflowWorkers(worker, config, ["prepare", "publish"]);
+    const [prepared, published] = await concurrentWorkflowWorkers(database, worker, config, ["prepare", "publish"]);
     const record = database.workflowAdjustments("p")[0], preparations = database.scopedGroupActivationPreparations("p");
     expect(published.status).toBe(record.status); expect(record.base).toEqual(request.base); expect(record.proposal).toEqual(request.proposal);
     if (record.status === "pending") {
@@ -787,8 +803,8 @@ describe("root Main workflow publication consumes the shared journal", () => {
     expect(database.workflowAdjustment("p", main.requestId)!.proposal).toEqual(original.proposal);
     expect(database.latestAgentNativeSessionBinding("p", "idea")!.session.nativeId).toBe("retained-original-worker");
     expect(publish(database, main)).toMatchObject({ status: "pending", workflowRevision: 1, replay: true });
-    const writerLease = database.writerLease(); database.close();
-    const reopened = CollaborationStateDatabase.open({ ...options, writerLease }); stores.push(reopened);
+    database.close();
+    const reopened = CollaborationStateDatabase.open(options); stores.push(reopened);
     expect(publish(reopened, main)).toMatchObject({ status: "pending", workflowRevision: 1, replay: true });
     expect(reopened.workflowAdjustmentCurrent("p")).toEqual(before);
   });
@@ -1052,20 +1068,21 @@ describe("root Main workflow publication consumes the shared journal", () => {
     right.proposal.orchestration.agents[0].label += " conflict";
     expect(workflowAdjustmentsConflict(left, right)).toBe(true);
   });
-  it("serializes actual competing publication and withdrawal processes into one truthful terminal state", async () => {
+  it("serializes actual competing publication and withdrawal Workers into one truthful terminal state", async () => {
     const { database, options, root, acceptMain } = await fixture(), main = acceptMain();
     const worker = join(root, "race.mjs"), config = join(root, "race.json");
     await writeFile(config, JSON.stringify({ options: { ...options, now: undefined, writerLease: database.writerLease() }, main }));
     await writeFile(worker, `import { readFileSync } from "node:fs";
 import { CollaborationStateDatabase } from ${JSON.stringify(new URL("../src/collaboration-state/store.ts", import.meta.url).href)};
+import { workerData } from "node:worker_threads";
 const { options, main } = JSON.parse(readFileSync(process.argv[2], "utf8"));
-const database = CollaborationStateDatabase.open({ ...options, now: () => 1000000 });
+const database = CollaborationStateDatabase.open({ ...options, now: () => 1000000, writerOwner: workerData.attachment });
 process.stdout.write("ready\\n"); await new Promise(resolve => process.stdin.once("data", resolve));
 try { const result = process.argv[3] === "publish" ? database.rollForwardAcceptedMainWorkflow({ projectId: "p", nodeRunId: "main-node", routeEpoch: 1,
   semanticInputHash: main.semanticInputHash, sequence: 0 }) : database.withdrawWorkflowAdjustment({ projectId: "p", requestId: main.requestId, operationId: "race" });
   process.stdout.write(JSON.stringify(result)); } finally { database.close(); }
 `);
-    const [publication, withdrawal] = await concurrentWorkflowWorkers(worker, config, ["publish", "withdraw"]);
+    const [publication, withdrawal] = await concurrentWorkflowWorkers(database, worker, config, ["publish", "withdraw"]);
     const terminal = database.workflowAdjustments("p")[0];
     expect(["applied", "withdrawn"]).toContain(terminal.status); expect(publication.status).toBe(terminal.status);
     expect(withdrawal.withdrawn).toBe(terminal.status === "withdrawn"); expect(withdrawal.record.status).toBe(terminal.status);
@@ -1168,7 +1185,7 @@ try { const result = process.argv[3] === "publish" ? database.rollForwardAccepte
 
   it("observes withdrawal and replacement from another writer connection without leaking caller mutations", async () => {
     const f = await fixture(), request = f.input(); f.database.submitUserWorkflowAdjustment(request);
-    const another = CollaborationStateDatabase.open({ ...f.options, writerLease: f.database.writerLease() }); stores.push(another);
+    const another = CollaborationStateDatabase.open({ ...f.options, writerLease: f.database.writerLease(), writerOwner: f.database.writerOwnerAttachment() }); stores.push(another);
     const read = f.database.workflowAdjustment("p", request.requestId)!;
     read.history[0]!.status = "applied"; read.proposal.agents.idea.instructions = "Changed caller copy";
     another.withdrawWorkflowAdjustment({ projectId: "p", requestId: request.requestId, operationId: "another-withdraw" });
@@ -1202,14 +1219,15 @@ try { const result = process.argv[3] === "publish" ? database.rollForwardAccepte
   it("migrates v19 journal indexes without rewriting any complete request, head or configuration", async () => {
     const f = await fixture(); f.database.submitUserWorkflowAdjustment(f.input());
     f.database.recordWorkflowAdjustmentWaiting({ projectId: "p", requestId: "user-one", reason: "Original waiting reason" });
-    const expected = f.database.workflowAdjustments("p"); f.database.close();
+    const expected = f.database.workflowAdjustments("p"), lease = f.database.writerLease(); f.database.close();
     const raw = new DatabaseSync(f.options.databasePath);
+    legacyWriterFixture(raw, lease, f.clock.now);
     const tables = ["project_events", "project_heads", "workflow_revisions", "node_runs", "work_tasks"];
     const before = tables.map(table => raw.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all());
     raw.exec("DROP INDEX workflow_adjustment_submissions; DROP INDEX workflow_adjustment_transitions; DROP INDEX IF EXISTS workflow_adjustment_summary; DROP INDEX IF EXISTS workflow_native_session_harness; UPDATE collaboration_state_meta SET schema_version = 19");
     raw.close();
     f.clock.now += 30_001;
-    const reopened = CollaborationStateDatabase.open({ ...f.options, instanceId: "index-migration-writer" }); stores.push(reopened);
+    const reopened = openUpgradedFixture({ ...f.options, instanceId: "index-migration-writer" }); stores.push(reopened);
     expect(reopened.workflowAdjustment("p", "user-one")).toEqual(expected[0]);
     expect(reopened.activeWorkflowAdjustments("p")).toEqual(expected);
     const inspect = new DatabaseSync(f.options.databasePath, { readOnly: true });
@@ -1222,13 +1240,14 @@ try { const result = process.argv[3] === "publish" ? database.rollForwardAccepte
   });
 
   it("rolls back the entire v19 index migration when an index cannot be created", async () => {
-    const f = await fixture(); f.database.submitUserWorkflowAdjustment(f.input()); f.database.close();
+    const f = await fixture(); f.database.submitUserWorkflowAdjustment(f.input()); const lease = f.database.writerLease(); f.database.close();
     const raw = new DatabaseSync(f.options.databasePath);
+    legacyWriterFixture(raw, lease, f.clock.now);
     const events = raw.prepare("SELECT * FROM project_events ORDER BY seq").all();
     raw.exec("DROP INDEX workflow_adjustment_submissions; DROP INDEX workflow_adjustment_transitions; DROP INDEX IF EXISTS workflow_adjustment_summary; DROP INDEX IF EXISTS workflow_native_session_harness; UPDATE collaboration_state_meta SET schema_version = 19; CREATE TABLE workflow_adjustment_transitions (failure TEXT)");
     raw.close();
     f.clock.now += 30_001;
-    expect(() => CollaborationStateDatabase.open({ ...f.options, instanceId: "failed-index-migration-writer" })).toThrow(/table|index/i);
+    expect(() => openUpgradedFixture({ ...f.options, instanceId: "failed-index-migration-writer" })).toThrow(/table|index/i);
     const inspect = new DatabaseSync(f.options.databasePath, { readOnly: true });
     try {
       expect(inspect.prepare("SELECT schema_version FROM collaboration_state_meta").get()).toEqual({ schema_version: 19 });
@@ -1371,12 +1390,13 @@ try { const result = process.argv[3] === "publish" ? database.rollForwardAccepte
 
   it("upgrades v20 browsing indexes without changing original project, task, session or journal bytes", async () => {
     const f = await fixture(); f.database.submitUserWorkflowAdjustment(f.input()); const expected = f.database.workflowAdjustments("p");
-    f.database.close(); const raw = new DatabaseSync(f.options.databasePath);
+    const lease = f.database.writerLease(); f.database.close(); const raw = new DatabaseSync(f.options.databasePath);
+    legacyWriterFixture(raw, lease, f.clock.now);
     const tables = ["project_heads", "project_events", "workflow_revisions", "work_tasks", "member_executions"];
     const before = tables.map(table => raw.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all());
     raw.exec("DROP INDEX workflow_adjustment_summary; DROP INDEX IF EXISTS workflow_native_session_harness; UPDATE collaboration_state_meta SET schema_version = 20"); raw.close();
     f.clock.now += 30_001;
-    const reopened = CollaborationStateDatabase.open({ ...f.options, instanceId: "paged-index-writer" }); stores.push(reopened);
+    const reopened = openUpgradedFixture({ ...f.options, instanceId: "paged-index-writer" }); stores.push(reopened);
     expect(reopened.workflowAdjustments("p")).toEqual(expected); expect(reopened.workflowAdjustmentPage("p").page!.records[0].requestId).toBe(expected[0].requestId);
     const inspect = new DatabaseSync(f.options.databasePath, { readOnly: true });
     try {
@@ -1392,9 +1412,10 @@ try { const result = process.argv[3] === "publish" ? database.rollForwardAccepte
     raw.exec("DROP INDEX workflow_adjustment_summary; DROP INDEX IF EXISTS workflow_native_session_harness; UPDATE collaboration_state_meta SET schema_version = 20");
     expect(() => CollaborationStateDatabase.open({ ...f.options, instanceId: "foreign-page-writer" })).toThrow(/writer|lease/i);
     expect(raw.prepare("SELECT schema_version FROM collaboration_state_meta").get()).toEqual({ schema_version: 20 });
-    f.database.close(); f.clock.now += 30_001; raw.exec("CREATE TABLE workflow_adjustment_summary (failure TEXT)");
+    const lease = f.database.writerLease(); f.database.close();
+    legacyWriterFixture(raw, lease, f.clock.now); raw.exec("UPDATE collaboration_state_meta SET schema_version=20; CREATE TABLE workflow_adjustment_summary (failure TEXT)");
     try {
-      expect(() => CollaborationStateDatabase.open({ ...f.options, instanceId: "failed-page-writer" })).toThrow(/table|index/i);
+      expect(() => openUpgradedFixture({ ...f.options, instanceId: "failed-page-writer" })).toThrow(/table|index/i);
       expect(raw.prepare("SELECT schema_version FROM collaboration_state_meta").get()).toEqual({ schema_version: 20 });
       expect(raw.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'workflow_adjustment_summary'").all()).toEqual([]);
     } finally { raw.close(); }
@@ -1407,12 +1428,14 @@ try { const result = process.argv[3] === "publish" ? database.rollForwardAccepte
       runtimePath: join(f.root, "runtime", "v21-original"), worktreePath: join(f.root, "worktrees", "idea"),
       executionContext: { role: "delivery", nodeRunId: "original-node", executionId: "original-execution", ownershipEpoch: 1, executionWorktree: join(f.root, "worktrees", "idea") },
       session: { schemaVersion: 1, harnessId: "codex", adapterVersion: "test", nativeId: "v21-original-session", generation: 0, durable: true, createdAt: "2026-10-11T00:00:00.000Z" } });
-    f.database.close();
-    const raw = new DatabaseSync(f.options.databasePath), tables = ["project_heads", "project_events", "workflow_revisions", "work_tasks", "member_executions"];
+    const lease = f.database.writerLease(); f.database.close();
+    const raw = new DatabaseSync(f.options.databasePath);
+    legacyWriterFixture(raw, lease, f.clock.now);
+    const tables = ["project_heads", "project_events", "workflow_revisions", "work_tasks", "member_executions"];
     const before = tables.map(table => raw.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all());
     raw.exec("DROP INDEX workflow_native_session_harness; UPDATE collaboration_state_meta SET schema_version = 21"); raw.close();
     f.clock.now += 30_001;
-    const reopened = CollaborationStateDatabase.open({ ...f.options, instanceId: "native-harness-index-writer" }); stores.push(reopened);
+    const reopened = openUpgradedFixture({ ...f.options, instanceId: "native-harness-index-writer" }); stores.push(reopened);
     const inspect = new DatabaseSync(f.options.databasePath, { readOnly: true });
     try {
       expect(inspect.prepare("SELECT schema_version FROM collaboration_state_meta").get()).toEqual({ schema_version: COLLABORATION_STATE_SCHEMA_VERSION });
@@ -1438,9 +1461,10 @@ try { const result = process.argv[3] === "publish" ? database.rollForwardAccepte
     raw.exec("DROP INDEX workflow_native_session_harness; UPDATE collaboration_state_meta SET schema_version = 21");
     expect(() => CollaborationStateDatabase.open({ ...f.options, instanceId: "foreign-native-index-writer" })).toThrow(/writer|lease/i);
     expect(raw.prepare("SELECT schema_version FROM collaboration_state_meta").get()).toEqual({ schema_version: 21 });
-    f.database.close(); f.clock.now += 30_001; raw.exec("CREATE TABLE workflow_native_session_harness (failure TEXT)");
+    const lease = f.database.writerLease(); f.database.close();
+    legacyWriterFixture(raw, lease, f.clock.now); raw.exec("UPDATE collaboration_state_meta SET schema_version=21; CREATE TABLE workflow_native_session_harness (failure TEXT)");
     try {
-      expect(() => CollaborationStateDatabase.open({ ...f.options, instanceId: "failed-native-index-writer" })).toThrow(/table|index/i);
+      expect(() => openUpgradedFixture({ ...f.options, instanceId: "failed-native-index-writer" })).toThrow(/table|index/i);
       expect(raw.prepare("SELECT schema_version FROM collaboration_state_meta").get()).toEqual({ schema_version: 21 });
       expect(raw.prepare("SELECT * FROM project_events ORDER BY seq").all()).toEqual(before);
       expect(raw.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'workflow_native_session_harness'").all()).toEqual([]);

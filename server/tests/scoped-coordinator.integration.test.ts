@@ -27,7 +27,7 @@ afterEach(async () => {
 const repository = { provider: "github" as const, providerId: 1, owner: "example", name: "openfars", private: true,
   defaultBranch: "main", htmlUrl: "https://github.com/example/openfars", cloneUrl: "https://github.com/example/openfars.git", observedAt: "2026-09-30T00:00:00Z" };
 
-async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?: string; blockScopedOpen?: string; blockFinalOpen?: string; blockScopedTurns?: number; weakRootIntervention?: boolean; childHandoff?: boolean; omitFirstRootGit?: boolean; omitFirstFinish?: string; blockFinalAgent?: string; queueIdeaSibling?: boolean; legacyRoot?: boolean; now?: () => number; leaseDurationMs?: number } = {}) {
+async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?: string; blockScopedOpen?: string; blockFinalOpen?: string; blockScopedTurns?: number; weakRootIntervention?: boolean; childHandoff?: boolean; omitFirstRootGit?: boolean; omitFirstFinish?: string; blockFinalAgent?: string; queueIdeaSibling?: boolean; legacyRoot?: boolean; now?: () => number } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-scoped-coordinator-")); roots.push(root);
   const hub = new EventHub(); const storage = new ProjectStorage(root, hub); await storage.initialize();
   const id = "prj_12345678901234567890123456789012";
@@ -271,7 +271,6 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
   };
   const createCoordinator = () => new CollaborationRuntimeCoordinator({ storage, serviceId: "scoped-project-e2e", hostId: "test-host", residentLauncher: launcher,
     ...(options.now ? { now: options.now } : {}),
-    ...(options.leaseDurationMs ? { leaseDurationMs: options.leaseDurationMs } : {}),
     executionInputBuilder: new ProductionCollaborationExecutionInputBuilder(storage, new SkillCatalog([])),
     validateWorkflowConfiguration: async (_state, proposal) => { expect(proposal.agents.main.harness).toBe(state.agents.main.harness); },
     gitFactory: (options) => {
@@ -515,7 +514,7 @@ describe("v3 project coordinator production entry", () => {
       .map((entry) => entry.request.invocationId)).toEqual(groupInvocations);
   }, 20_000);
 
-  it("contains a scheduled run's expired writer fence without an unhandled rejection or later Git mutations", async () => {
+  it("contains a scheduled run's explicit writer fence without an unhandled rejection or later Git mutations", async () => {
     let clock = Date.now();
     const f = await fixture({ blockScopedAgent: "idea", now: () => clock });
     await f.coordinator.createProject(f.state, { enabled: true, provider: "github" });
@@ -523,27 +522,30 @@ describe("v3 project coordinator production entry", () => {
       .toEqual({ session: "session-idea", error: undefined });
     const mutationsBefore = f.git().log.length;
     clock += 60_000;
+    expect(f.coordinator.writerLeaseHealth().status).toBe("ready");
+    await f.coordinator.database().relinquishWriterLease();
     f.releaseBlocked();
     await expect.poll(async () => (await f.coordinator.projectReadModel(f.state)).phase, { timeout: 4_000 }).toBe("collaboration:writer-lease-lost");
     expect((await f.coordinator.projectReadModel(f.state)).status).toBe("interrupted");
     expect(hasUserWorkflowPause((await f.coordinator.projectReadModel(f.state)))).toBe(false);
-    expect((await f.coordinator.projectReadModel(f.state)).lastError).toContain("服务写入租约失效");
+    expect((await f.coordinator.projectReadModel(f.state)).lastError).toContain("服务写入所有权失效");
     expect((await f.coordinator.projectReadModel(f.state)).runtime?.waiting)
       .toMatchObject({ kind: "service", errorCode: "WRITER_LEASE_STALE" });
-    await expect(f.coordinator.resumeProject(f.state)).rejects.toThrow(/writer lease was lost/);
+    await expect(f.coordinator.resumeProject(f.state)).rejects.toThrow(/writer ownership was lost/);
     expect(f.git().log).toHaveLength(mutationsBefore);
     expect(f.state.scopedGroupFinalMerges ?? []).toHaveLength(0);
     await expect.poll(() => f.active.size, { timeout: 2_000 }).toBe(0);
   }, 20_000);
 
-  it("retains completed status when the backend writer lease later expires", async () => {
+  it("retains completed status when the backend writer is later fenced", async () => {
     let clock = Date.now();
-    const f = await fixture({ now: () => clock, leaseDurationMs: 5_000 });
+    const f = await fixture({ now: () => clock });
     await f.coordinator.createProject(f.state, { enabled: true, provider: "github" });
     await expect.poll(() => f.state.status, { timeout: 12_000 }).toBe("completed");
     clock += 60_000;
-    await new Promise((resolve) => setTimeout(resolve, 1_800));
-    await expect(f.coordinator.resumeProject(f.state)).rejects.toThrow(/writer lease was lost/);
+    expect(f.coordinator.writerLeaseHealth().status).toBe("ready");
+    await f.coordinator.database().relinquishWriterLease();
+    await expect(f.coordinator.resumeProject(f.state)).rejects.toThrow(/writer ownership was lost/);
     expect((await f.coordinator.projectReadModel(f.state)).status).toBe("completed");
     expect((await f.coordinator.projectReadModel(f.state)).lastError).toBeUndefined();
   }, 20_000);

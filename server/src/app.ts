@@ -2219,7 +2219,7 @@ export function createApp(dependencies: AppDependencies) {
     if (error instanceof CollaborationStateError && /^\/api\/projects\/[^/]+\/workflow\/adjustments(?:\/|$)/.test(_request.path)) {
       const status = ["PROJECT_NOT_FOUND", "RECORD_NOT_FOUND"].includes(error.code) ? 404
         : ["UNSAFE_CONFIGURATION", "CREDENTIAL_DATA_REJECTED"].includes(error.code) ? 400
-        : ["WRITER_LEASE_HELD", "WRITER_LEASE_STALE"].includes(error.code) ? 503
+        : ["WRITER_LEASE_HELD", "WRITER_LEASE_STALE", "WRITER_UPGRADE_REQUIRED", "WRITER_COMMIT_UNCONFIRMED"].includes(error.code) ? 503
         : error.code === "DATABASE_INTEGRITY_FAILED" ? 500 : 409;
       response.status(status).json({ error: redactTrace(error.message), code: error.code,
         ...(["STALE_WORKFLOW_CONFIGURATION", "WORKFLOW_ADJUSTMENT_CONFLICT"].includes(error.code) ? { details: error.details } : {}) });

@@ -68,7 +68,7 @@ describe("read-only Workflow replay history", () => {
   it("reads immutable topology versions and configuration without appending events", async () => {
     const { root, state } = await fixture();
     const database = CollaborationStateDatabase.open({ databasePath: path.join(root, "state.sqlite"),
-      serviceId: "replay-test", instanceId: "test", hostId: "local", topology: "single-host", leaseDurationMs: 60_000 });
+      serviceId: "replay-test", instanceId: "test", hostId: "local", topology: "single-host" });
     databases.push(database);
     database.createProject({ projectId: state.id, workflowRevision: 1, workflowSnapshot: state.orchestration,
       git: { enabled: false, status: "disabled" }, workerCapacity: 1, managementCapacity: 1, requestId: "create" });

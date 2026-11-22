@@ -97,7 +97,6 @@ async function main(): Promise<void> {
   let orchestrator: Orchestrator;
   const collaborationRuntime = new CollaborationRuntimeCoordinator({
     storage,
-    leaseDurationMs: config.collaborationLeaseDurationMs,
     credentialResolverForAccount: (accountId) => githubAccounts.credentialResolver(accountId),
     executionInputBuilder: new ProductionCollaborationExecutionInputBuilder(storage, skills),
     invocationDispatcher: new ProductionCollaborationInvocationDispatcher(storage),

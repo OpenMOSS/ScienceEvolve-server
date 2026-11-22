@@ -32,8 +32,8 @@ Express API
 
 Each project row retains its own committed-state or stable-publication read
 boundary. Expensive projection starts are spaced across event-loop turns so
-lease renewal can run; asynchronous I/O for one row does not hold the launch
-queue for other projects. The complete list still waits for every row and
+timers and unrelated requests can run; asynchronous I/O for one row does not
+hold the launch queue for other projects. The complete list still waits for every row and
 propagates read failures rather than substituting stale or partial state.
 
 ## GitHub account authority

@@ -24,7 +24,7 @@ afterEach(async () => {
 async function fixture() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "scienceevolve-serial-publication-worker-"));
   const options = { databasePath: path.join(root, "state.sqlite"), serviceId: "serial-publication-test",
-    hostId: "test", topology: "single-host" as const, leaseDurationMs: 180_000 };
+    hostId: "test", topology: "single-host" as const };
   const resource = { root, database: await openCollaborationStateWorker(options) }; resources.push(resource);
   const storage = new ProjectStorage(path.join(root, "data"), new EventHub()); await storage.initialize();
   const orchestration = cloneAgentOrchestrationTemplate(), agents = mergeAgentConfigs(undefined, orchestration);

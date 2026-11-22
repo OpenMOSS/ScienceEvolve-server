@@ -56,7 +56,7 @@ Before enabling Git-on collaboration:
    status-check, review, or merge-queue rules that can block a merge.
 5. Validate every selected Harness + gateway + model combination. A catalog
    entry or executable on `PATH` alone is not readiness evidence.
-6. Configure alerts for filesystem bytes/inodes, SQLite or writer-lease errors,
+6. Configure alerts for filesystem bytes/inodes, SQLite or writer-ownership errors,
    resident process growth, retained worktree count, open/conflicted PRs, and
    projects waiting on authorization or stop proof.
 
@@ -232,6 +232,8 @@ can invalidate recovery and are unsupported.
 
 ## Upgrade: drain and restart one version
 
+See [SQLite writer ownership and offline upgrade](../sqlite-writer-lifecycle.md) for the schema-30 startup, backup, and restore limitations. Do not start schema 30 on an existing legacy database without its explicit offline upgrade.
+
 Do not perform an in-place rolling upgrade with old and new ScienceEvolve services
 overlapping on the same data directory.
 
@@ -240,14 +242,14 @@ overlapping on the same data directory.
    them; use Cancel only when termination is intended. Wait for all requested
    cancellations and stop confirmations to settle.
 3. Stop the sole writer service cleanly. Confirm that the old service no longer
-   owns the writer lease and that no old-version server is being restarted by a
+   holds its database open and that no old-version server is being restarted by a
    supervisor.
-4. If a backup is required, take a storage-consistent snapshot only after the
+4. Before a writer protocol upgrade, take a storage-consistent snapshot after the
    writer is stopped. Keep the SQLite database, project state, repositories,
    linked worktrees, runtime evidence, and permissions together.
 5. Deploy one internally consistent ScienceEvolve build (server, web assets, schema,
    Harness adapters, and resident protocol) and start exactly one writer.
-6. Verify writer-lease acquisition and startup reconciliation before restoring
+6. Verify lifecycle-lock acquisition, the new epoch and startup reconciliation before restoring
    admission. Resume paused projects gradually while watching authorization,
    stop-proof, resident, Git, and capacity alerts.
 
@@ -319,7 +321,7 @@ There is no automatic cleanup policy for collaboration Git evidence. Alert on:
 - filesystem free bytes and inodes;
 - repository object growth and linked-worktree count;
 - retained execution branches and open/conflicted/closed PR count;
-- SQLite size, integrity/startup errors, and writer-lease renewals;
+- SQLite size, integrity/startup errors, ownership status/epoch and unconfirmed COMMITs;
 - resident and descendant process count;
 - projects paused for GitHub, user intervention, stop proof, or recovery limit;
 - external GitHub checks, reviews, branch protection, merge queues, quotas, and

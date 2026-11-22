@@ -407,7 +407,7 @@ describe("Finite original-session terminal push observation", () => {
     try {
       const first = f.database.beginTerminalPushObservation(f.reserveInput())!; f.open(first);
       const oldTasks = f.database.projectState("p").tasks;
-      const nextWriterTime = Number((f.raw.prepare("SELECT expires_at_ms FROM writer_service_lease WHERE singleton=1").get() as { expires_at_ms: number }).expires_at_ms) + 1;
+      const nextWriterTime = Number(f.raw.prepare("SELECT acquired_at_ms FROM writer_service_owner WHERE singleton=1").get()!.acquired_at_ms) + 1;
       f.database.close();
       const next = CollaborationStateDatabase.open({ databasePath: path.join(f.root, "state.sqlite"), serviceId: "history-test",
         instanceId: "next-writer", hostId: "test-host", topology: "single-host", now: () => nextWriterTime }); databases.push(next);

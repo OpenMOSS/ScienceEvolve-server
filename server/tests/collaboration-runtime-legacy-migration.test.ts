@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { legacyWriterFixture, openUpgradedFixture } from "./helpers/legacy-writer-fixture.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { cloneAgentOrchestrationTemplate } from "../src/agent-orchestration.js";
 import { EventHub } from "../src/event-hub.js";
@@ -76,7 +77,6 @@ describe("CollaborationRuntimeCoordinator legacy v1 migration", () => {
       databasePath: fixture.databasePath,
       serviceId: "legacy-runtime-trusted",
       hostId: "host-test",
-      leaseDurationMs: 5_000,
       gitFactory: (options) => recoveryGit(options, fixture, trace, remotePull),
       residentLauncher: recoveryResidents(fixture, trace, () => coordinator)
     });
@@ -132,7 +132,6 @@ describe("CollaborationRuntimeCoordinator legacy v1 migration", () => {
       databasePath: fixture.databasePath,
       serviceId: "legacy-runtime-untrusted",
       hostId: "host-test",
-      leaseDurationMs: 5_000,
       gitFactory: (options) => recoveryGit(options, fixture, trace),
       residentLauncher: recoveryResidents(fixture, trace, () => coordinator)
     });
@@ -217,8 +216,7 @@ async function seedLegacyFinalRepair(
     serviceId: `legacy-seed-${mode}`,
     instanceId: `legacy-seed-instance-${mode}`,
     hostId: "host-test",
-    topology: "single-host",
-    leaseDurationMs: 5_000
+    topology: "single-host"
   });
   database.createProject({
     projectId,
@@ -398,6 +396,7 @@ async function seedLegacyFinalRepair(
   if (mode === "trusted-operation") {
     seedLegacyLostCreateOperation(databasePath, repair);
   }
+  openUpgradedFixture({ databasePath, serviceId: `legacy-upgrade-${mode}`, hostId: "host-test", topology: "single-host" }).close();
   return { root, databasePath, storage, state, groupRunId, groupBranch, finalTaskId, repair };
 }
 
@@ -875,6 +874,8 @@ function seedLegacyLostCreateOperation(databasePath: string, repair: MemberExecu
 
 function downgradeCollaborationSchemaToV1(databasePath: string): void {
   const legacy = new DatabaseSync(databasePath);
+  const row = legacy.prepare("SELECT * FROM writer_service_owner").get()!;
+  legacyWriterFixture(legacy, { serviceId: String(row.service_id), instanceId: String(row.instance_id), hostId: String(row.host_id), epoch: Number(row.epoch) }, Date.now());
   legacy.exec("PRAGMA foreign_keys=OFF");
   legacy.exec("PRAGMA legacy_alter_table=ON");
   try {
