@@ -27,7 +27,7 @@ export type { AgentProtocol } from "./agent-runtime.js";
 export { normalizeGatewayTokenUsage } from "./internal/shared/token-usage-ledger.js";
 
 /** Bump whenever route conversion semantics invalidate a cached smoke probe. */
-export const PROTOCOL_ROUTER_COMPATIBILITY_VERSION = "13";
+export const PROTOCOL_ROUTER_COMPATIBILITY_VERSION = "14";
 
 export type NormalizedRole = "system" | "developer" | "user" | "assistant" | "tool";
 
@@ -3727,11 +3727,14 @@ async function streamProxyResponse(
       // A closed display tap must not interrupt the native tool loop.
     }
   };
-  response.writeHead(200, {
-    "content-type": "text/event-stream",
-    "cache-control": "no-cache",
-    connection: "keep-alive"
-  });
+  // The first-output heartbeat may already have opened the downstream stream.
+  if (!response.headersSent) {
+    response.writeHead(200, {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+      connection: "keep-alive"
+    });
+  }
   const sourceResponseId = `resp_${randomUUID().replaceAll("-", "")}`;
   const sourceChatCompletionId = `chatcmpl_${randomUUID().replaceAll("-", "")}`;
   const anthropicMessageId = `msg_${randomUUID().replaceAll("-", "")}`;

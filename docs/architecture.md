@@ -88,7 +88,9 @@ start/progress/completion events. Each active tool call owns an independent idle
 window; raw stdout and transport keep-alives cannot extend either deadline. A
 provider request is charged exactly once by `usageId`. Missing usage remains an
 explicit unknown request and may later be repaired to known without double
-counting; it is never rendered as zero usage.
+counting; it is never rendered as zero usage. The first-output heartbeat and
+subsequent model frames share one downstream SSE response; its headers are
+written only once, and heartbeat-only traffic is not model progress.
 
 Built-in descriptors remain in the Registry's built-in table. A code-level
 extension carries its own descriptor and is registered exactly once through the

@@ -156,6 +156,33 @@ describe("protocol proxy loopback integration", () => {
     expect(proxy.getFailure?.()).toBeUndefined();
   });
 
+  it.each(protocols)("continues a delayed provider stream after the first-output heartbeat (%s)", async source => {
+    let requests = 0;
+    upstream = createServer(async (request, response) => {
+      for await (const _chunk of request) { /* Drain the request. */ }
+      requests += 1;
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.flushHeaders();
+      await delay(650);
+      for (const frame of streamFrames("chat-completions")) response.write(`data: ${frame}\n\n`);
+      response.end("data: [DONE]\n\n");
+    });
+    const address = await listen(upstream);
+    proxy = await startProtocolProxy({ sourceProtocol: source, targetProtocol: "chat-completions",
+      gatewayUrl: `http://127.0.0.1:${address.port}/v1`, force: true, timeoutMs: 3_000 });
+    const response = await fetch(`${proxy.baseUrl}${sourcePath[source].replace("/v1", "")}`, {
+      method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${proxy.token}`, "x-api-key": proxy.token },
+      body: JSON.stringify(sourceBody(source, true)), signal: AbortSignal.timeout(4_000)
+    });
+    const text = await response.text();
+    expect(text).toContain(": waiting for provider output");
+    expect(text).toContain("streamed chat");
+    expect(text).not.toContain("Cannot write headers");
+    expect(text).toContain(source === "responses" ? '"type":"response.completed"' : source === "anthropic-messages" ? '"type":"message_stop"' : "data: [DONE]");
+    expect(requests).toBe(1);
+    expect(proxy.getFailure?.()).toBeUndefined();
+  });
+
   it("keeps both transport failure causes when buffered recovery exhausts the same budget", async () => {
     const streams: boolean[] = [];
     upstream = createServer(async (request, response) => {
