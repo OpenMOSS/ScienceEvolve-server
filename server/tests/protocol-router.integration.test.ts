@@ -2653,6 +2653,65 @@ describe("protocol proxy loopback integration", () => {
     expect(body).not.toContain('"type":"response.incomplete"');
   });
 
+  it.each([false, true])("preserves an orphaned native tool result as explicit feedback without inventing a Responses call (stream=%s)", async stream => {
+    const forwarded: Array<Record<string, unknown>> = [];
+    const traces: Array<{ message: string; data?: Record<string, unknown> }> = [];
+    upstream = createServer(async (request, response) => {
+      let raw = "";
+      for await (const chunk of request) raw += chunk.toString();
+      const body = JSON.parse(raw) as Record<string, unknown>;
+      forwarded.push(body);
+      const input = body.input as Array<Record<string, unknown>>;
+      const known = new Set(input.filter(item => item.type === "function_call").map(item => item.call_id));
+      const orphan = input.some(item => item.type === "function_call_output" && !known.has(item.call_id));
+      response.writeHead(orphan ? 400 : 200, { "content-type": "application/json" });
+      response.end(JSON.stringify(orphan ? { error: { message: "function_call_output requires item_reference ids matching each call_id on HTTP requests" } } : responseBody("responses")));
+    });
+    const address = await listen(upstream);
+    proxy = await startProtocolProxy({ sourceProtocol: "chat-completions", targetProtocol: "responses",
+      gatewayUrl: `http://127.0.0.1:${address.port}/v1`, gatewayApiKey: "test-key",
+      onTrace: (_kind, message, data) => { traces.push({ message, data }); } });
+    const error = "Unknown system error -122: Unknown system error -122, write";
+    const original = { model: "model-neutral-a", stream, messages: [
+      { role: "user", content: "Continue the original task; verify existing effects first." },
+      { role: "assistant", content: null, tool_calls: [{ id: "paired-call", type: "function", function: { name: "read", arguments: '{"path":"evidence.txt"}' } }] },
+      { role: "tool", tool_call_id: "paired-call", content: "existing evidence" },
+      { role: "tool", tool_call_id: "orphan-write", content: error }
+    ] };
+    const serialized = JSON.stringify(original);
+    const response = await fetch(`${proxy.baseUrl}/chat/completions`, { method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${proxy.token}` }, body: serialized });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("hello from responses");
+    expect(forwarded).toHaveLength(1);
+    const input = forwarded[0]!.input as Array<Record<string, unknown>>;
+    expect(input.filter(item => item.type === "function_call")).toEqual([
+      { type: "function_call", call_id: "paired-call", name: "read", arguments: '{"path":"evidence.txt"}' }
+    ]);
+    expect(input.filter(item => item.type === "function_call_output")).toEqual([
+      { type: "function_call_output", call_id: "paired-call", output: "existing evidence" }
+    ]);
+    const feedback = input.find(item => item.role === "user" && String(item.content).includes("orphan-write"));
+    expect(feedback?.content).toContain(error);
+    expect(feedback?.content).toContain("missing from the native request history");
+    expect(feedback?.content).toContain("Do not infer that the operation did not run");
+    expect(input.some(item => item.type === "item_reference")).toBe(false);
+    expect(traces).toContainEqual({ message: "Protocol proxy preserved orphaned tool results as historical diagnostics", data: expect.objectContaining({ count: 1 }) });
+    expect(JSON.stringify(original)).toBe(serialized);
+  });
+
+  it("rejects historical tool output without identity before a provider request", async () => {
+    const modelFetch = vi.fn();
+    proxy = await startProtocolProxy({ sourceProtocol: "chat-completions", targetProtocol: "responses",
+      gatewayUrl: "http://127.0.0.1:12345/v1", gatewayApiKey: "test-key", modelFetch });
+    const response = await fetch(`${proxy.baseUrl}/chat/completions`, { method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${proxy.token}` },
+      body: JSON.stringify({ model: "model-neutral-a", messages: [{ role: "tool", content: "unidentified result" }] }) });
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain("missing its required tool call identity");
+    expect(modelFetch).not.toHaveBeenCalled();
+  });
+
   it("keeps the Responses call_id distinct from item_id when streaming to Chat", async () => {
     upstream = createServer(async (_request, response) => {
       response.writeHead(200, { "content-type": "text/event-stream" });

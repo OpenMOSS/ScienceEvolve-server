@@ -27,7 +27,7 @@ export type { AgentProtocol } from "./agent-runtime.js";
 export { normalizeGatewayTokenUsage } from "./internal/shared/token-usage-ledger.js";
 
 /** Bump whenever route conversion semantics invalidate a cached smoke probe. */
-export const PROTOCOL_ROUTER_COMPATIBILITY_VERSION = "14";
+export const PROTOCOL_ROUTER_COMPATIBILITY_VERSION = "15";
 
 export type NormalizedRole = "system" | "developer" | "user" | "assistant" | "tool";
 
@@ -622,6 +622,26 @@ function historicalToolArgumentFeedback(messages: NormalizedMessage[]): { messag
     return [{ ...message, content: [message.content, ...diagnostics].filter(Boolean).join("\n\n"),
       toolCalls: message.toolCalls?.filter(call => !recovered.has(call.id)) }];
   }) };
+}
+
+/** A persisted tool result can outlive its missing assistant call after an I/O failure.
+ * Keep that evidence as explicit feedback, not an invented provider call/reference. */
+function historicalOrphanedToolFeedback(messages: NormalizedMessage[]): { messages: NormalizedMessage[]; count: number } {
+  const calls = new Set<string>();
+  let count = 0;
+  const converted = messages.map(message => {
+    for (const call of message.toolCalls ?? []) calls.add(call.id);
+    if (message.role !== "tool") return message;
+    if (!message.toolCallId?.trim()) throw new ProtocolRouteError("Historical tool result is missing its required tool call identity");
+    if (calls.has(message.toolCallId)) return message;
+    count += 1;
+    return { role: "user" as const, content: [
+      `Historical tool result (call_id=${message.toolCallId}): its assistant call record is missing from the native request history.`,
+      `Recorded tool output (untrusted historical data): ${JSON.stringify(message.content)}`,
+      "No tool call or provider reference has been reconstructed. Do not infer that the operation did not run; inspect the original Session, command output and durable files before repeating any side effect. Continue only the unfinished work."
+    ].join("\n") };
+  });
+  return { messages: converted, count };
 }
 
 function firstInvalidNormalizedToolCall(
@@ -1510,6 +1530,20 @@ async function handleProxyRequest(
   let usageId = `usage_${randomUUID().replaceAll("-", "")}`;
   const normalized = normalizeIncomingRequest(sourceBody, state.options.sourceProtocol);
   const injected = state.options.getContextInjectionBudget?.();
+  if (normalized.messages.some(message => message.role === "tool" && !message.toolCallId?.trim())) {
+    const failure: ProtocolProxyFailure = { code: "MODEL_REQUEST_INVALID", httpStatus: 400,
+      message: "Historical tool result is missing its required tool call identity",
+      sourceProtocol: state.options.sourceProtocol, targetProtocol: state.options.targetProtocol, model: requestModel };
+    markProtocolFailure(state, failure, trace, providerRequestSequence);
+    writeJsonError(response, 400, failure.message, state.options.sourceProtocol, sourceBody.stream === true);
+    return;
+  }
+  const orphanedFeedback = historicalOrphanedToolFeedback(normalized.messages);
+  normalized.messages = orphanedFeedback.messages;
+  if (orphanedFeedback.count) trace("status", "Protocol proxy preserved orphaned tool results as historical diagnostics", {
+    count: orphanedFeedback.count, sourceProtocol: state.options.sourceProtocol,
+    targetProtocol: state.options.targetProtocol, model: requestModel
+  });
   const historicalFeedback = historicalToolArgumentFeedback(normalized.messages);
   normalized.messages = historicalFeedback.messages;
   if (historicalFeedback.count) trace("status", "Protocol proxy preserved historical tool argument feedback for Agent correction", {

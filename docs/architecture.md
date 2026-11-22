@@ -108,6 +108,13 @@ paired official tool events plus the final handoff. The smoke cache includes
 Gateway revision, Adapter version, executable fingerprint, protocol router
 compatibility version and the selected Gateway reasoning fingerprint.
 
+Historical tool results whose preceding assistant call is absent are passed to
+the model as explicitly labelled, untrusted diagnostic text. Their recorded
+output and call ID remain available; no provider call or item reference is
+invented, and the native Session is not rewritten. A missing result identity
+fails before the provider request. Paired calls and results remain native tool
+history.
+
 Gateway reasoning is a Gateway/model contract rather than a Harness guess. A
 Gateway stores one supported parameter path and bounded option list per model;
 the selected option is resolved into the outbound body only for that exact
