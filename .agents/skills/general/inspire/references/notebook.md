@@ -23,7 +23,7 @@ Notebook 是交互工作台，不只是“开一个终端”。
 1. 用真实 Workspace 选择角色：CPU 准备盒走 `CPU资源空间`，GPU Probe 走 `分布式训练空间`。
 2. 用 Quota Live 查询选择合法 `gpu,cpu,mem` 三元组。
 3. 确认 Project 是目标项目名，Image 已 `READY`。
-4. 需要复用同一调度条件时写 Workload Profile；远端目录仍用 Path Alias。
+4. 复用调度条件时记录不含凭据的完整参数；CLI 7.2.1 仍需显式传入，远端目录使用当前工作区核验过的绝对路径。
 
 ScienceEvolve 的 MCP 创建固定使用 `--no-wait --post-start none`。需要启动后动作时，先 defer 等 `resource_ready`，再配置连接并自行启动；不要依赖 CLI 隐含的等待或配置里的 post-start 脚本。
 
@@ -64,7 +64,7 @@ Notebook 连接类命令包括 `ssh`、`exec`、`shell`、`scp`、`ssh-config` �
 
 没有任何 Cached Connection 时，联网 Notebook 的首次 Bootstrap 仍需要能解析 Notebook 的上下文：通常传 `--workspace <workspace>`，必要时再传 `--account <alias>` 指定所属账号。`ssh-config` 生成的 OpenSSH `ProxyCommand` 会固化解析出的 Account Alias，后续 VS Code Remote SSH / 原生 OpenSSH 连接也按该账号路径执行。
 
-新账号没有默认 SSH 公钥时，联网 Notebook 先执行 `notebook connection refresh <name> --workspace <workspace> --pubkey <公钥文件>` 建立缓存，再执行 `notebook exec <name> --account <alias> --cwd <工作路径> <短启动命令>`。`exec` 不接受 `--workspace`；长实验用短命令启动后台程序，将等待交给系统。公钥和私钥应由运行 Server 的系统用户预先配置，私钥不写入项目知识或实验产物。
+新账号没有默认 SSH 公钥时，联网 Notebook 先执行 `notebook connection refresh <name> --workspace <workspace> --pubkey <公钥文件>` 建立缓存，再执行 `notebook exec <name> --account <alias> --cwd <绝对工作路径> <短启动命令>`。CLI 7.2.1 的 `exec` 可传 `--workspace` 消歧；长实验用短命令启动后台程序，将等待交给系统。公钥和私钥应由运行 Server 的系统用户预先配置，私钥不写入项目知识或实验产物。
 
 使用 `--cwd` 时，后台启动命令整体加括号，例如 `"(nohup python3 probe.py > probe.log 2>&1 < /dev/null & echo LAUNCHED)"`。CLI 会在命令前拼接 `cd … &&`；未分组的 `&` 会把前面的命令链一起放入后台，可能让 SSH 输出连接一直保留到程序退出，失去短启动命令的效果。
 
@@ -74,7 +74,7 @@ Notebook 连接类命令包括 `ssh`、`exec`、`shell`、`scp`、`ssh-config` �
 
 源码同步优先走 Git：本地 push，远端 pull。`notebook scp` 适合少量非 Git 文件、产物下载和临时配置，不适合作为源码同步主路径。
 
-多仓库项目把 Repo 并列放在 `me:<repo>` 这类路径约定下；项目公共数据、权重和 Checkpoint 放 `public` 或指定存储池 Alias。
+多仓库项目将各 Repo 放在当前项目工作区下的明确子目录；公共数据、权重和 Checkpoint 使用已授权、同存储池的项目公共绝对路径。CLI 7.2.1 不解析 Path Alias。
 
 跨 Workspace 时先确认共享盘作用域：同项目路径通常可见，不同项目路径通常因 Fileset 隔离不可见。
 

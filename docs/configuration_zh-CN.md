@@ -12,7 +12,7 @@
 
 - Node.js 24 或更高版本（协作运行的内置 SQLite 权威状态依赖 Node 24）
 - npm 10 或更高版本
-- 可执行的 Codex CLI 与 [Inspire CLI](../.agents/skills/general/inspire/references/setup/install-and-config.md#1-安装)；使用 SII 实验工具时还需完成账号和项目初始化
+- 可执行的 Codex CLI 与 [Inspire CLI](../.agents/skills/general/inspire/references/setup/install-and-config.md#1-安装)；使用 SII 实验工具时还需登录账号，并实时核验项目权限和资源
 - 至少一个可用的模型网关
 - Git（启用 Git 协作时需要）
 
@@ -380,45 +380,55 @@ SCIENCEEVOLVE_INSPIRE_CONFIG_PATH=
 SCIENCEEVOLVE_INSPIRE_NO_PROXY=
 ```
 
-把上面的路径替换为本机真实路径；未配置工作区边界时，当前内核回退到 `/inspire/qb-ilm`，该路径不适用于所有安装位置。`SCIENCEEVOLVE_INSPIRE_WORKSPACE_ROOT` 是本机文件系统边界，必须包含实际的 Agent 工作区（通常位于 `${SCIENCEEVOLVE_DATA_DIR}/projects/...`）；它不是 SII 平台上的 Workspace 名称。`SCIENCEEVOLVE_INSPIRE_CONFIG_PATH` 是可选的兼容配置层，不能替代 Inspire CLI 6.x 的账号目录。`SCIENCEEVOLVE_INSPIRE_NO_PROXY` 只补充逗号分隔的直连域名，也不能替代账号登录或平台代理配置。
+把上面的路径替换为本机真实路径；未配置工作区边界时，当前内核回退到 `/inspire/qb-ilm`，该路径不适用于所有安装位置。`SCIENCEEVOLVE_INSPIRE_WORKSPACE_ROOT` 是本机文件系统边界，必须包含实际的 Agent 工作区（通常位于 `${SCIENCEEVOLVE_DATA_DIR}/projects/...`）；它不是 SII 平台上的 Workspace 名称。Server 将可选的 `SCIENCEEVOLVE_INSPIRE_CONFIG_PATH` 传为 `INSPIRE_GLOBAL_CONFIG_PATH`，但下文使用的 CLI 7.2.1 不读取该配置层；它不能指定账号或替代 OAuth 登录。`SCIENCEEVOLVE_INSPIRE_NO_PROXY` 只补充逗号分隔的直连域名，也不能替代账号登录或平台代理配置。
 
-#### Inspire/SII 账号初始化
+**安装或登录另一个 CLI 不会自动改变 Server 的绑定。** `SCIENCEEVOLVE_INSPIRE_BIN` 应指向实际验证过的可执行文件；Shell 函数、别名或某个项目的虚拟环境不会覆盖这一设置。部署配置变化须经运维确认并重启 Server 才生效；之后还需从实际 `sii_command` 核验版本和只读资源查询，不能把终端登录成功当作 MCP 已兼容。
 
-以下命令必须由运行 ScienceEvolve Server 的同一个系统用户执行，将 `your-account-alias` 替换为要使用的本地账号别名；账号配置保存在 `~/.inspire/accounts/<account-alias>/`。如果 `inspire` 不在 `PATH`，请把命令替换为 `SCIENCEEVOLVE_INSPIRE_BIN` 的绝对路径。
+#### Inspire/SII 账号登录
 
-```bash
-SCIENCEEVOLVE_INSPIRE_ACCOUNT_ALIAS=your-account-alias
-inspire --version
-inspire account add "$SCIENCEEVOLVE_INSPIRE_ACCOUNT_ALIAS"
-inspire account use "$SCIENCEEVOLVE_INSPIRE_ACCOUNT_ALIAS"
-inspire config check
-inspire init
-```
-
-然后在 ScienceEvolve 仓库中初始化项目上下文，并明确选择本项目的点券归属：
+以下示例按 **Inspire CLI 7.2.1** 的实际帮助核对。由运行 ScienceEvolve Server 的同一个系统用户、相同 `HOME` 执行，将路径和 `your-account-alias` 换成真实值。账号配置和 OAuth 会话由 CLI 保存在 `~/.inspire/accounts/<account-alias>/`；不要复制到项目输入、Prompt、文档或日志。`INSPIRE_ACCOUNT` 仅是下例的 Shell 变量，不是 ScienceEvolve 配置项。
 
 ```bash
-cd /path/to/ScienceEvolve
-inspire init --scope project --select-project "具有能动性的科学大模型"
+SCIENCEEVOLVE_INSPIRE_BIN=/absolute/path/to/inspire
+INSPIRE_ACCOUNT=your-account-alias
+ins7() (
+  unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY
+  "$SCIENCEEVOLVE_INSPIRE_BIN" --no-env-file "$@"
+)
+ins7 --version
+ins7 login --account "$INSPIRE_ACCOUNT" --no-use --no-browser
+ins7 account check --account "$INSPIRE_ACCOUNT"
 ```
 
-`inspire account add` 会要求填写平台登录 ID、平台地址和可选代理。登录 ID 是实际 username，不是网页显示名。需要通过 SII Proxy 访问平台时，应把代理写入 Inspire 账号配置；ScienceEvolve 的 compute wrapper 会清除通用 Shell HTTP(S) 代理变量，避免实验命令意外走普通公网代理。
+保持终端开启，由账号持有者在自己的浏览器打开 CLI 显示的官方授权地址并完成设备授权；不要分享设备码或令牌。已经登录且检查通过时，不必重复登录或创建账号。`--no-browser` 不启动服务器图形浏览器；`--no-use` 保留原活动账号，登录成功不代表服务已选中该账号。
+
+先检查服务使用的活动账号：
+
+```bash
+ins7 account current
+```
+
+仅在部署明确选择该账号、且不会影响原账号的活动实验时，再执行 `ins7 account use "$INSPIRE_ACCOUNT"`。SII 监测绑定提交账号，不能为了登录任意切换共享活动账号。需要 SII 专用代理时，按 [安装与账号配置](../.agents/skills/general/inspire/references/setup/install-and-config.md) 设置；Server 同样清除通用 Shell HTTP(S)/ALL 代理变量。
+
+CLI 7.2.1 的 `account context` 用于实时发现资源；`init` 仅验证/规范化账号配置，不建立仓库级配置。项目、Workspace、Group、Quota、Image 和远端绝对路径应在命令中明确提供。
 
 #### Project 与资源条件
 
 当前 ScienceEvolve 实验 Workload 的点券必须归属项目 `具有能动性的科学大模型`。Execution Agent 创建 Notebook、Job、HPC、Ray 或 Serving 时，必须显式使用该 `--project`，不能依赖 Active Project，也不能静默切换到其他项目。
 
-提交实验前先确认账号和实时资源：
+提交实验前，使用上面的同一 `ins7` 函数与账号确认认证和实时资源：
 
 ```bash
-inspire account current
-inspire config check
-inspire config context
-inspire project detail "具有能动性的科学大模型" --workspace "<目标 Workspace>"
-inspire notebook quota --workspace "CPU资源空间"
-inspire job quota --workspace "分布式训练空间"
-inspire resources availability --workspace all --include-cpu
+ins7 account check --account "$INSPIRE_ACCOUNT"
+ins7 account context --account "$INSPIRE_ACCOUNT"
+ins7 project detail "具有能动性的科学大模型" --account "$INSPIRE_ACCOUNT"
+ins7 hpc quota --workspace "CPU资源空间" --account "$INSPIRE_ACCOUNT"
+ins7 job quota --workspace "分布式训练空间" --account "$INSPIRE_ACCOUNT"
+ins7 image list --workspace "CPU资源空间" --account "$INSPIRE_ACCOUNT"
+ins7 resources availability --workspace "CPU资源空间" --include-cpu --account "$INSPIRE_ACCOUNT"
 ```
+
+`project detail` 查询项目本身，不接受 `--workspace`；Quota、镜像和 Availability 按实际目标 Workspace 查询，`resources availability` 不接受 `--workspace all`。这些只读检查不创建作业，登录成功也不保证项目权限、镜像、Quota 或资源可用。
 
 每次资源申请都需要五类调度条件：
 
@@ -430,7 +440,7 @@ inspire resources availability --workspace all --include-cpu
 | Quota | `gpu,cpu,mem` 三元组，必须来自对应 Workload 的实时 Quota 行。 |
 | Image | Notebook、Job 或其他 Workload 使用的运行镜像。 |
 
-这些条件没有可安全依赖的隐式默认值。重复使用同一套条件时，可以通过 `inspire <workload> profile set` 保存 Workload Profile，但创建命令仍需显式使用该 Profile。资源可用量会变化，Agent 在每次提交前仍应查询 Quota 和 Availability，提交后继续检查 Events、Logs、Metrics、Instances 和 Status，并清理不再使用的资源。
+这些条件没有可安全依赖的隐式默认值。CLI 7.2.1 不提供 Workload Profile 或 Path Alias；复现实验可记录不含凭据的完整参数，提交时仍须显式传入，并使用当前工作区验证过的远端绝对路径。资源可用量会变化，Agent 在每次提交前仍应查询 Quota 和 Availability，提交后继续检查 Events、Logs、Metrics、Instances 和 Status，并清理不再使用的资源。
 
 完整的 Inspire 配置与资源规则见 [安装与账号配置](../.agents/skills/general/inspire/references/setup/install-and-config.md) 和 [资源与调度条件](../.agents/skills/general/inspire/references/resources-and-paths.md)。具体命令参数始终以当前安装版本的 `inspire --help` 和子命令 `--help` 为准。
 

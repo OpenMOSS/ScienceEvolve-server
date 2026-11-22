@@ -12,7 +12,7 @@ For a first local task, follow the README's [quick start](../README.md#quick-sta
 
 - Node.js 24 or later. Collaboration's authoritative SQLite state requires Node 24.
 - npm 10 or later.
-- Executable Codex and [Inspire CLIs](../.agents/skills/general/inspire/references/setup/install-and-config.md#1-安装). SII experiments also require account and project initialization.
+- Executable Codex and [Inspire CLIs](../.agents/skills/general/inspire/references/setup/install-and-config.md#1-安装). SII experiments also require account login and live checks of Project permissions and resources.
 - At least one working model gateway.
 - Git when enabling Git collaboration.
 
@@ -380,47 +380,55 @@ SCIENCEEVOLVE_INSPIRE_CONFIG_PATH=
 SCIENCEEVOLVE_INSPIRE_NO_PROXY=
 ```
 
-Replace the paths with actual local paths. Without a configured boundary, the current runtime falls back to `/inspire/qb-ilm`, which does not fit every installation. `SCIENCEEVOLVE_INSPIRE_WORKSPACE_ROOT` is a local filesystem boundary containing the actual Agent workspaces, normally `${SCIENCEEVOLVE_DATA_DIR}/projects/...`. It is separate from the SII platform's Workspace name. `SCIENCEEVOLVE_INSPIRE_CONFIG_PATH` is an optional compatibility configuration layer and does not replace the Inspire CLI 6.x account directory. `SCIENCEEVOLVE_INSPIRE_NO_PROXY` adds comma-separated direct-access hosts and does not replace account login or platform-proxy setup.
+Replace the paths with actual local paths. Without a configured boundary, the current runtime falls back to `/inspire/qb-ilm`, which does not fit every installation. `SCIENCEEVOLVE_INSPIRE_WORKSPACE_ROOT` is a local filesystem boundary containing the actual Agent workspaces, normally `${SCIENCEEVOLVE_DATA_DIR}/projects/...`. It is separate from the SII platform's Workspace name. Server passes optional `SCIENCEEVOLVE_INSPIRE_CONFIG_PATH` as `INSPIRE_GLOBAL_CONFIG_PATH`, but CLI 7.2.1 used below does not read that layer; it cannot select an account or replace OAuth login. `SCIENCEEVOLVE_INSPIRE_NO_PROXY` adds comma-separated direct-access hosts and does not replace account login or platform-proxy setup.
 
-#### Inspire/SII account initialization
+**Installing or logging into another CLI does not change Server's executable binding.** Point `SCIENCEEVOLVE_INSPIRE_BIN` at the executable actually verified. Shell functions, aliases, and project virtual environments do not override this setting. Deployment changes require operator approval and a Server restart to take effect. Then verify the version and read-only resource queries through actual `sii_command`; terminal login alone does not establish MCP compatibility.
 
-Run these commands as the same OS user that runs ScienceEvolve Server. Replace `your-account-alias` with the local alias you want to use. Account configuration is stored in `~/.inspire/accounts/<account-alias>/`. If `inspire` is outside `PATH`, use the absolute `SCIENCEEVOLVE_INSPIRE_BIN` executable instead.
+#### Inspire/SII account login
 
-```bash
-SCIENCEEVOLVE_INSPIRE_ACCOUNT_ALIAS=your-account-alias
-inspire --version
-inspire account add "$SCIENCEEVOLVE_INSPIRE_ACCOUNT_ALIAS"
-inspire account use "$SCIENCEEVOLVE_INSPIRE_ACCOUNT_ALIAS"
-inspire config check
-inspire init
-```
-
-Then initialize project context from the ScienceEvolve repository and explicitly select the required billing Project:
+These examples were checked against **Inspire CLI 7.2.1** help. Run them as the same OS user, with the same `HOME`, as ScienceEvolve Server. Replace the executable path and `your-account-alias`. CLI stores account configuration and OAuth sessions under `~/.inspire/accounts/<account-alias>/`; never copy them into project inputs, prompts, documentation, or logs. `INSPIRE_ACCOUNT` is only a Shell variable for this example, not a ScienceEvolve setting.
 
 ```bash
-cd /path/to/ScienceEvolve
-inspire init --scope project --select-project "具有能动性的科学大模型"
+SCIENCEEVOLVE_INSPIRE_BIN=/absolute/path/to/inspire
+INSPIRE_ACCOUNT=your-account-alias
+ins7() (
+  unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY
+  "$SCIENCEEVOLVE_INSPIRE_BIN" --no-env-file "$@"
+)
+ins7 --version
+ins7 login --account "$INSPIRE_ACCOUNT" --no-use --no-browser
+ins7 account check --account "$INSPIRE_ACCOUNT"
 ```
 
-`inspire account add` asks for the platform login ID, platform URL, and optional proxy. Use the actual username rather than the Web display name. If SII Proxy is needed, configure it in the Inspire account. ScienceEvolve's compute wrapper clears generic Shell HTTP(S) proxy variables to keep experiment commands from accidentally using an ordinary public-network proxy.
+Keep the terminal open while the account holder completes device authorization at the official URL displayed by CLI in their own browser. Do not share device codes or tokens. If already logged in and the check passes, there is no need to log in again or recreate the account. `--no-browser` avoids launching a graphical browser on the server; `--no-use` retains the active account, so successful login does not select the account for Server.
+
+First check the service user's active account:
+
+```bash
+ins7 account current
+```
+
+Run `ins7 account use "$INSPIRE_ACCOUNT"` only when the deployment explicitly selects that account and the switch will not disrupt active experiments submitted by the previous account. SII monitoring binds to the submitting account; do not switch the shared active account merely to log in. For a dedicated SII proxy, follow [installation and account setup](../.agents/skills/general/inspire/references/setup/install-and-config.md). Server also clears generic Shell HTTP(S)/ALL proxy variables.
+
+CLI 7.2.1 uses `account context` for live discovery. `init` only validates/normalizes account configuration; it does not create repository-local configuration. Supply Project, Workspace, Group, Quota, Image, and absolute remote paths explicitly in commands.
 
 #### Project and resource requirements
 
 The current ScienceEvolve deployment requires experiment workloads to bill the Project `具有能动性的科学大模型`. Execution Agents creating Notebook, Job, HPC, Ray, or Serving workloads must explicitly pass this `--project`, rather than relying on Active Project or silently selecting another Project.
 
-Before submitting, check the account and live resource state:
+Before submitting, check authentication and live resource state using the same `ins7` function and account defined above:
 
 ```bash
-inspire account current
-inspire config check
-inspire config context
-inspire project detail "具有能动性的科学大模型" --workspace "<TARGET_WORKSPACE>"
-inspire notebook quota --workspace "CPU资源空间"
-inspire job quota --workspace "分布式训练空间"
-inspire resources availability --workspace all --include-cpu
+ins7 account check --account "$INSPIRE_ACCOUNT"
+ins7 account context --account "$INSPIRE_ACCOUNT"
+ins7 project detail "具有能动性的科学大模型" --account "$INSPIRE_ACCOUNT"
+ins7 hpc quota --workspace "CPU资源空间" --account "$INSPIRE_ACCOUNT"
+ins7 job quota --workspace "分布式训练空间" --account "$INSPIRE_ACCOUNT"
+ins7 image list --workspace "CPU资源空间" --account "$INSPIRE_ACCOUNT"
+ins7 resources availability --workspace "CPU资源空间" --include-cpu --account "$INSPIRE_ACCOUNT"
 ```
 
-Use the platform's exact Project and Workspace names; replace `<TARGET_WORKSPACE>` with the actual target.
+`project detail` addresses the Project itself and does not accept `--workspace`. Query Quota, images, and Availability in the actual target Workspace; `resources availability` rejects `--workspace all`. These read-only checks create no workloads. Login alone does not establish Project permissions, images, Quota, or resource availability.
 
 | Scheduling condition | Meaning |
 | --- | --- |
@@ -430,7 +438,7 @@ Use the platform's exact Project and Workspace names; replace `<TARGET_WORKSPACE
 | Quota | The `gpu,cpu,mem` tuple from the relevant Workload's live Quota row. |
 | Image | Runtime image for the Notebook, Job, or other Workload. |
 
-These conditions have no safe implicit defaults. Reusable combinations can be saved with `inspire <workload> profile set`, but creation commands must explicitly select the Profile. Availability changes over time. Before each submission, query Quota and Availability; afterward check Events, Logs, Metrics, Instances, and Status, and clean up unused resources.
+These conditions have no safe implicit defaults. CLI 7.2.1 provides neither Workload Profiles nor Path Aliases. Record credential-free explicit parameters for reproducibility, supply them when submitting, and use verified absolute remote paths for the current workspace. Availability changes over time. Before each submission, query Quota and Availability; afterward check Events, Logs, Metrics, Instances, and Status, and clean up unused resources.
 
 See [installation and account setup](../.agents/skills/general/inspire/references/setup/install-and-config.md) and [resources and scheduling](../.agents/skills/general/inspire/references/resources-and-paths.md). Use the installed version's `inspire --help` and subcommand `--help` for exact arguments.
 

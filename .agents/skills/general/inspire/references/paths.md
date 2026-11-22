@@ -1,17 +1,10 @@
 # 远端路径
 
-理解共享盘作用域、存储池、挂载隔离和 Path Alias 时先看本页。调度条件和资源规格看 [`resources-and-paths.md`](resources-and-paths.md)；公网 / 内部源看 [`network-and-sources.md`](network-and-sources.md)。
+理解共享盘作用域、存储池和挂载隔离时先看本页。路径配置按 CLI 7.2.1；调度条件和资源规格看 [`resources-and-paths.md`](resources-and-paths.md)，公网 / 内部源看 [`network-and-sources.md`](network-and-sources.md)。
 
 ## 1. 路径不是调度条件
 
-Path Alias 是远端路径 Alias，不是 Workload Profile。它只回答“文件在哪里”，不回答“任务在哪里跑”。
-
-| 概念 | 保存什么 | 不能替代 |
-| --- | --- | --- |
-| Workload Profile | `workspace`、`project`、`group`、`quota`、`image` | 远端目录 |
-| Path Alias | 共享盘上的目录 | `workspace`、`project`、`group`、`quota`、`image` |
-
-账号级 `[path_aliases]` 提供默认远端路径；仓库级、账号隔离的 `[path_aliases]` 可以覆盖当前 Repo 的同名 Alias。不要维护单独的“远端工作目录”字段。
+远端路径只回答“文件在哪里”，不回答“任务在哪里跑”。`workspace`、`project`、`group`、`quota`、`image` 是独立的调度参数。CLI 7.2.1 不提供 Path Alias 或 Workload Profile，也不读取仓库级路径配置；`--cwd` 和远端文件参数使用经过验证的绝对路径。
 
 ### ScienceEvolve 动态存储归属
 
@@ -20,8 +13,8 @@ ScienceEvolve Execution Agent 不预设固定存储池。每次创建 Workload �
 1. 规范化 `SCIENCEEVOLVE_ROLE_WORKSPACE` 的真实路径，并确认它位于 `SCIENCEEVOLVE_INSPIRE_WORKSPACE_ROOT` 边界内。不使用当前 shell 的偶然 `cwd`、历史会话或文档示例代替这两个运行时事实。
 2. 从真实工作区的 `/inspire/<tier>/...` 前缀提取 `<tier>`。这个值由当前部署决定，Skill 不写死任何存储池名称。
 3. 任务源码、启动脚本、工作目录、输入、Checkpoint、日志和结果默认位于该工作区或其子目录。提交前检查 `--cwd`、命令文本和所有显式输入输出路径，不得静默切换到其他 `<tier>`。
-4. 必须使用 Path Alias 时，选择并验证与当前 `<tier>` 一致的 `<tier>.me` 或 `<tier>.public`。`me` 和 `public` 只有在当前合并配置显示它们解析到同一 `<tier>` 时才可使用；不从 Alias 名称猜测其目标。
-5. 无法解析真实工作区、路径不在允许边界内、Alias 存储池不一致，或目标 Workload 看不到该项目路径时，停止创建并向用户说明。只有用户明确要求跨存储池，并已确认目标路径在当前项目可见时，才能偏离默认归属。
+4. 将已验证的绝对路径传给 `--cwd` 和远端文件参数；不使用 `me:<repo>` 等缩写，也不从账号别名推导个人目录。
+5. 无法解析真实工作区、路径不在允许边界内、存储池不一致，或目标 Workload 看不到该项目路径时，停止创建并向用户说明。只有用户明确要求跨存储池，并已确认目标路径在当前项目可见时，才能偏离默认归属。
 
 ## 2. 路径作用域
 
@@ -51,17 +44,6 @@ ScienceEvolve Execution Agent 不预设固定存储池。每次创建 Workload �
 
 跨项目搬小文件时，在两个项目各起一个 Notebook，用全局个人路径中转。大数据集或全量 Checkpoint 超出个人 Quota 时，联系项目管理员处理。
 
-## 5. Alias 语义
+## 5. 路径核验与记录
 
-默认 Alias 由 `inspire init` 写入账号配置；当前 Repo 需要覆盖时，用项目初始化或 Path Alias 命令写仓库级配置。
-
-| Alias | 指向 |
-| --- | --- |
-| `me` | 当前项目、当前账号、初始化时选择的默认存储池 |
-| `public` | 当前项目公共目录、初始化时选择的默认存储池 |
-| `global-me` | 当前账号全局目录 |
-| `<tier>.me` | 指定存储池下的项目个人目录，例如 `ssd.me`、`hdd.me`、`qb-ilm2.me` |
-| `<tier>.public` | 指定存储池下的项目公共目录 |
-| `<tier>.global-me` | 指定存储池下的全局个人目录 |
-
-路径参数支持 `alias`、`alias:<subdir>` 和命名 Alias 三种模型。具体命令语法看 CLI Help；Reference 只强调语义：把代码、数据、权重和产物放到远端路径约定里，不把路径含义塞进 Workload Profile。
+在项目 `INSPIRE.md` 中记录不含凭据的目录约定；实际提交仍需核对运行时工作区和目标实例的挂载可见性。`notebook exec --cwd` 要求远端绝对目录；SCP 远端相对路径依赖远端 Shell，不能作为可复现项目路径。共享盘文件位置不授予其他项目访问权限。

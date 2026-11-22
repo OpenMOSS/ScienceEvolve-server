@@ -1,6 +1,6 @@
 # 安装、配置与 SII Proxy
 
-安装、更新、账号配置、项目初始化和本机 SII proxy setup 都看这一份。平台任务运行看 notebook / compute workloads / resources 等业务手册；这里不维护命令清单，命令表面以 CLI help 为准。
+安装、更新、OAuth 登录、账号发现和本机 SII proxy setup 都看这一份。以下账号与资源命令按 **Inspire CLI 7.2.1** 的实际帮助核对；平台任务运行看 notebook / compute workloads / resources 等业务手册，具体参数以绑定可执行文件的 CLI help 为准。
 
 ## 1. 安装
 
@@ -42,7 +42,7 @@ inspire --help
 inspire update --check
 ```
 
-如果 `inspire: command not found`，开新终端或运行 `exec $SHELL`。如果 Playwright Chromium 缺失，直接重跑安装脚本或运行 `inspire update --cli-only`；安装 / 更新流程会修全局 CLI 的浏览器运行时。
+如果 `inspire: command not found`，先确认实际安装路径。ScienceEvolve 通过 `SCIENCEEVOLVE_INSPIRE_BIN` 绑定可执行文件，修改 Shell 的 PATH 或安装项目虚拟环境不会自动切换服务。OAuth 设备授权不要求在服务器启动图形浏览器；其它操作若报告浏览器运行时缺失，应按该操作的错误与安装说明处理，不能把它当作账号未登录。
 
 ## 2. 更新
 
@@ -53,100 +53,53 @@ inspire update --cli-only
 inspire update --skill-only
 ```
 
-`inspire update` 会自动识别 `uv tool` / `pipx` 安装来源，升级 CLI 包，刷新 harness skill，并显示 GitHub Releases 的更新摘要。`--cli-only` 只升 CLI 包与运行时；`--skill-only` 只刷 `SKILL.md` 和 `references/`。
+`--check` 仅检查上游；实际升级须在部署授权后执行。`--cli-only` 升级 CLI 包与运行时，`--skill-only` 刷新 Skill 和 references。7.2.1 的实际 update 还会扫描并提示清理旧状态，即使没有新版本；不要将升级或清理当作只读检查，也不要绕过确认删除已有过程文件。
 
-## 3. 账号配置
+## 3. 账号登录与代理
 
-账号配置和仓库无关，任意目录运行：
-
-```bash
-inspire account add <name>
-inspire config show --compact
-inspire config check
-```
-
-`inspire account add` 会询问平台登录 username、password、base URL 和代理。username 必须是登录 ID，不是网页右上角中文显示名。配置写入 `~/.inspire/accounts/<name>/config.toml`。
-
-不常驻 SII、但本机 Clash Verge 能转发 `*.sii.edu.cn` 时，代理填本机 Clash mixed port。端口以本机 Clash Verge 设置为准，下面只用 `7897` 作为示例：
-
-```text
-http://127.0.0.1:7897
-```
-
-能直连 SII 校园网时，账号 proxy 可以留空；如果想复用同一套 Clash 配置，就仍然填本机 mixed port，然后在 Clash 的 `SII Proxy` 组里选择 `DIRECT`。
-
-账号级 proxy 是标准入口，也会优先于通用 Shell 代理。为兼容现有开发环境，CLI 仍会继承 `http_proxy` / `HTTP_PROXY`、`https_proxy` / `HTTPS_PROXY` 和 `all_proxy` / `ALL_PROXY`；因此即使账号配置里没有 proxy，这些变量也可能改变登录和 Browser API 的实际链路。用下面的命令查看脱敏后的有效代理来源、目标路由和 `NO_PROXY` 匹配结果：
+使用与 ScienceEvolve Server 相同的操作系统用户和 `HOME`，在服务机器上执行绑定的 CLI；以下用 `inspire` 表示该可执行文件。账号持有者完成官方 OAuth 设备授权，Agent 不读取、复制或代填密码/令牌：
 
 ```bash
-inspire config show --compact --filter Proxy
+inspire --version
+inspire login --account your-account-alias --no-use --no-browser
+inspire account check --account your-account-alias
 ```
 
-平台登录和 Browser API 的通用 Shell HTTP(S) 代理来源会遵守 `NO_PROXY` / `no_proxy`。如果当前网络应直连 SII，可把 `.sii.edu.cn` 加入 bypass；确认是 Shell 代理干扰时，也可只对本次命令取消大小写两组变量：
+保持终端开启，在自己的浏览器打开 CLI 显示的官方授权地址并完成授权；设备码过期后重新执行登录，不把设备码发给别人。已有登录且检查通过时直接使用，不必重新授权。`account add` 只用于新账号名称，已有名称会失败；它同样使用设备授权，不是用户名/密码采集入口。
+
+`--no-use` 保留当前活动账号。先用 `inspire account current` 查看服务会使用的账号；仅在部署授权且不影响原账号活动实验时运行 `inspire account use your-account-alias`。显式 `--account` 只选择本次命令，不更改共享默认值。登录7.2.1不等于正在运行的 SII MCP 已切到该版本。
+
+账号配置和登录态由 CLI 保存到 `~/.inspire/accounts/<account-alias>/`；账号别名不要求等于平台登录 ID。不要把配置全文、OAuth会话、密码或令牌复制到仓库、Prompt、日志或 `INSPIRE.md`。本地账号改名用 `account rename`，不得用删账号/删会话来隐藏恢复失败。
+
+需要 SII 专用代理时，在官方登录命令的 `--proxy URL` 中指定不含凭据的代理入口，具体参数先查 `login --help`。Clash mixed port 必须使用本机实际值，例如 `http://127.0.0.1:7897`；直连校园网时无需公网代理。代理凭据不能放进命令行或文档。
+
+诊断配置来源和代理路由使用 `inspire account check --account your-account-alias --details`；只检查本地状态时加 `--offline`。这些输出不应原样贴入公共记录。ScienceEvolve 会清除通用 HTTP(S)/ALL 代理变量；本地核对时也可仅对该命令取消它们：
 
 ```bash
 env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY \
-  -u http_proxy -u https_proxy -u all_proxy inspire init
+  -u http_proxy -u https_proxy -u all_proxy \
+  inspire --no-env-file account check --account your-account-alias
 ```
 
-不再使用 `INSPIRE_FORCE_PROXY` 等旧式一次性开关；需要稳定代理时写入账号配置。
+## 4. 实时资源发现与路径
 
-## 4. 全局发现与项目初始化
-
-账号配置完成后，先做一次全局发现，把可见 project、project catalog、compute group catalog 和默认远端 path alias 写入账号配置：
+登录后进行只读验证，不将登录成功等同于资源可用：
 
 ```bash
-inspire init
-inspire resources availability --workspace all --include-cpu
+inspire account context --account your-account-alias
+inspire project detail "具有能动性的科学大模型" --account your-account-alias
+inspire hpc quota --workspace "CPU资源空间" --account your-account-alias
+inspire image list --workspace "CPU资源空间" --account your-account-alias
+inspire resources availability --workspace "CPU资源空间" --include-cpu --account your-account-alias
 ```
 
-每个需要仓库 project context 或覆盖默认 path alias 的本地仓库，再各做一次项目初始化：
+`project detail` 不带 `--workspace`；Quota、镜像和 Availability 使用实际目标 Workspace，Availability 不接受 `all`。资源名、权限、规格、镜像和余额以当前查询为准，不能从历史输出推断。
 
-```bash
-cd /path/to/your-repo
-inspire init --scope project
-```
+CLI 7.2.1 的 `init` 只验证/规范化当前账号配置并写入账号的 `config.toml`，不是登录后必做步骤，也不建立仓库级配置。Project、Workspace、Group、Quota、Image 均需显式传入；不使用 Workload Profile 或 Path Alias。远端 `--cwd` 使用已验证的绝对路径，文件操作路径来自当前 `SCIENCEEVOLVE_ROLE_WORKSPACE` 和同一存储池，不从账号别名或文档示例推导。
 
-项目配置分两层：`./.inspire/config.toml` 是仓库共享层，适合记录所有账号共用的 `[cli]` 设置；`./.inspire/accounts/<account>/config.toml` 是账号项目覆盖层。`inspire init --scope project` 会把当前仓库的项目上下文和发现到的远端 path alias 写入账号项目覆盖层。不要维护单独的“远端工作目录”字段；用 alias：
+CLI 仅通过显式 `--env-file PATH` 加载 dotenv，不自动读取仓库 `.env`；ScienceEvolve 使用 `--no-env-file` 并继承服务进程环境。不要把部署配置和项目说明混成另一份凭据来源。
 
-```bash
-inspire notebook exec <name> --cwd me "pwd"
-inspire notebook exec <name> --cwd me:<repo> "git pull"
-inspire notebook scp <name> ./config.yaml me:<repo>/config.yaml
-```
-
-如果本仓库需要让 Agent 运行 `inspire ...` 时稳定加载项目 `.env`，先生成模板再登记到共享项目配置：
-
-```bash
-inspire config env --output .env.example
-cp .env.example .env
-inspire config env use .env
-```
-
-也可以在项目初始化时顺手登记：
-
-```bash
-inspire init --scope project --env-file .env
-```
-
-登记后写入的是 `./.inspire/config.toml` 的 `[cli].env_file`，不是某个账号目录；真实父进程环境变量仍然优先于 `.env`。
-
-多账号只用这些命令：
-
-```bash
-inspire account add <name2>
-inspire account use <name>
-inspire account rename <old-name> <new-name>
-inspire account current
-```
-
-这里的 `<name>` 是本地 account alias，也就是 `~/.inspire/accounts/<name>/` 的目录名；它不要求等于平台登录 username。`~/.inspire/current` 是普通文本文件，不是 symlink，内容只有当前 active account alias 一行。`inspire account use <name>` 只更新这个默认指针，不会移动或合并任何账号目录。
-`inspire account rename <old-name> <new-name>` 只改本地 alias：移动 `~/.inspire/accounts/<old-name>/` 到新目录，若旧 alias 是 active account 则同步更新 `~/.inspire/current`，并把 remembered notebook target cache 中的旧 alias 改成新 alias。平台登录 username 保留在该账号的 `config.toml` 中，不会被 rename 修改。
-
-账号目录、Web session、联网 Notebook SSH 连接缓存和 rtunnel proxy state 都在 `~/.inspire/accounts/<name>/` 下。连接缓存用 `inspire notebook connection list/status/refresh/forget/prune` 管理。
-
-Notebook 连接类命令的 `--account <name>` 也使用本地 account alias，不用平台登录 username 反查 alias。`ssh` / `exec` / `shell` / `scp` / `ssh-config` / `ssh-proxy` 在不传 `--account` 时可以跨账号解析已有 notebook connection；传 `--account all` 表示扫描全部账号，传具体 alias 表示只使用该账号。
-
-联网 notebook 才创建或刷新 SSH / rtunnel connection。不可上网区 notebook 的 `exec` / `shell` 走 JupyterTerminal；文件流转先落到 `/inspire/...` 共享路径，再通过可上网 notebook 的 `notebook scp` 或外部 `rsync` 上传 / 下载。
+Notebook 连接缓存通过 `notebook connection` 命令组管理。联网 Notebook 首次使用 SSH 前显式刷新连接；受限 Notebook 的 `exec` / `shell` 走 JupyterTerminal，不为其建立绕过限制的隧道。文件流转先落到同一 `/inspire/...` 共享路径，再通过已授权的联网 Notebook 上传/下载。
 
 ## 5. SII Proxy
 
@@ -262,7 +215,7 @@ function main(config, profileName) {
 ```bash
 lsof -iTCP:<mixed-port> -sTCP:LISTEN
 curl -sS -o /dev/null -w "sii: %{http_code}\n" -x http://127.0.0.1:<mixed-port> https://qz.sii.edu.cn
-inspire config check
+inspire account check --account your-account-alias
 ```
 
-如果 `qz.sii.edu.cn` 失败，先查 Clash Verge 规则里是否有 `DOMAIN-SUFFIX,sii.edu.cn,SII Proxy`，再查 `SII Proxy` 组当前选中的是可用代理还是 `DIRECT`，最后用 `inspire config show --compact --filter Proxy` 同时确认账号级 proxy、Shell proxy、有效路由和 `NO_PROXY` 匹配结果。
+如果 `qz.sii.edu.cn` 失败，先查 Clash Verge 规则里是否有 `DOMAIN-SUFFIX,sii.edu.cn,SII Proxy`，再查 `SII Proxy` 组当前选中的是可用代理还是 `DIRECT`，最后用 `inspire account check --account your-account-alias --details` 核对配置来源和代理路由；不要把网络可达当作认证成功。

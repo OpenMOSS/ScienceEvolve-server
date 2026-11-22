@@ -19,7 +19,7 @@ Notebook/Ray/Serving 等常驻资源上的实验可沿用后台程序和 Sentine
 
 Notebook 创建由 MCP 固定添加 `--no-wait --post-start none`，避免 CLI 默认等待启动或执行配置里的启动后动作。显式启动后脚本需分阶段执行：等待 `resource_ready`，按 Notebook reference 准备连接，再登记并启动后台程序。新账号或新 Notebook 没有连接缓存时，先用 `sii_command` 执行 `notebook connection refresh`，明确 workspace 和可用公钥路径；不要把连接配置错误当作科研程序失败。
 
-`inspire` 是启智平台的本地命令入口。这个 Skill 不复述 CLI 使用手册；命令组、子命令、参数、默认值和示例始终以 `inspire --help` / `inspire <group> --help` / `inspire <group> <subcommand> --help` 为准。
+`inspire` 是启智平台的本地命令入口。本文的账号/配置说明以 CLI 7.2.1 为准；先从实际 `sii_command` 查询 `--version` 和 `--help`，终端安装或登录另一个可执行文件不代表 MCP 已切换。命令组、参数与默认值始终以该绑定版本的帮助为准。登录由账号持有者完成，Agent 不索取密码、设备码或令牌。
 
 本文件只保留超出 `--help` 的平台判断：任务落在哪个 Workspace，资源条件和远端路径如何分离，公网和 SII 内部源怎么取舍，Notebook / Job / HPC / Ray / Serving 如何选型，以及观察、止损、清理闭环。
 
@@ -30,21 +30,21 @@ Notebook 创建由 MCP 固定添加 `--no-wait --post-start none`，避免 CLI �
 | 平面 | 要回答的问题 | 不要混淆 |
 | --- | --- | --- |
 | 调度条件 | 跑在哪个 Workspace / Project / Compute Group，用多少 GPU / CPU / 内存 / Shared Memory，基于哪个镜像 | 不是远端路径，也不是对象名字 |
-| 远端文件 | 代码、数据、权重、Checkpoint、产物放在哪个共享盘路径 | Path Alias 不能代替 Workspace / Project / Group / Quota |
+| 远端文件 | 代码、数据、权重、Checkpoint、产物放在哪个共享盘路径 | 绝对路径不能代替 Workspace / Project / Group / Quota |
 | 工作负载 | 需要交互调试、GPU 后台任务、CPU Slurm、Ray 弹性集群，还是模型服务 | 不要为了“能跑”把所有事都塞进 Notebook |
 | 观察收尾 | 如何判断排队、失败、空转、已完成，以及何时 `stop` / `delete` | `status=RUNNING` 不等于业务健康，`status=SUCCEEDED` 不等于产物完整 |
 
-`workspace`、`project`、`group`、`quota`、`image` 是核心调度条件，没有隐式默认值。创建 Workload 时显式传入，或用 Workload Profile 保存。GPU Job Shared Memory 属于资源细项，不等同于 `quota` 的内存字段，且不能超过 `quota` 的实例内存；需要时查 `job create --help` 或 [`references/compute-workloads.md`](references/compute-workloads.md)。Path Alias 只表示远端路径，服务于 `--cwd`、`scp`、日志路径和共享盘约定。
+`workspace`、`project`、`group`、`quota`、`image` 是核心调度条件，没有隐式默认值，创建 Workload 时显式传入。CLI 7.2.1 不提供 Workload Profile 或 Path Alias；`--cwd`、文件传输、日志与共享盘使用验证过的绝对路径。GPU Job Shared Memory 属于资源细项，不等同于 `quota` 的内存字段，且不能超过 `quota` 的实例内存；需要时查 `job create --help` 或 [`references/compute-workloads.md`](references/compute-workloads.md)。
 
 ### ScienceEvolve 项目点券归属（强制）
 
-ScienceEvolve 科研项目中的 Execution Agent 创建或启动任何 Inspire Workload 时，点券必须来自项目 `具有能动性的科学大模型`。所有 `notebook create`、`job create`、`hpc create`、`ray create`、`serving create` 及其 Workload Profile 都必须显式设置 `--project 具有能动性的科学大模型` 或等价的 Profile project 字段；不得依赖 Active Project，不得静默改用其他项目。
+ScienceEvolve 科研项目中的 Execution Agent 创建或启动任何 Inspire Workload 时，点券必须来自项目 `具有能动性的科学大模型`。所有 `notebook create`、`job create`、`hpc create`、`ray create`、`serving create` 都必须显式设置 `--project 具有能动性的科学大模型`；不得依赖 Active Project，不得静默改用其他项目。
 
-提交前用 Live `config context` 和 `project detail` 确认该项目在目标 Workspace 可见、状态可用且点券余额可用。若验证失败，停止提交并向用户请求处理；不得为了让任务启动而切换点券归属。只读查询不消耗点券，可以跨可见 Workspace 检查上下文、Quota、Availability、Status、Events、Logs 和 Metrics。
+提交前用 Live `account check`、`account context` 和 `project detail` 确认认证、可见资源、项目状态与点券余额，再查询目标 Workspace 的 Quota、镜像和 Availability。`project detail` 不接受 `--workspace`，`resources availability` 必须指定一个实际 Workspace、不接受 `all`。若验证失败，停止提交并报告具体阻塞；不得为了让任务启动而切换点券归属。只读查询不消耗点券，可以分别检查各可见 Workspace。
 
 Compute Group 名称可能承载平台调度区语义，例如 `开发区` / `训练区`。qz 公平调度 Workspace 只接受 `1=LOW`（可抢占）或 `4=HIGH`（稳定），其他 Workspace 保留 `1–10`；CLI 从 live `is_fair_workspace` 能力选择合同。开发区同时支持整节点和碎卡 GPU 任务，训练区优先保障整节点任务，碎卡任务只能用 `1=LOW`。整节点 / 碎卡按每个实例或节点选择的 Live Quota Row 判断，不按多节点任务的 GPU 总数判断；`--nodes` 只放大实例数。选择资源时从同一行复制完整 `group` 和 `quota`，训练区碎卡提交后再从 Status / Events 核实解析后的优先级和调度结果。
 
-资源可用性里 `Available` 是即时空闲 GPU，`Low Pri` 是低优可抢占占用，`High Pri` 是高优任务可能回收的 `Available + Low Pri` 上限；正式提交后仍以 Events / Instances / Metrics 判断调度结果。
+CLI 7.2.1 的 Availability 中，`Available` 表示 Workspace 保证额度余量，超用时可为负；`High Pri GPU` 加上可抢占任务占用后仍可能为负，不等于已预留的空闲 GPU。正式提交后仍以 Events / Instances / Metrics 判断调度结果。
 
 日常 Workspace 选择通常很直接：
 
@@ -81,9 +81,9 @@ Compute Group 名称可能承载平台调度区语义，例如 `开发区` / `�
 
 ### ScienceEvolve Execution 代理约束（强制）
 
-ScienceEvolve 的 Execution Agent 调用 `inspire` CLI 时，必须在该命令进程中执行 `unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY`。
+ScienceEvolve 的 Execution Agent 调用 `inspire` CLI 时，必须在该命令进程中执行 `unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY`；SII MCP 已做同样处理。
 
-Execution Agent 创建 Workload 前，必须从运行时注入的 `SCIENCEEVOLVE_ROLE_WORKSPACE` 解析当前 Agent 工作区的真实路径和 `/inspire/<tier>/` 存储池；`SCIENCEEVOLVE_INSPIRE_WORKSPACE_ROOT` 只用于校验工作区边界，不是可写死的远端目录。代码、任务工作目录、输入、Checkpoint、日志和结果默认使用当前工作区或其子目录；使用 Path Alias 时必须先确认 Alias 解析到同一 `<tier>`。不得根据 Skill 示例、历史任务或账号默认 Alias 猜测存储池，也不得在路径不可用时静默回退到另一存储池。无法确认当前存储池、Alias 归属或目标项目可见性时，停止提交并请求用户处理。路径判断细则见 [`references/paths.md`](references/paths.md)。
+Execution Agent 创建 Workload 前，必须从运行时注入的 `SCIENCEEVOLVE_ROLE_WORKSPACE` 解析当前 Agent 工作区的真实路径和 `/inspire/<tier>/` 存储池；`SCIENCEEVOLVE_INSPIRE_WORKSPACE_ROOT` 只用于校验工作区边界，不是可写死的远端目录。代码、任务工作目录、输入、Checkpoint、日志和结果默认使用当前工作区或其子目录的绝对路径。不得根据 Skill 示例、历史任务或账号名称猜测存储池，也不得在路径不可用时静默回退到另一存储池。无法确认当前存储池或目标项目可见性时，停止提交并报告具体阻塞。路径判断细则见 [`references/paths.md`](references/paths.md)。
 
 日常执行顺序：
 
@@ -105,10 +105,10 @@ Notebook 连接类命令可跨账号解析已有连接；`--account <name>` 指�
 
 | 用户问题或 Agent 判断点 | 先加载 |
 | --- | --- |
-| 安装、更新、账号添加 / 切换、首次初始化、`inspire init` 全局发现与项目初始化、SII Proxy Setup | [`references/setup/install-and-config.md`](references/setup/install-and-config.md) |
-| 选择 `CPU资源空间` / `分布式训练空间` / 特殊 Workspace，理解 Compute Group、`--quota gpu,cpu,mem`、资源实时查询和 Workload Profile | [`references/resources-and-paths.md`](references/resources-and-paths.md) |
+| 安装、更新、OAuth设备授权、账号选择、实时资源发现与 SII Proxy Setup | [`references/setup/install-and-config.md`](references/setup/install-and-config.md) |
+| 选择 `CPU资源空间` / `分布式训练空间` / 特殊 Workspace，理解 Compute Group、`--quota gpu,cpu,mem`、实时查询与显式资源参数 | [`references/resources-and-paths.md`](references/resources-and-paths.md) |
 | 需要区分公网、SII 内部源、离线 GPU 空间，或查 PyPI / `pip`、Apt、Conda、PyTorch Wheels、`npm`、Maven、Docker Registry、OSS、NTP 等内部源地址 | [`references/network-and-sources.md`](references/network-and-sources.md) |
-| 理解共享盘作用域、存储池、挂载隔离、Path Alias 和远端路径不可见 | [`references/paths.md`](references/paths.md) |
+| 理解共享盘作用域、存储池、挂载隔离和远端绝对路径不可见 | [`references/paths.md`](references/paths.md) |
 | 创建交互环境、连接 Notebook、SSH / `exec` / `shell` / `scp`、IDE URL、容器 HTTP 服务暴露、基底环境准备、大文件流转 | [`references/notebook.md`](references/notebook.md) |
 | 在 GPU Job、CPU HPC、Ray、Serving 之间选型，或提交后观察 Events / Logs / Metrics / Instances / Status，分析排队、失败、空转、优先级和异常状态 | [`references/compute-workloads.md`](references/compute-workloads.md) |
 | 一个项目跨越 CPU 准备、数据处理、GPU 训练、部署或交付，需要阶段化计划 | [`references/workflows.md`](references/workflows.md) |
@@ -128,6 +128,6 @@ Notebook 连接类命令可跨账号解析已有连接；`--account <name>` 指�
 - `Existing Notebooks`
 - `Ongoing Jobs`
 
-不要把账号配置、密码、代理密钥、平台 Session、`.inspire/config.toml` 或 `.inspire/accounts/<account>/config.toml` 内容复制进 `INSPIRE.md`。配置事实由 CLI 合并和展示；项目说明只记录人类可读的协作约定。
+不要把账号配置、密码、代理密钥或 OAuth 会话内容复制进 `INSPIRE.md`。CLI 7.2.1 的持久配置位于服务用户的账号目录，不读取仓库级 `.inspire` 配置；项目说明只记录不含凭据的协作约定。
 
 `AGENTS.md` / `CLAUDE.md` 等文件可以记录本地 Agent 计划和执行风格；启智上下文必须集中在 `INSPIRE.md`，方便不同 Harness、不同成员和未来 Agent 共用同一份项目事实。

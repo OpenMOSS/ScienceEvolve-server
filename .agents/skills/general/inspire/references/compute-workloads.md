@@ -1,6 +1,6 @@
 # Job、HPC、Ray 与 Serving
 
-在 GPU Job、CPU HPC、Ray 和 Serving 之间选型，或提交后观察 Events / Logs / Metrics / Instances / Status 时看本页。资源目录和 Profile 看 [`resources-and-paths.md`](resources-and-paths.md)，镜像看 [`image-management.md`](image-management.md)，模型仓库看 [`model.md`](model.md)。命令语法和参数以 CLI Help 为准。
+在 GPU Job、CPU HPC、Ray 和 Serving 之间选型，或提交后观察 Events / Logs / Metrics / Instances / Status 时看本页。资源发现与显式调度参数看 [`resources-and-paths.md`](resources-and-paths.md)，镜像看 [`image-management.md`](image-management.md)，模型仓库看 [`model.md`](model.md)。命令语法和参数以 CLI Help 为准。
 
 ## 1. 先选工作负载类型
 
