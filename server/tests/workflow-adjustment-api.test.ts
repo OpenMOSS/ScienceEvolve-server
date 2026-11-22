@@ -25,7 +25,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map(root => fs.rm(root, { recursive: true, force: true })));
 });
 
-async function fixture(options: { root?: string; allowMain?: boolean; gateway?: boolean } = {}) {
+async function fixture(options: { root?: string; allowMain?: boolean; gateway?: boolean; gatewayReasoning?: boolean } = {}) {
   const root = options.root ?? await fs.mkdtemp(path.join(os.tmpdir(), "openfars-user-adjustment-api-"));
   if (!options.root) roots.push(root);
   const hub = new EventHub(), storage = new ProjectStorage(root, hub), skills = new SkillCatalog([]);
@@ -35,7 +35,9 @@ async function fixture(options: { root?: string; allowMain?: boolean; gateway?: 
   const gatewayFetch = vi.fn(async () => { throw new Error("Queue validation must not initiate a connection probe"); });
   const gatewayStore = options.gateway ? new GatewayStore(root, { fetch: gatewayFetch, resolveHostname: async () => ["93.184.216.34"] }) : undefined;
   const gateway = await gatewayStore?.create({ name: "Unprobed configured Gateway", url: "https://gateway.example.com/v1", apiKey: "server-only-gateway-secret",
-    models: ["test-model"], defaultModel: "test-model", protocol: "responses" });
+    models: ["test-model"], defaultModel: "test-model", protocol: "responses",
+    ...(options.gatewayReasoning ? { modelReasoning: { "test-model": { parameter: "reasoning.effort", defaultOptionId: "high",
+      options: [{ id: "high", label: "High", value: "high" }] } } } : {}) });
   let state!: ProjectState, orchestrator!: Orchestrator;
   const hooks: { validate?: (proposal: AgentOrchestrationProposal) => Promise<void> } = {};
   const validate = vi.fn(async (_state: ProjectState, proposal: AgentOrchestrationProposal) => {
@@ -101,7 +103,7 @@ async function fixture(options: { root?: string; allowMain?: boolean; gateway?: 
       type: "agent.trace", level: "info", agent: "main", message: "Concurrent native event remains transportable"
     });
   };
-  return { root, state, storage, skills, orchestrator, coordinator, app, url, database, body, validate, hooks, changeConfiguration, gatewayFetch, run, pause, resume, cancel, queueNativeTrace };
+  return { root, state, storage, skills, orchestrator, coordinator, app, url, database, body, validate, hooks, changeConfiguration, gatewayStore, gatewayFetch, run, pause, resume, cancel, queueNativeTrace };
 }
 
 describe("workflow adjustment public API", () => {
@@ -412,6 +414,40 @@ describe("workflow adjustment public API", () => {
     expect(f.gatewayFetch).not.toHaveBeenCalled();
     expect(f.state.agents.main.gatewaySnapshot?.apiKey).toBe("server-only-gateway-secret");
     expect((await f.database.workflowAdjustmentContext(f.state.id, { agents: f.state.agents, skillDefinitions: {}, mcpDefinitions: {} })).records).toHaveLength(1);
+  });
+
+  it("allows unrelated workflow edits when the live gateway drops the locked model's reasoning options", async () => {
+    const f = await fixture({ gateway: true, gatewayReasoning: true });
+    const before = structuredClone(f.state.agents.main.gatewaySnapshot);
+    expect(before?.reasoning?.optionId).toBe("high");
+    const store = f.gatewayStore!;
+    const get = store.get.bind(store);
+    vi.spyOn(store, "get").mockImplementation(async id => {
+      const current = await get(id);
+      return current && { ...current, models: ["replacement-model"], modelReasoning: {} };
+    });
+    const input = await f.body();
+    await request(f.app).post(f.url).send(input).expect(202);
+    expect(f.state.agents.main.gatewaySnapshot).toEqual(before);
+    expect(f.gatewayFetch).not.toHaveBeenCalled();
+
+    const changed = await f.body("changed-reasoning");
+    changed.proposal.agents.main.gatewayReasoningOption = "new-setting";
+    changed.replacesRequestId = input.requestId;
+    await request(f.app).post(f.url).send(changed).expect(400);
+  });
+
+  it("returns a definite validation response for errors from the SDK's Zod instance", async () => {
+    const f = await fixture();
+    vi.spyOn(f.orchestrator, "submitWorkflowAdjustment").mockImplementationOnce(async () => {
+      const error = Object.assign(new Error("separate Zod instance"), {
+        name: "ZodError",
+        issues: [{ code: "custom", path: ["agents", "main"], message: "invalid reasoning setting" }]
+      });
+      throw error;
+    });
+    const response = await request(f.app).post(f.url).send(await f.body()).expect(400);
+    expect(response.body.error).toContain("invalid reasoning setting");
   });
 
   it("serializes two browser replacements and accepts only the explicitly named current request", async () => {
