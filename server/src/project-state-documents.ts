@@ -1,4 +1,5 @@
 import type { ActiveAgentExecution, ProjectState } from "./types.js";
+import type { WorkflowConfigurationVersion } from "./workflow-adjustments.js";
 import { mkdirSync, renameSync, unlinkSync, writeFileSync, promises as fs } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
 import { projectStateDigest } from "./project-state.js";
@@ -30,7 +31,7 @@ export interface ProjectStateDocumentStore {
   domain(projectId: string): ProjectStateDomain | undefined | Promise<ProjectStateDomain | undefined>;
   read(projectId: string, name: ProjectStateDocumentName): ProjectStateDocument | undefined | Promise<ProjectStateDocument | undefined>;
   write(projectId: string, name: ProjectStateDocumentName, value: unknown, expectedVersion: string,
-    publishView?: (document: ProjectStateDocument) => void): ProjectStateDocument | Promise<ProjectStateDocument>;
+    publishView?: (document: ProjectStateDocument) => void, expectedWorkflowVersion?: WorkflowConfigurationVersion): ProjectStateDocument | Promise<ProjectStateDocument>;
 }
 
 /** Apply only this writer's changes to the authoritative checkpoint. A stale

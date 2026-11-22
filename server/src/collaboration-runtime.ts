@@ -1235,8 +1235,8 @@ export class CollaborationRuntimeCoordinator implements CollaborationRuntimeLife
     const reader = readOnlyProjectStateDocuments(source);
     return { source, domain: async projectId => this.#database ? (await this.#database.projectStateDomain(projectId)) : (await reader.domain(projectId)),
       read: async (projectId, name) => this.#database ? (await this.#database.projectStateDocument(projectId, name)) : (await reader.read(projectId, name)),
-      write: async (projectId, name, value, expectedVersion, publishView) => {
-        this.assertWritable(); return await this.database().writeProjectStateDocument(projectId, name, value, expectedVersion, publishView);
+      write: async (projectId, name, value, expectedVersion, publishView, expectedWorkflowVersion) => {
+        this.assertWritable(); return await this.database().writeProjectStateDocument(projectId, name, value, expectedVersion, publishView, expectedWorkflowVersion);
       } };
   }
 

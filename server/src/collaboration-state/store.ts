@@ -17506,12 +17506,21 @@ export class CollaborationStateDatabase {
   }
 
   writeProjectStateDocument(projectId: string, name: ProjectStateDocumentName, value: unknown, expectedVersion: string,
-    publishView?: (document: ProjectStateDocument) => void): ProjectStateDocument {
+    publishView?: (document: ProjectStateDocument) => void, expectedWorkflowVersion?: WorkflowConfigurationVersion): ProjectStateDocument {
     this.assertOpen();
     this.assertLeaseHeld();
     const prepared = this.prepareProjectStateDocument(projectId, name, value, expectedVersion);
-    return this.mutateProject(projectId, undefined, head => this.commitProjectStateDocument(head, prepared, publishView),
-      { operation: "project-state-document", projectId, documentName: name, timings: prepared.timings }).value;
+    return this.mutateProject(projectId, undefined, head => {
+      if (expectedWorkflowVersion) {
+        if (name !== "project.checkpoint" || this.projectStateDomain(projectId)?.scheduler !== "serial")
+          throw new CollaborationStateError("INVALID_STATE_TRANSITION", "Serial workflow persistence requires its original checkpoint and scheduler");
+        const current = this.serialWorkflowAdjustmentCurrent(projectId);
+        if (!current || !sameWorkflowConfigurationVersion(expectedWorkflowVersion, current.version))
+          throw new CollaborationStateError("WORKFLOW_ADJUSTMENT_CONFLICT", "Workflow authority changed during serial persistence; retry the current formal version");
+        this.assertRetainedWorkflowSessionHarnesses(projectId, current.snapshot.agents, prepared.saved);
+      }
+      return this.commitProjectStateDocument(head, prepared, publishView);
+    }, { operation: "project-state-document", projectId, documentName: name, timings: prepared.timings }).value;
   }
 
   private writeProjectStateDocumentInTransaction(head: HeadRow, name: ProjectStateDocumentName, value: unknown, expectedVersion: string,
