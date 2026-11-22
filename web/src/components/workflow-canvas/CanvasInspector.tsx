@@ -280,10 +280,10 @@ export function CanvasInspector({
           {orchestration.schemaVersion === 3 && <button type="button" className="primary-button" onClick={() => onEnterCollaboration?.(collaboration.id)}>进入组内 Workflow</button>}
           <ul className="collaboration-member-summary" aria-label="协作组成员">
             {refs.map((ref) => {
-              const memberId = ref.kind === "agent" ? ref.agentId : ref.groupId;
+              const memberId = ref.kind === "gate" ? ref.gateId : ref.kind === "agent" ? ref.agentId : ref.groupId;
               const member = ref.kind === "agent" ? orchestration.agents.find((entry) => entry.name === memberId) : undefined;
               return <li key={ref.nodeId}>
-                <span className="collaboration-member-copy"><strong>{memberId}</strong><small>{scoped ? `${ref.kind === "agent" ? "Agent" : "协作组"} · ${ref.nodeId}` : member?.description ?? "组内 Agent"}</small></span>
+                <span className="collaboration-member-copy"><strong>{memberId}</strong><small>{scoped ? `${ref.kind === "gate" ? "Gate" : ref.kind === "agent" ? "Agent" : "协作组"} · ${ref.nodeId}` : member?.description ?? "组内 Agent"}</small></span>
                 {orchestration.schemaVersion !== 3 && <button type="button" onClick={() => onEditCollaborationMember?.(memberId)} disabled={!onEditCollaborationMember} aria-label={`${locked ? "查看" : "编辑"}组内 Agent ${memberId}`}>{locked ? <Eye size={12} /> : <Pencil size={12} />}{locked ? "查看" : "编辑"}</button>}
               </li>;
             })}

@@ -300,7 +300,8 @@ export function removeScopedNode(draft: AgentOrchestrationTemplate, groupId: str
     group.workflow.canvas.edges = Object.fromEntries(Object.entries(group.workflow.canvas.edges).filter(([id]) => !id.startsWith(`${nodeId}->`) && !id.includes(`->${nodeId}:`)));
   }
   const registry = draft.collaborations?.find((entry) => entry.id === groupId);
-  if (registry && !group.workflow.nodes.some((entry) => entry.kind === "agent" && entry.agentId === ref.agentId)) {
+  if (ref.kind === "gate") draft.gates = draft.gates?.filter(gate => gate.id !== ref.gateId);
+  if (ref.kind === "agent" && registry && !group.workflow.nodes.some((entry) => entry.kind === "agent" && entry.agentId === ref.agentId)) {
     registry.memberAgentIds = registry.memberAgentIds.filter((id) => id !== ref.agentId);
   }
 }

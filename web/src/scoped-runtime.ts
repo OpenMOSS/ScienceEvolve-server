@@ -26,7 +26,7 @@ export function normalizeScopedRuntime(data: Record<string, unknown>) {
       ["id", "projectId", "groupId", "parentGroupRunId", "parentArrivalRequestId", "activationRequestId", "workflowRevision", "leaderAgentId", "baseCommit", "groupBranch", "integrationTarget", "status"]),
     scopedArrivals: records<NonNullable<Project["scopedArrivals"]>[number]>(data.scopedArrivals,
       ["requestId", "groupRunId", "targetNodeId", "status"],
-      ["sequence", "requestId", "groupRunId", "sourceRunId", "targetNodeId", "targetKind", "agentId", "childGroupId", "status", "pathContext"]),
+      ["sequence", "requestId", "groupRunId", "sourceRunId", "targetNodeId", "targetKind", "gateRunId", "agentId", "childGroupId", "status", "pathContext"]),
     scopedExecutions: records<NonNullable<Project["scopedExecutions"]>[number]>(data.scopedExecutions,
       ["id", "groupRunId", "arrivalRequestId", "agentId", "status"],
       ["id", "projectId", "groupRunId", "arrivalRequestId", "agentId", "ownershipEpoch", "executionBranch", "worktreePath", "status"]),
@@ -60,7 +60,7 @@ export function scopedRosterMembers(project: Project, groupId: string, visited =
   const run = currentScopedGroupRun(project, groupId);
   return group?.workflow.nodes.flatMap((node) => node.kind === "collaboration"
     ? scopedRosterMembers(project, node.groupId, visited)
-    : [{ key: `${groupId}:${node.nodeId}`, agentId: node.agentId,
+    : node.kind === "gate" ? [] : [{ key: `${groupId}:${node.nodeId}`, agentId: node.agentId,
         scopeLabel: project.orchestration.collaborations?.find((entry) => entry.id === groupId)?.displayName ?? groupId,
         executionCount: new Set((project.scopedExecutions ?? []).filter((execution) => execution.groupRunId === run?.id &&
           (project.scopedArrivals ?? []).some((arrival) => arrival.requestId === execution.arrivalRequestId && arrival.targetNodeId === node.nodeId))

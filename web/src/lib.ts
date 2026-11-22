@@ -1,3 +1,4 @@
+import { workflowGateSchema, workflowGateConfigurationErrors } from "../../server/src/internal/shared/workflow-gate.js";
 import { searchTreeConfigSchema } from "../../server/src/internal/shared/search-tree.js";
 import { summarizeFailureAttempts } from "../../server/src/internal/shared/failure-attempt-history.js";
 import { normalizeScopedRuntime } from "./scoped-runtime";
@@ -892,7 +893,8 @@ export function normalizeAgentOrchestration(
   const scopedWorkflow = schemaVersion === 3 && source.scopedWorkflow && typeof source.scopedWorkflow === "object"
     ? structuredClone(source.scopedWorkflow) as AgentOrchestrationTemplate["scopedWorkflow"]
     : undefined;
-  const outerIds = workflowOuterNodeIds({ agents, collaborations, schemaVersion, scopedWorkflow });
+  const gates = Array.isArray(source.gates) ? source.gates.map(gate => workflowGateSchema.parse(gate)) : undefined;
+  const outerIds = workflowOuterNodeIds({ agents, collaborations, schemaVersion, scopedWorkflow, gates });
   const configuredOuter = (name: string) => outerIds.includes(name);
   const firstOuterNode = outerIds[0] ?? "main";
   const agentTemplates: AgentOrchestrationTemplate["agents"] = [];
@@ -1015,6 +1017,7 @@ export function normalizeAgentOrchestration(
   const canvas = normalizeCanvasLayout(source.canvas, {
     schemaVersion,
     scopedWorkflow,
+    gates,
     agents,
     collaborations,
     routes,
@@ -1031,6 +1034,7 @@ export function normalizeAgentOrchestration(
     agents,
     collaborations,
     ...(scopedWorkflow ? { scopedWorkflow } : {}),
+    ...(gates ? { gates } : {}),
     ...(Array.isArray(source.agentTemplates) || agentTemplates.length ? { agentTemplates } : {}),
     input: { source: "input", target: inputTarget },
     routes,
@@ -1076,6 +1080,8 @@ export function agentOrchestrationError(
   if (value.canvas?.connections?.termination === false) {
     return "结束节点尚未连接到 Agent";
   }
+  const gateIssue = workflowGateConfigurationErrors(value)[0];
+  if (gateIssue) return gateIssue;
   const loopIssue = validateWorkflowLoops(value)[0];
   if (loopIssue) return `Loop ${loopIssue.loopId || loopIssue.index + 1}：${loopIssue.message}`;
   const seen = new Set<string>();
@@ -2537,7 +2543,7 @@ function normalizeNodeRuns(value: unknown): NodeRun[] {
     const nodeId = optionalString(node.nodeId);
     const status = raw.status as NodeRun["status"];
     if (!id || !nodeId || !NODE_RUN_STATUSES.has(status)) return [];
-    const nodeRef = node.kind === "collaboration"
+    const nodeRef = node.kind === "gate" ? { kind: "gate" as const, nodeId, gateId: asString(node.gateId, nodeId) } : node.kind === "collaboration"
       ? { kind: "collaboration" as const, nodeId, groupId: asString(node.groupId, nodeId) }
       : { kind: "agent" as const, nodeId, agentId: asString(node.agentId, nodeId) };
     return [{
@@ -2549,7 +2555,7 @@ function normalizeNodeRuns(value: unknown): NodeRun[] {
       activatedByAgentId: asString(raw.activatedByAgentId, "main"),
       status,
       ...copyOptionalStrings(raw, [
-        "optionalTask", "sourceNodeRunId", "sourceAgentId", "routeEmissionId",
+        "gateRunId", "optionalTask", "sourceNodeRunId", "sourceAgentId", "routeEmissionId",
         "activatedAt", "updatedAt", "completedAt", "output", "failureReason"
       ])
     }];
@@ -3021,6 +3027,7 @@ export function normalizeProject(value: unknown): Project {
     activeNodeRunId: optionalString(data.activeNodeRunId),
     ...normalizeScopedRuntime(data),
     scopedPullRequests: normalizePullRequests(data.scopedPullRequests),
+    ...(Array.isArray(data.workflowGates) ? { workflowGates: structuredClone(data.workflowGates) as NonNullable<Project["workflowGates"]> } : {}),
     nodeRuns: normalizeNodeRuns(data.nodeRuns),
     groupRuns: normalizeGroupRuns(data.groupRuns),
     tasks: normalizeWorkTasks(data.tasks),

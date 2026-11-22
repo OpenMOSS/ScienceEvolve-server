@@ -415,7 +415,7 @@ describe("WorkflowCanvasEditor interactions", () => {
       memberAgentIds: ["idea", "execution", "writing"]
     });
     const group = orchestration.scopedWorkflow!.groups[0]!;
-    const refs = Object.fromEntries(group.workflow.nodes.map((ref) => [ref.kind === "agent" ? ref.agentId : ref.groupId, ref.nodeId]));
+    const refs = Object.fromEntries(group.workflow.nodes.map((ref) => [ref.kind === "gate" ? ref.gateId : ref.kind === "agent" ? ref.agentId : ref.groupId, ref.nodeId]));
     group.workflow.routes[refs.idea!] = [{ target: refs.execution!, kind: "strong" }];
     group.workflow.routes[refs.execution!] = [{ target: refs.idea!, kind: "strong" }];
     group.workflow.routes[refs.writing!] = [{ target: "finish", kind: "weak" }];
@@ -451,7 +451,7 @@ describe("WorkflowCanvasEditor interactions", () => {
       memberAgentIds: ["idea", "execution", "writing"]
     });
     const group = orchestration.scopedWorkflow!.groups[0]!;
-    const refs = Object.fromEntries(group.workflow.nodes.map((ref) => [ref.kind === "agent" ? ref.agentId : ref.groupId, ref.nodeId]));
+    const refs = Object.fromEntries(group.workflow.nodes.map((ref) => [ref.kind === "gate" ? ref.gateId : ref.kind === "agent" ? ref.agentId : ref.groupId, ref.nodeId]));
     group.workflow.routes[refs.idea!] = [{ target: refs.execution!, kind: "strong" }];
     group.workflow.routes[refs.execution!] = [];
     const view = renderEditor(orchestration, cloneAgentsConfig(DEFAULT_AGENTS), { gitEnabled: true });
@@ -476,7 +476,7 @@ describe("WorkflowCanvasEditor interactions", () => {
       memberAgentIds: ["idea", "execution", "writing"]
     });
     const group = orchestration.scopedWorkflow!.groups[0]!;
-    const refs = Object.fromEntries(group.workflow.nodes.map((ref) => [ref.kind === "agent" ? ref.agentId : ref.groupId, ref.nodeId]));
+    const refs = Object.fromEntries(group.workflow.nodes.map((ref) => [ref.kind === "gate" ? ref.gateId : ref.kind === "agent" ? ref.agentId : ref.groupId, ref.nodeId]));
     group.workflow.routes[refs.idea!] = [{ target: refs.execution!, kind: "strong" }];
     group.workflow.routes[refs.execution!] = [];
     const view = renderEditor(orchestration, cloneAgentsConfig(DEFAULT_AGENTS), { gitEnabled: true });

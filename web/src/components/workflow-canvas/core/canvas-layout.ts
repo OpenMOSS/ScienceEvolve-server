@@ -29,7 +29,7 @@ declare global {
 
 export type CanvasOrchestrationShape = Pick<
   AgentOrchestrationTemplate,
-  "agents" | "collaborations" | "schemaVersion" | "scopedWorkflow" | "routes" | "loops" | "input" | "termination"
+  "gates" | "agents" | "collaborations" | "schemaVersion" | "scopedWorkflow" | "routes" | "loops" | "input" | "termination"
 > & {
   /** Presentation-only adapter for a scoped Input's parallel fan-out. */
   layoutInputTargets?: readonly string[];

@@ -16,7 +16,7 @@ function editor(readOnly = false, useDefaultViewport = false) {
   addScopedGroup(initial, { id: "research", displayName: "Research", leaderAgentId: "main",
     memberAgentIds: ["idea", "execution", "writing"] });
   const group = initial.scopedWorkflow!.groups[0]!;
-  const ids = Object.fromEntries(group.workflow.nodes.map(ref => [ref.kind === "agent" ? ref.agentId : ref.groupId, ref.nodeId]));
+  const ids = Object.fromEntries(group.workflow.nodes.map(ref => [ref.kind === "gate" ? ref.gateId : ref.kind === "agent" ? ref.agentId : ref.groupId, ref.nodeId]));
   group.workflow.routes[ids.idea!] = [];
   group.workflow.canvas!.viewport = useDefaultViewport ? { x: 0, y: 0, zoom: .82 } : { x: 25, y: 30, zoom: .8 };
   group.workflow.canvas!.nodes[ids.idea!] = { x: 160, y: 100 };

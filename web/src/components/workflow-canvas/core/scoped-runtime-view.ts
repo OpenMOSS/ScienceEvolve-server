@@ -27,6 +27,9 @@ export function buildScopedRuntimeView(project: Project, groupId: string) {
     if (ref?.kind === "agent") {
       node.name = ref.agentId;
       node.template = project.orchestration.agents.find((agent) => agent.name === ref.agentId)?.template ?? "general";
+    } else if (ref?.kind === "gate") {
+      node.gate = project.orchestration.gates?.find(gate => gate.id === ref.gateId);
+      node.displayName = node.gate?.name;
     } else if (ref?.kind === "collaboration") {
       const child = contract!.groups.find((entry) => entry.id === ref.groupId);
       const display = project.orchestration.collaborations?.find((entry) => entry.id === ref.groupId);

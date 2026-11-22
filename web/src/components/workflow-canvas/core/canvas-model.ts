@@ -52,6 +52,7 @@ export interface CanvasNode {
   displayName?: string;
   template?: AgentTemplate;
   collaboration?: CollaborationNode;
+  gate?: NonNullable<AgentOrchestrationTemplate["gates"]>[number];
   memberAgentIds?: string[];
   memberNodeRefs?: NodeRef[];
   x: number;

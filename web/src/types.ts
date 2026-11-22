@@ -1,3 +1,4 @@
+import type { WorkflowGate } from "../../server/src/internal/shared/workflow-gate.js";
 import type { ProjectViewStatus } from "./project-status";
 
 export type AgentId = string;
@@ -70,6 +71,7 @@ export interface ResultFormat {
 }
 
 export type NodeRef =
+  | { kind: "gate"; nodeId: WorkflowNodeId; gateId: string }
   | { kind: "agent"; nodeId: WorkflowNodeId; agentId: AgentId }
   | { kind: "collaboration"; nodeId: WorkflowNodeId; groupId: string };
 
@@ -634,6 +636,7 @@ export interface AgentDefinition {
 }
 
 export interface AgentOrchestrationTemplate {
+  gates?: WorkflowGate[];
   schemaVersion?: 2 | 3;
   agents: AgentDefinition[];
   collaborations?: CollaborationNode[];
@@ -999,6 +1002,7 @@ export type NodeRunStatus =
   | "completed";
 
 export interface NodeRun {
+  gateRunId?: string;
   id: NodeRunId;
   node: NodeRef;
   workflowRevision: number;
@@ -1068,7 +1072,8 @@ export interface ScopedArrival {
   groupRunId: GroupRunId;
   sourceRunId: string;
   targetNodeId: WorkflowNodeId;
-  targetKind: "agent" | "collaboration";
+  targetKind: "agent" | "collaboration" | "gate";
+  gateRunId?: string;
   agentId?: AgentId;
   childGroupId?: string;
   status: string;
@@ -1358,6 +1363,7 @@ export interface Project {
   git?: ProjectGitState;
   workflowRevision?: number;
   activeNodeRunId?: NodeRunId;
+  workflowGates?: import("../../server/src/internal/shared/workflow-gate.js").GateRun[];
   nodeRuns?: NodeRun[];
   groupRuns?: GroupRun[];
   scopedGroupRuns?: ScopedGroupRun[];

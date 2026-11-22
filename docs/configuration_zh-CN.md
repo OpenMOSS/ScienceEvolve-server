@@ -479,3 +479,5 @@ git diff --check
 更详细的状态机、持久化结构和失败恢复策略见 [docs/architecture.md](architecture.md)。
 
 可选项目探索记录：[搜索树配置与接口](search-tree.md)。
+
+Workflow 检查节点：[Gate 配置与执行](workflow-gate.md)。

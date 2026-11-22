@@ -219,8 +219,8 @@ export function CanvasNodes({
               >{groupExpanded ? "收起成员" : node.memberNodeRefs ? `查看 ${node.memberNodeRefs.length} 个直接节点` : `查看 ${node.memberAgentIds?.length ?? 0} 名成员`}</button>}
               {groupExpanded && <ul className="collaboration-member-list" aria-label={`${view.title}成员摘要`}>
                 {node.memberNodeRefs ? node.memberNodeRefs.map((ref) => <li key={ref.nodeId}>
-                  <span aria-hidden="true">•</span><strong>{ref.kind === "agent" ? ref.agentId : ref.groupId}</strong>
-                  <small>{ref.kind === "agent" ? "Agent" : "协作组"} · {ref.nodeId}</small>
+                  <span aria-hidden="true">•</span><strong>{ref.kind === "gate" ? ref.gateId : ref.kind === "agent" ? ref.agentId : ref.groupId}</strong>
+                  <small>{ref.kind === "gate" ? "Gate" : ref.kind === "agent" ? "Agent" : "协作组"} · {ref.nodeId}</small>
                 </li>) : (node.memberAgentIds ?? []).map((memberId) => <li key={memberId}>
                   <span aria-hidden="true">•</span><strong>{memberId}</strong>
                   {groupMemberStates?.[node.id]?.[memberId] && <small>{groupMemberStates[node.id]![memberId]}</small>}
@@ -272,6 +272,7 @@ function defaultPresentation(node: WorkflowCanvasNode): CanvasNodePresentation {
   if (node.kind === "input") return { title: node.name, description: "用户提交的任务、约束和已有资料。", modelLabel: "input", color: "#446b9b", softColor: "#eaf0f7" };
   if (node.kind === "finish") return { title: node.name, description: "被指定的终止外层节点完成后进入这里。", modelLabel: "工作流结束", color: "#a65365", softColor: "#f9eaed" };
   if (node.name === "main") return { title: "Main Agent", description: "理解目标、协调上下文，并在每轮选择一个外层节点。", modelLabel: "gpt-5.6-sol", initials: "MA", color: "#25714e", softColor: "#e7f1e9" };
+  if (node.gate) return { title: node.gate.name, description: node.gate.verifier.kind === "code" ? "前序 Agent 执行检查代码" : `检查 Agent：${node.gate.verifier.agentId}`, modelLabel: "GATE", initials: "G", color: "#b56f17", softColor: "#fff2d9" };
   if (node.collaboration) return { title: node.displayName ?? node.name, description: `${node.memberAgentIds?.length ?? 0} 名成员协作`, modelLabel: "COLLABORATION", initials: "组", color: "#5c5bd6", softColor: "#eeedff" };
   return {
     title: node.name,
@@ -285,7 +286,7 @@ function defaultPresentation(node: WorkflowCanvasNode): CanvasNodePresentation {
 function nodeBadge(node: WorkflowCanvasNode): ReactNode {
   if (node.kind === "input") return "INPUT";
   if (node.kind === "finish") return "END";
-  return node.name === "main" ? "MAIN" : node.collaboration ? "GROUP" : "AGENT";
+  return node.gate ? "GATE" : node.name === "main" ? "MAIN" : node.collaboration ? "GROUP" : "AGENT";
 }
 
 function portLabel(port: WorkflowCanvasPort): string {

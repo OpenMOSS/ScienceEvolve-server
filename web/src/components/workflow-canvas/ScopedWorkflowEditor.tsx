@@ -1,3 +1,4 @@
+import { WorkflowGateEditor } from "./WorkflowGateEditor";
 import type { ReactNode } from "react";
 import { ArrowLeft, GitBranch, Layers3, Plus } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
@@ -342,6 +343,7 @@ function ScopedWorkflowEditorSurface({
       const child = ref.kind === "collaboration" ? orchestration.collaborations?.find((item) => item.id === ref.groupId) : undefined;
       return {
         id: ref.nodeId, kind: "agent" as const, name: ref.nodeId,
+        ...(ref.kind === "gate" ? { gate: orchestration.gates?.find(gate => gate.id === ref.gateId) } : {}),
         ...(member ? { displayName: member.name, template: member.template ?? "general" } : {}),
         ...(child ? { displayName: child.displayName, collaboration: child, memberAgentIds: child.memberAgentIds } : {}),
         ...(positions[ref.nodeId] ?? { x: 360 + Math.floor(index / 4) * 270, y: 55 + index % 4 * 170 })
@@ -817,10 +819,10 @@ function ScopedWorkflowEditorSurface({
         <section className="scoped-settings-card" aria-label="协作组直接成员">
         <h4>直接成员<span className="scoped-count">{workflow.nodes.length}</span></h4>
         <ul className="scoped-member-list">{workflow.nodes.map((ref) => <li key={ref.nodeId}>
-          <button type="button" aria-label={ref.kind === "agent" ? ref.agentId : display(ref.groupId)} aria-pressed={selectedId === ref.nodeId && !selectedEdgeId}
+          <button type="button" aria-label={ref.kind === "gate" ? ref.gateId : ref.kind === "agent" ? ref.agentId : display(ref.groupId)} aria-pressed={selectedId === ref.nodeId && !selectedEdgeId}
             onClick={() => { setSelectedId(ref.nodeId); setSelectedEdgeId(undefined); }}>
-            <span>{ref.kind === "agent" ? ref.agentId : display(ref.groupId)}</span>
-            <small>{ref.kind === "agent" ? "Agent" : "协作组"}</small>
+            <span>{ref.kind === "gate" ? ref.gateId : ref.kind === "agent" ? ref.agentId : display(ref.groupId)}</span>
+            <small>{ref.kind === "gate" ? "Gate" : ref.kind === "agent" ? "Agent" : "协作组"}</small>
           </button>{ref.kind === "collaboration" && <button type="button" title={`进入 ${display(ref.groupId)}`} onClick={() => onNavigate(ref.groupId)}>进入</button>}
         </li>)}</ul>
         <label>引用已有 Agent<select ref={addAgentSelectRef} aria-label="引用已有 Agent" value={newAgentId} disabled={locked || !addableAgents.length} onChange={(event) => setNewAgentId(event.target.value)}><option value="">选择 Agent</option>{addableAgents.map((id) => <option key={id} value={id}>{id}</option>)}</select></label>
@@ -874,6 +876,7 @@ function ScopedWorkflowEditorSurface({
             invalidTargetId={invalidLink ? linkTarget : undefined} readOnly={locked} suppressGroupMembers
             resolvePresentation={node => node.id === "input" ? { title: "进入协作组", description: "仅此处可发出并行入口边", modelLabel: "PARALLEL", color: "#316ac4", softColor: "#eaf1ff" }
               : node.id === "finish" ? { title: "结束协作组", description: "等待所有必要路径与 Git 集成", modelLabel: "END", color: "#a65365", softColor: "#f9eaed" }
+              : node.gate ? { title: node.gate.name, description: node.gate.verifier.kind === "code" ? "前序 Agent 执行检查代码" : `检查 Agent：${node.gate.verifier.agentId}`, modelLabel: "GATE", color: "#b56f17", softColor: "#fff2d9" }
               : node.collaboration ? { title: node.displayName ?? node.name, description: "子协作组 · 可进入内部编排", modelLabel: "GROUP", initials: "组", color: "#5c5bd6", softColor: "#eeedff" }
               : { title: node.displayName ?? node.name, description: "引用同一 Agent · 保留原 session", modelLabel: "AGENT", color: "#25714e", softColor: "#e7f1e9" }}
             onSelectNode={node => {
@@ -892,7 +895,8 @@ function ScopedWorkflowEditorSurface({
       </div>
       <aside className="scoped-panel scoped-inspector" aria-label="组内节点属性">
         {inspectorTabs}<div className="scoped-inspector-content" hidden={inspectorContent !== undefined}>
-        {selectedEdge ? <CanvasInspector
+        <WorkflowGateEditor key={`new-${groupId}`} workflow={orchestration} groupId={groupId} readOnly={locked} onChange={value => mutate(draft => { Object.assign(draft, value); })} onSelect={id => { setSelectedId(id); setSelectedEdgeId(undefined); }} />
+        {!selectedEdge && workflow.nodes.some(node => node.kind === "gate" && node.nodeId === selectedId) ? <WorkflowGateEditor key={selectedId} workflow={orchestration} groupId={groupId} gateId={selectedId} readOnly={locked} onChange={value => mutate(draft => { Object.assign(draft, value); })} /> : selectedEdge ? <CanvasInspector
           selectedEdge={selectedEdge}
           orchestration={scopedInspectorOrchestration}
           scopeKind="collaboration"

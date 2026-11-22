@@ -956,3 +956,9 @@
   animation: none;
 }
 .workflow-canvas-presentation .edge-layer.is-moving .workflow-edge-halo { opacity: 0; }
+
+.workflow-gate-editor { padding: 14px; }
+.workflow-gate-editor fieldset { border: 0; padding: 0; display: grid; gap: 12px; min-width: 0; }
+.workflow-gate-editor label { display: grid; gap: 5px; font-size: 12px; }
+.workflow-gate-editor input, .workflow-gate-editor textarea, .workflow-gate-editor select { width: 100%; min-width: 0; }
+.workflow-gate-editor p { font-size: 12px; line-height: 1.6; }

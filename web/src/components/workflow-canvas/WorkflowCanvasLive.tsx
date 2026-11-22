@@ -45,7 +45,7 @@ function liveGroup(project: Project, node: CanvasNode, scopeId?: string) {
           ? project.orchestration.collaborations?.find((group) => group.id === ref.groupId)
           : undefined;
         return { id: ref.nodeId,
-          name: ref.kind === "agent" ? agentMeta(ref.agentId, project.orchestration.agents.find((agent) => agent.name === ref.agentId)?.template).name : child?.displayName ?? ref.groupId,
+          name: ref.kind === "gate" ? `Gate ${ref.gateId}` : ref.kind === "agent" ? agentMeta(ref.agentId, project.orchestration.agents.find((agent) => agent.name === ref.agentId)?.template).name : child?.displayName ?? ref.groupId,
           ...(ref.kind === "collaboration" ? { groupId: ref.groupId } : {}),
           leader: ref.kind === "agent" && ref.agentId === leaderAgentId,
           state, label: arrival || state !== "waiting" ? runtimeNodeLabel(state) : "尚未执行" };

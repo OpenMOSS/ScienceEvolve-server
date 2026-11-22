@@ -60,7 +60,7 @@ export function AgentLibraryPanel({ orchestration, selectedId, readOnly = false,
         const parent = orchestration.scopedWorkflow?.groups.find((entry) => entry.id === group.id)?.parentGroupId;
         return <div className={`library-item collaboration-library-item ${selectedId === group.id ? "is-active" : ""}`} key={group.id}>
         <span className="agent-avatar"><UsersRound size={14} /></span>
-        <button type="button" className="library-copy" onClick={() => onSelectCollaboration(group.id)}><strong>{group.displayName}</strong><small>{scoped ? `${refs.length} 个直接节点 · ${parent ? "嵌套协作组" : "根图协作组"}` : `${refs.length} 名成员 · 单一外层节点`}</small><span className="collaboration-library-members">{refs.map((ref) => ref.kind === "agent" ? ref.agentId : ref.groupId).join(" · ")}</span></button>
+        <button type="button" className="library-copy" onClick={() => onSelectCollaboration(group.id)}><strong>{group.displayName}</strong><small>{scoped ? `${refs.length} 个直接节点 · ${parent ? "嵌套协作组" : "根图协作组"}` : `${refs.length} 名成员 · 单一外层节点`}</small><span className="collaboration-library-members">{refs.map((ref) => ref.kind === "gate" ? ref.gateId : ref.kind === "agent" ? ref.agentId : ref.groupId).join(" · ")}</span></button>
         <span className="collaboration-library-fixed">固定</span>
       </div>; })}
     </section>}

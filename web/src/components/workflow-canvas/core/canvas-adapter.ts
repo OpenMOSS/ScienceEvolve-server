@@ -5,7 +5,7 @@ import type { CanvasEdge, CanvasModel, CanvasNode, CanvasSummary } from "./canva
 import { collaborationMemberRefs, workflowOuterNodes } from "./workflow-nodes";
 
 /**
- * Convert OpenFARS workflow semantics into the canvas render model. This is
+ * Convert ScienceEvolve workflow semantics into the canvas render model. This is
  * intentionally one-way: canvas coordinates and ports never alter routes,
  * termination, decision plans, or scheduler behavior.
  */
@@ -28,6 +28,7 @@ export function adaptWorkflowToCanvas(
       id: node.id,
       kind: "agent" as const,
       name: node.id,
+      ...(node.gate ? { gate: structuredClone(node.gate), displayName: node.gate.name } : {}),
       ...(node.kind === "collaboration" ? { displayName: node.displayName } : {}),
       ...(node.definition ? { template: node.definition.template ?? "general" } : {}),
       ...(node.collaboration

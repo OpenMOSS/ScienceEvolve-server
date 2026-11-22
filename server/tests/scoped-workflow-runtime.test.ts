@@ -1,3 +1,6 @@
+import { WorkflowGateSession, gateRunId, type GateRun, type GateOrigin } from "../src/workflow-gate.js";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -39,7 +42,15 @@ afterEach(async () => {
 });
 
 function definitions(options: { fifo?: boolean; nested?: boolean; shared?: boolean; depth3?: boolean; weak?: boolean; childWeak?: boolean;
-  loop?: boolean; loopPaths?: boolean; loopBatch?: boolean }) {
+  loop?: boolean; loopPaths?: boolean; loopBatch?: boolean; gate?: "code" | "agent" | "decision"; gateLoop?: boolean; gateSources?: boolean }) {
+  if (options.gate) return [definition("G", {
+    nodes: [...(options.gate === "code" ? [agent("G", "one"), ...(options.gateSources ? [agent("G", "two")] : [])] : []), { kind: "gate", nodeId: "quality", gateId: "quality" }, agent("G", "four"), agent("G", "five")],
+    input: entrance(options.gate === "code" ? "G_one" : "quality", ...(options.gateSources ? ["G_two"] : [])),
+    routes: { ...(options.gate === "code" ? { G_one: [edge("quality")] } : {}), ...(options.gateSources ? { G_two: [edge("quality")] } : {}),
+      quality: options.gateLoop ? [edge("G_four")] : [{ kind: "weak", target: "G_four" }, { kind: "weak", target: "G_five" }],
+      G_four: [edge(options.gateLoop ? "G_one" : "finish")], G_five: [edge("finish")] },
+    ...(options.gateLoop ? { loops: [{ id: "repeat", from: "G_four", to: "G_one", maxIterations: 2, exitTo: "G_five" }] } : {})
+  })];
   if (options.loop || options.loopPaths || options.loopBatch) return [definition("G", {
     nodes: ["one", "two", "three", ...(options.loopPaths ? ["four"] : [])].map((name) => agent("G", name)),
     input: entrance("G_one", ...(options.loopPaths ? ["G_four"] : [])),
@@ -84,6 +95,10 @@ async function fixture(options: Parameters<typeof definitions>[0] = {}) {
     git: { enabled: true, status: "ready", repository: { owner: "example", name: "openfars", htmlUrl: repository.htmlUrl,
       private: true, defaultBranch: "main", localPath: join(root, "workspace") } },
     workflowSnapshot: { schemaVersion: 3, agents: ["main", ...agentNames].map((name) => ({ name })),
+      ...(options.gate ? { gates: [{ id: "quality", name: "Quality", groupId: "G",
+        verifier: options.gate === "code" ? { kind: "code", interpreter: "node", output: "json", code: 'console.log(JSON.stringify({score:76}))' }
+          : { kind: "agent", agentId: "two", instructions: "Assess the original input" },
+        ...(options.gate === "decision" ? { decisionAgentId: "three" } : {}) }] } : {}),
       collaborations: groups.map((group) => ({ id: group.id })), routes: { main: [edge("G")], G: [edge("finish")] },
       scopedWorkflow: { schemaVersion: 1, rootAgentIds: ["main"], groups } } });
   const git = new RuntimeGit(database);
@@ -99,7 +114,37 @@ async function fixture(options: Parameters<typeof definitions>[0] = {}) {
     starts.push({ ...input, session });
     input.onOpened();
     try {
-      const result = await handler(input);
+      let gateResult: { selectedWeakTarget?: string } | undefined;
+      if (options.gate && (input.arrival.targetNodeId === "G_one" || options.gateSources && input.arrival.targetNodeId === "G_two" || input.arrival.targetKind === "gate")) {
+        const graph = database.workflowSnapshot("p", 1) as import("../src/types.js").AgentOrchestrationTemplate;
+        const gate = graph.gates![0];
+        const bound = input.arrival.gateRunId ? database.workflowGate("p", input.arrival.gateRunId)! : undefined;
+        const origin: GateOrigin = bound?.origin ?? { projectId: "p", sourceRunId: input.arrival.requestId,
+          scopeId: input.groupRun.id, nodeId: input.arrival.targetNodeId, agentId: input.execution.agentId,
+          executionId: input.execution.id, invocationId: input.invocationId, workspacePath: root, workflowRevision: 1,
+          input: { assignment: "original scoped research", arrival: input.arrival.requestId } };
+        const gateSession = new WorkflowGateSession(origin, [{ gate, targets: input.workflow.routes.quality.map(edge => edge.target) }],
+          { read: async id => database.workflowGate("p", id), save: async (run, version) => database.saveWorkflowGate(run, version) },
+          { agentId: input.execution.agentId, invocationId: input.invocationId }, async () => {});
+        if (gate.verifier.kind === "code") {
+          const record = await gateSession.request({ operation: "prepare", gateId: gate.id }, "prepare") as GateRun;
+          const event = { schemaVersion: 1 as const, seq: 1, timestamp: NOW, invocationId: input.invocationId, harnessId: "fixture" };
+          await gateSession.observe({ ...event, eventId: "started", kind: "tool.started", phase: "started",
+            tool: { name: "bash", toolType: "shell", callId: "check", status: "started", input: { command: record.command } } });
+          const actual = await promisify(execFile)("bash", ["-c", record.command!]);
+          await gateSession.observe({ ...event, eventId: "completed", kind: "tool.completed", phase: "completed",
+            tool: { name: "bash", toolType: "shell", callId: "check", status: "completed", outputPreview: actual.stdout } });
+        } else if (input.execution.agentId === "two") {
+          await gateSession.bindChecker(gate.id);
+          await gateSession.request({ operation: "report", gateId: gate.id, result: { score: 76, diagnosis: "negative feedback is useful" } }, "actual-report");
+        }
+        const recorded = database.workflowGate("p", gateRunId(origin, gate.id))!;
+        if (recorded.decisionAgentId === input.execution.agentId) {
+          await gateSession.request({ operation: "choose", gateId: gate.id, target: "G_four" }, "choice");
+          if (input.arrival.targetKind === "gate") gateResult = { selectedWeakTarget: "G_four" };
+        }
+      }
+      const result = gateResult ?? await handler(input);
       database.recordScopedAgentTaskCompletion({
         projectId: "p", executionId: input.execution.id,
         ownershipEpoch: input.execution.ownershipEpoch, agentId: input.execution.agentId,
@@ -124,6 +169,37 @@ async function fixture(options: Parameters<typeof definitions>[0] = {}) {
  * native reports, Finish barriers and parent routes use real SQLite. */
 
 describe("recursive scoped graph runtime composition", () => {
+  it.each(["loop", "sources"] as const)("isolates Gate results across %s entries and replays no checks", async scenario => {
+    const f = await fixture({ gate: "code", gateLoop: scenario === "loop", gateSources: scenario === "sources" });
+    await f.runtime.activateGroup(f.activation);
+    expect(await f.runtime.advance(f.input)).toMatchObject({ status: "completed", issues: [] });
+    const checks = f.database.workflowGates("p");
+    expect(checks).toHaveLength(2);
+    expect(new Set(checks.map(run => run.origin.sourceRunId)).size).toBe(2);
+    expect(new Set(checks.map(run => run.origin.invocationId)).size).toBe(2);
+    expect(checks.every(run => run.status === "delivered")).toBe(true);
+    if (scenario === "sources") expect(new Set(checks.map(run => run.origin.agentId))).toEqual(new Set(["one", "two"]));
+    const count = f.starts.length;
+    expect(await f.runtime.advance(f.input)).toMatchObject({ status: "completed", issues: [] });
+    expect(f.starts).toHaveLength(count);
+    expect(f.database.workflowGates("p")).toEqual(checks);
+  });
+
+  it.each(["code", "agent", "decision"] as const)("runs a scoped %s Gate with one selected successor and retained original feedback", async gate => {
+    const f = await fixture({ gate });
+    await f.runtime.activateGroup(f.activation);
+    expect(await f.runtime.advance(f.input)).toMatchObject({ status: "completed", issues: [] });
+    const projection = f.database.projectState("p");
+    const actual = f.starts.map(turn => turn.execution.agentId);
+    expect(actual).toEqual(gate === "code" ? ["one", "four"] : gate === "agent" ? ["two", "four"] : ["two", "three", "four"]);
+    expect(projection.workflowGates).toHaveLength(1);
+    expect(projection.workflowGates![0]).toMatchObject({ status: "delivered", selectedTarget: "G_four", result: { score: 76 } });
+    expect(projection.scopedArrivals?.filter(arrival => arrival.targetNodeId === "G_four")).toHaveLength(1);
+    expect(projection.scopedArrivals?.some(arrival => arrival.targetNodeId === "G_five")).toBe(false);
+    expect(await f.runtime.advance(f.input)).toMatchObject({ status: "completed", issues: [] });
+    expect(f.starts.map(turn => turn.execution.agentId)).toEqual(actual);
+  });
+
   it("runs 1-2-3 alongside 4 and 5, and holds the root outer slot after final synchronization", async () => {
     const { database, git, runtime, activation, input, starts, setHandler } = await fixture();
     const slow = deferred();

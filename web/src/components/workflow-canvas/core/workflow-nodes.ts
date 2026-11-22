@@ -10,7 +10,8 @@ import type {
 
 export interface WorkflowOuterNode {
   id: WorkflowNodeId;
-  kind: "agent" | "collaboration";
+  kind: "agent" | "collaboration" | "gate";
+  gate?: NonNullable<AgentOrchestrationTemplate["gates"]>[number];
   displayName: string;
   definition?: AgentDefinition;
   collaboration?: CollaborationNode;
@@ -53,12 +54,14 @@ export function collaborationForAgent(
  * members never become outer nodes.
  */
 export function workflowOuterNodes(
-  orchestration: Pick<AgentOrchestrationTemplate, "agents" | "collaborations" | "schemaVersion" | "scopedWorkflow">
+  orchestration: Pick<AgentOrchestrationTemplate, "agents" | "collaborations" | "schemaVersion" | "scopedWorkflow" | "gates">
 ): WorkflowOuterNode[] {
+  const gates: WorkflowOuterNode[] = (orchestration.gates ?? []).filter(gate => !gate.groupId).map(gate => ({ id: gate.id, kind: "gate", displayName: gate.name, gate }));
   if (orchestration.schemaVersion === 3 && orchestration.scopedWorkflow) {
     const definitions = new Map(orchestration.agents.map((entry) => [entry.name, entry]));
     const displays = new Map((orchestration.collaborations ?? []).map((entry) => [entry.id, entry]));
     return [
+      ...gates,
       ...orchestration.scopedWorkflow.rootAgentIds.map((id) => ({
         id, kind: "agent" as const, displayName: id, definition: definitions.get(id)
       })),
@@ -119,28 +122,28 @@ export function workflowOuterNodes(
       collaboration: group
     });
   }
-  return result;
+  return [...result, ...gates];
 }
 
 export function workflowOuterNodeIds(
-  orchestration: Pick<AgentOrchestrationTemplate, "agents" | "collaborations" | "schemaVersion" | "scopedWorkflow">
+  orchestration: Pick<AgentOrchestrationTemplate, "agents" | "collaborations" | "schemaVersion" | "scopedWorkflow" | "gates">
 ): WorkflowNodeId[] {
   return workflowOuterNodes(orchestration).map((node) => node.id);
 }
 
 export function workflowNodeRef(
-  orchestration: Pick<AgentOrchestrationTemplate, "agents" | "collaborations" | "schemaVersion" | "scopedWorkflow">,
+  orchestration: Pick<AgentOrchestrationTemplate, "agents" | "collaborations" | "schemaVersion" | "scopedWorkflow" | "gates">,
   nodeId: WorkflowNodeId
 ): NodeRef | undefined {
   const node = workflowOuterNodes(orchestration).find((entry) => entry.id === nodeId);
   if (!node) return undefined;
-  return node.kind === "collaboration"
+  return node.kind === "gate" ? { kind: "gate", nodeId: node.id, gateId: node.id } : node.kind === "collaboration"
     ? { kind: "collaboration", nodeId: node.id, groupId: node.id }
     : { kind: "agent", nodeId: node.id, agentId: node.id };
 }
 
 export function workflowNodeDisplayName(
-  orchestration: Pick<AgentOrchestrationTemplate, "agents" | "collaborations" | "schemaVersion" | "scopedWorkflow">,
+  orchestration: Pick<AgentOrchestrationTemplate, "agents" | "collaborations" | "schemaVersion" | "scopedWorkflow" | "gates">,
   nodeId: WorkflowNodeId
 ): string {
   const node = workflowOuterNodes(orchestration).find((entry) => entry.id === nodeId);

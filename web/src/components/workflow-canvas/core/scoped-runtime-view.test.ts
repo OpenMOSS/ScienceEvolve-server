@@ -6,7 +6,7 @@ import { buildScopedRuntimeView } from "./scoped-runtime-view";
 function fixture() {
   const project = runtimeProjectFixture();
   for (const group of project.orchestration.scopedWorkflow!.groups) {
-    const aliases = new Map(group.workflow.nodes.map((node) => [node.nodeId, node.kind === "agent" ? node.agentId : node.groupId]));
+    const aliases = new Map(group.workflow.nodes.map((node) => [node.nodeId, node.kind === "gate" ? node.gateId : node.kind === "agent" ? node.agentId : node.groupId]));
     group.workflow.nodes.forEach((node) => { node.nodeId = aliases.get(node.nodeId)!; });
     group.workflow.input.edges.forEach((edge) => { edge.target = aliases.get(edge.target) ?? edge.target; });
     group.workflow.routes = Object.fromEntries(Object.entries(group.workflow.routes).map(([source, edges]) =>
