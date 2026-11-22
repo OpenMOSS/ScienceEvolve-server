@@ -30,7 +30,7 @@ interface LaunchReceipt { signature: string; results: PendingItem[] }
 
 export function savedTaskProjectInput(task: SavedResearchTask) {
   return createProjectSchema.parse({ sourceSavedTaskId: task.id, title: task.title, requirement: task.requirement,
-    agents: task.agents, orchestration: task.orchestration, git: task.git,
+    searchTree: task.searchTree, agents: task.agents, orchestration: task.orchestration, git: task.git,
     skillDefinitions: task.skillDefinitions ?? {}, mcpDefinitions: task.mcpDefinitions ?? {} });
 }
 

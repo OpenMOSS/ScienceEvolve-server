@@ -475,3 +475,5 @@ git diff --check
 ```
 
 See [architecture](architecture.md) for state machines, persistence, and recovery details.
+
+Optional project exploration records: [Search tree configuration and API](search-tree.md).

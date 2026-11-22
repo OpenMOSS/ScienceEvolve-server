@@ -508,11 +508,11 @@ function projectDraft(project: ProjectState) {
   // editable Agent settings, even after their credentials have been removed.
   const agents = Object.fromEntries(Object.entries(publicAgentConfigs(project.agents))
     .map(([id, { gatewaySnapshot: _snapshot, ...settings }]) => [id, settings]));
-  return { title: project.title, requirement: project.requirement, agents, orchestration: project.orchestration,
+  return { ...(project.searchTree ? { searchTree: project.searchTree } : {}), title: project.title, requirement: project.requirement, agents, orchestration: project.orchestration,
     git: { enabled: project.git?.enabled === true }, skillDefinitions: project.skillDefinitions ?? {}, mcpDefinitions: project.mcpDefinitions ?? {} };
 }
 function taskDraft(task: SavedResearchTask): AssistantDraft {
-  return assistantDraftSchema.parse({ title: task.title, requirement: task.requirement, agents: task.agents, orchestration: task.orchestration,
+  return assistantDraftSchema.parse({ ...(task.searchTree ? { searchTree: task.searchTree } : {}), title: task.title, requirement: task.requirement, agents: task.agents, orchestration: task.orchestration,
     git: task.git, skillDefinitions: task.skillDefinitions, mcpDefinitions: task.mcpDefinitions });
 }
 function sameDraft(left: AssistantDraft, right: AssistantDraft) {

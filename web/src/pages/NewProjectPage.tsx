@@ -1,3 +1,5 @@
+import { SearchTreeEditor } from "../components/SearchTree";
+import type { SearchTreeConfig } from "../types";
 import { FormEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
@@ -684,6 +686,7 @@ export function NewProjectPage({
   const [title, setTitle] = useState(cachedTask?.title ?? "");
   const [requirement, setRequirement] = useState(cachedTask?.requirement ?? "");
   const [inputDescription, setInputDescription] = useState("");
+  const [searchTree, setSearchTree] = useState<SearchTreeConfig | undefined>(cachedTask?.searchTree);
   const [inputFiles, setInputFiles] = useState<InputFileMeta[]>([]);
   const inputSessionStorageKey = `openfars-user-inputs:${savedTaskId ?? "new"}`;
   const [inputUploadId, setInputUploadId] = useState<string | undefined>(() => {
@@ -772,7 +775,7 @@ export function NewProjectPage({
   const [newConfigBlank, setNewConfigBlank] = useState(false);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const wasInactiveRef = useRef(false);
-  const loadingDraft = { title, requirement, agents, orchestration, skillDefinitions, mcpDefinitions,
+  const loadingDraft = { title, requirement, searchTree, agents, orchestration, skillDefinitions, mcpDefinitions,
     git: { enabled: gitEnabled, accountId: githubAccountId, repositoryName: gitRepositoryName, repositoryVisibility: gitRepositoryVisibility } };
   const latestLoadingDraft = useRef(loadingDraft); latestLoadingDraft.current = loadingDraft;
 
@@ -794,6 +797,7 @@ export function NewProjectPage({
           setSaveTaskNotice("已保留你在后台刷新期间的草稿编辑。");
         if (unchanged("title")) { setTitle(task.title); setWorkflowName(task.title); }
         if (unchanged("requirement")) setRequirement(task.requirement);
+        if (unchanged("searchTree")) setSearchTree(task.searchTree);
         // The graph and its Agent/resource references form one configuration.
         // Unrelated title/account edits must not prevent its revalidation.
         if (["agents", "orchestration", "skillDefinitions", "mcpDefinitions"].every(key => unchanged(key as keyof typeof beforeRefresh))) {
@@ -1008,6 +1012,7 @@ export function NewProjectPage({
     if (presetId === "saved-task" && editingTask) {
       setAgents(applyCatalogDefaultHarness(cloneAgentsConfig(editingTask.agents), harnesses, defaultHarnessId));
       setOrchestration(cloneAgentOrchestration(editingTask.orchestration));
+      setSearchTree(editingTask.searchTree);
       setSkillDefinitions(structuredClone(editingTask.skillDefinitions ?? {}));
       setMcpDefinitions(structuredClone(editingTask.mcpDefinitions ?? {}));
       setGitEnabled(editingTask.git?.enabled ?? false);
@@ -1434,6 +1439,7 @@ export function NewProjectPage({
         if (inputFiles.reduce((sum, { size }) => sum + size, 0) > 200 * 1024 * 1024) throw new Error("附件总量不能超过 200 MiB");
       }
       const project = await createProject({
+        ...(searchTree ? { searchTree } : {}),
         ...(assistant?.conversationId ? { explainerConversationId: assistant.conversationId } : {}),
         ...(editingTask?.id ? { sourceSavedTaskId: editingTask.id } : {}),
         title: title.trim(),
@@ -1573,6 +1579,7 @@ export function NewProjectPage({
     setSaveTaskError("");
     setSaveTaskNotice("");
     const input = {
+      ...(searchTree ? { searchTree } : {}),
       title: title.trim(),
       requirement: requirement.trim(),
       agents: cloneAgentsConfig(agents),
@@ -1788,10 +1795,11 @@ export function NewProjectPage({
 
   const assistant = useExplainerDraftBridge({ active: active && !skillsLoading && !submitting && !savedTaskLoadError && (!savedTaskId || Boolean(editingTask)),
     key: savedTaskId ?? "new", taskId: editingTask?.id,
-    draft: { title, requirement, agents, orchestration, git: { enabled: gitEnabled, ...(gitEnabled ? { provider: "github" as const,
+    draft: { title, requirement, ...(searchTree ? { searchTree } : {}), agents, orchestration, git: { enabled: gitEnabled, ...(gitEnabled ? { provider: "github" as const,
       accountId: githubAccountId, repositoryName: gitRepositoryName, repositoryVisibility: gitRepositoryVisibility } : {}) },
       ...projectResourcesPayload(skillDefinitions, mcpDefinitions) },
     apply: (draft, taskId) => {
+      setSearchTree(draft.searchTree);
       setTitle(draft.title); setRequirement(draft.requirement); setAgents(cloneAgentsConfig(draft.agents));
       if (draft.orchestration) applyAssistantWorkflow(draft.orchestration);
       setSkillDefinitions(structuredClone(draft.skillDefinitions ?? {})); setMcpDefinitions(structuredClone(draft.mcpDefinitions ?? {}));
@@ -1865,6 +1873,7 @@ export function NewProjectPage({
               message={savedTaskLoadError}
             />
           )}
+          <SearchTreeEditor value={searchTree} files={inputFiles} onChange={value => { setSearchTree(value); setTouched(true); }} />
           <section className="form-section">
             <div className="form-section-head">
               <span className="section-number">01</span>

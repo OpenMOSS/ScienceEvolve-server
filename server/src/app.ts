@@ -1065,6 +1065,11 @@ export function createApp(dependencies: AppDependencies) {
     }
   });
 
+  app.post("/api/projects/:projectId/search-tree", async (request, response, next) => {
+    try { response.json(await orchestrator.searchTree(request.params.projectId, request.body)); }
+    catch (error) { next(error); }
+  });
+
   app.post("/api/projects/:projectId/git/retry", async (request, response, next) => {
     try {
       const project = await orchestrator.retryGitInitialization(request.params.projectId);

@@ -90,6 +90,7 @@ export class SavedResearchTaskStore {
         agents,
         orchestration,
         git: parsed.git,
+        ...(parsed.searchTree ? { searchTree: parsed.searchTree } : {}),
         ...(Object.keys(skillDefinitions).length ? { skillDefinitions } : {}),
         ...(Object.keys(mcpDefinitions).length ? { mcpDefinitions } : {})
       };
@@ -135,6 +136,7 @@ export class SavedResearchTaskStore {
         orchestration,
         git: parsed.git,
         ...(Object.keys(skillDefinitions).length ? { skillDefinitions } : { skillDefinitions: undefined }),
+        searchTree: parsed.searchTree,
         ...(Object.keys(mcpDefinitions).length ? { mcpDefinitions } : { mcpDefinitions: undefined })
       };
       tasks[index] = updated;
@@ -280,6 +282,7 @@ function parsePersistedTask(value: unknown): SavedResearchTask {
     throw new Error("已保存科研任务使用旧 Controller 格式");
   }
   const parsed = savedResearchTaskInputSchema.parse({
+    searchTree: value.searchTree,
     title: value.title,
     requirement: value.requirement,
     agents: Object.fromEntries(Object.entries(value.agents).map(([name, config]) =>
@@ -299,6 +302,7 @@ function parsePersistedTask(value: unknown): SavedResearchTask {
     schemaVersion: 2,
     kind: "scienceevolve-saved-research-task",
     id: value.id,
+    ...(parsed.searchTree ? { searchTree: parsed.searchTree } : {}),
     title: parsed.title,
     requirement: parsed.requirement,
     createdAt: value.createdAt,

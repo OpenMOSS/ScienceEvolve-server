@@ -41,6 +41,17 @@ afterEach(async () => {
 });
 
 describe("SavedResearchTaskStore", () => {
+  it("retains optional search-tree planning across save, restart and explicit removal", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "scienceevolve-saved-search-tree-")); temporaryRoots.push(root);
+    const store = new SavedResearchTaskStore(root), orchestration = cloneAgentOrchestrationTemplate();
+    const input = { title: "Search", requirement: "Preserve optional search tree configuration.", orchestration,
+      agents: mergeAgentConfigs(undefined, orchestration) };
+    const searchTree = { root: { name: "Root" }, directions: [{ kind: "direction" as const, id: "quality", parentId: "root", name: "Quality" }] };
+    const created = await store.create({ ...input, searchTree });
+    expect((await new SavedResearchTaskStore(root).get(created.id)).searchTree).toEqual(searchTree);
+    await store.update(created.id, input, created.updatedAt);
+    expect((await new SavedResearchTaskStore(root).get(created.id)).searchTree).toBeUndefined();
+  });
   it("retains deletion receipts across later writes and rejects a concurrent stale batch without partially deleting", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "scienceevolve-saved-deletion-")); temporaryRoots.push(root);
     const store = new SavedResearchTaskStore(root), orchestration = cloneAgentOrchestrationTemplate();

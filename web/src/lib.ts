@@ -1,3 +1,4 @@
+import { searchTreeConfigSchema } from "../../server/src/internal/shared/search-tree.js";
 import { summarizeFailureAttempts } from "../../server/src/internal/shared/failure-attempt-history.js";
 import { normalizeScopedRuntime } from "./scoped-runtime";
 import { githubAuthorizationWaiting } from "../../server/src/internal/shared/project-runtime-status.js";
@@ -1906,6 +1907,7 @@ export function normalizeSavedResearchTasks(
         requirement,
         createdAt,
         updatedAt,
+        ...(task.searchTree === undefined ? {} : { searchTree: searchTreeConfigSchema.parse(task.searchTree) }),
         agents: normalizeAgents(task.agents, orchestration),
         orchestration,
         git,
@@ -2928,6 +2930,7 @@ export function normalizeProject(value: unknown): Project {
   return {
     id,
     ...(collaboration ? { collaboration } : {}),
+    ...(data.searchTree === undefined ? {} : { searchTree: searchTreeConfigSchema.parse(data.searchTree) }),
     title: asString(data.title, "未命名科研项目"),
     requirement: asString(data.requirement),
     status,
