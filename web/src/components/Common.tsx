@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react";
 import {
   Atom,
   Bot,
@@ -88,9 +88,11 @@ export function StatusBadge({
 
 export function OverallProgressBar({
   progress,
+  label,
   compact = false
 }: {
   progress?: OverallProgress;
+  label?: React.ReactNode;
   compact?: boolean;
 }) {
   const percent = Math.max(0, Math.min(100, progress?.percent ?? 0));
@@ -103,7 +105,7 @@ export function OverallProgressBar({
       aria-label={`流程进度 ${formattedPercent}%`}
     >
       <div className="overall-progress-copy">
-        <strong>{progress?.label || "等待任务启动"}</strong>
+        <strong>{label ?? (progress?.label || "等待任务启动")}</strong>
         <span>流程进度 {formattedPercent}%</span>
       </div>
       <div
@@ -139,10 +141,30 @@ export function Button({
       className={`button button-${variant} ${className}`}
       disabled={disabled || loading}
       {...props}
+      data-component="button"
+      data-variant={variant === "danger" ? "primary" : variant}
+      data-danger={variant === "danger" || undefined}
+      data-icon={Boolean(icon || loading) || undefined}
+      aria-busy={loading || props["aria-busy"]}
     >
       {loading ? <LoaderCircle className="spin" size={17} /> : icon}
       <span>{children}</span>
     </button>
+  );
+}
+
+export function TextArea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <span className={className} data-component="input" data-variant="normal">
+      <span data-slot="input-wrapper">
+        <textarea
+          {...props}
+          data-slot="input-input"
+          data-invalid={props["aria-invalid"] === true ? "" : undefined}
+          data-readonly={props.readOnly ? "" : undefined}
+        />
+      </span>
+    </span>
   );
 }
 
