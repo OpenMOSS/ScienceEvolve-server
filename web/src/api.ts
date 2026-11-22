@@ -488,9 +488,72 @@ function unwrapProject(value: unknown): unknown {
   return value;
 }
 
-export async function getProjects(includeArchived = false): Promise<Project[]> {
+function normalizeProjectSummary(value: unknown): Project {
+  const row = value as { id?: unknown; overallProgress?: { percent?: unknown } } | null;
+  const percent = row?.overallProgress?.percent;
+  if (typeof row?.id !== "string" || !row.id.trim() || typeof percent !== "number" || !Number.isFinite(percent) || percent < 0 || percent > 100)
+    throw new Error("项目卡片缺少有效的编号或进度");
+  return normalizeProject(value);
+}
+
+export async function getProjects(includeArchived = false, stream?: {
+  signal: AbortSignal; onProjects: (projects: Project[]) => void
+}): Promise<Project[]> {
   const query = includeArchived ? "?view=summary&includeArchived=true" : "?view=summary";
-  return loadResource(`projects:${includeArchived}`, async () => normalizeProjects(await request(`/api/projects${query}`, { cache: "no-store" })));
+  const path = `/api/projects${query}`;
+  if (!stream) return loadResource(`projects:${includeArchived}`, async () => normalizeProjects(await request(path, { cache: "no-store" })));
+  const { signal, onProjects } = stream;
+  const response = await fetch(API_BASE + path, { cache: "no-store", signal, headers: { Accept: "application/x-ndjson, application/json" } });
+  const projects = new Map<string, Project>();
+  const addRow = (value: unknown) => {
+    const project = normalizeProjectSummary(value);
+    if (projects.has(project.id)) throw new Error(`项目列表重复返回 ${project.id}`);
+    projects.set(project.id, project);
+    return project;
+  };
+  if (!response.ok || !response.headers.get("Content-Type")?.includes("application/x-ndjson")) {
+    const result = await readResponse(response);
+    if (!result || typeof result !== "object" || !("projects" in result) || !Array.isArray(result.projects))
+      throw new Error("项目列表响应缺少 projects");
+    return result.projects.map(addRow);
+  }
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("项目列表响应缺少数据流");
+  const decoder = new TextDecoder();
+  let buffer = "", complete = false;
+  const cancel = () => { void reader.cancel().catch(() => undefined); };
+  signal.addEventListener("abort", cancel, { once: true });
+  try {
+    while (true) {
+      signal.throwIfAborted();
+      const { value, done } = await reader.read();
+      signal.throwIfAborted();
+      buffer += decoder.decode(value, { stream: !done });
+      const lines = buffer.split("\n");
+      buffer = done ? "" : lines.pop()!;
+      const batch: Project[] = [];
+      try {
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const event = JSON.parse(line) as { type?: string; project?: unknown; message?: unknown } | null;
+          if (complete) throw new Error("项目列表结束后仍收到数据");
+          if (event?.type === "complete") { complete = true; continue; }
+          if (event?.type === "error") throw new Error(typeof event.message === "string" ? event.message : "项目列表读取失败");
+          if (event?.type !== "project") throw new Error("项目列表包含未知事件");
+          batch.push(addRow(event.project));
+        }
+      } finally {
+        if (batch.length) onProjects(batch);
+      }
+      if (done) break;
+    }
+    if (!complete) throw new Error("项目列表连接在完成前中断");
+    return [...projects.values()];
+  } finally {
+    signal.removeEventListener("abort", cancel);
+    cancel();
+    reader.releaseLock();
+  }
 }
 
 function projectFoldersResponse(value: unknown): ProjectFolder[] {
@@ -532,6 +595,11 @@ export async function moveProjectsToFolder(projectIds: string[], folderId: strin
 
 export async function getQueue(): Promise<QueueSnapshot> {
   return loadResource("queue", async () => normalizeQueueSnapshot(await request("/api/queue")));
+}
+
+export async function getProjectSummary(projectId: string, signal?: AbortSignal): Promise<Project> {
+  return normalizeProjectSummary(unwrapProject(await request(
+    `/api/projects/${encodeURIComponent(projectId)}?view=summary`, { cache: "no-store", signal })));
 }
 
 export async function getProject(projectId: string): Promise<Project> {
@@ -2108,7 +2176,7 @@ export async function respondToUserIntervention(
 export async function addProjectUserInput(
   projectId: string,
   message: string,
-  options?: { mode?: "wait" | "interrupt"; requestId?: string }
+  options?: { mode?: "chat" | "wait" | "interrupt"; requestId?: string }
 ): Promise<Project> {
   const body: Record<string, string> = { message };
   if (options?.mode) body.mode = options.mode;

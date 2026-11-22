@@ -76,7 +76,6 @@ import {
   catalogDefaultHarnessId,
   cloneAgentOrchestration,
   cloneAgentsConfig,
-  orchestrationWithoutGit,
   constrainAgentConfigToHarness,
   createBlankWorkflow,
   DEFAULT_AGENTS,
@@ -1066,13 +1065,7 @@ export function NewProjectPage({
     }).catch(() => setSaveTaskNotice("助手配置已应用，可在画布中点击自动调整整理布局。"));
   };
 
-  const gitRequiredByCollaborations = (orchestration.collaborations?.length ?? 0) > 0;
   const setGitMode = (enabled: boolean) => {
-    if (!enabled && gitRequiredByCollaborations) return;
-    if (!enabled) {
-      try { setOrchestration(orchestrationWithoutGit(orchestration)); }
-      catch (error) { setSaveTaskError(error instanceof Error ? error.message : "当前 Workflow 无法关闭 Git 机制"); return; }
-    }
     setGitEnabled(enabled);
     setTouched(true);
     if (!enabled) return;
@@ -1106,7 +1099,7 @@ export function NewProjectPage({
     gateways,
     harnesses
   ) : [];
-  const orchestrationError = agentOrchestrationError(orchestration, gitEnabled);
+  const orchestrationError = agentOrchestrationError(orchestration);
   const projectReferenceError = useMemo(() => {
     for (const definition of orchestration.agents) {
       const config = agents[definition.name];
@@ -1123,13 +1116,12 @@ export function NewProjectPage({
     }
     return "";
   }, [agents, mcpDefinitions, orchestration.agents, skillDefinitions]);
-  const collaborationGitReady = !gitRequiredByCollaborations || gitEnabled;
   const githubAccountReady = !gitEnabled || githubAccounts.some(
     (account) => account.id === githubAccountId && account.status === "ready"
   );
   const repositoryNameError = gitEnabled ? gitRepositoryNameError(gitRepositoryName) : "";
   const repositoryConfigurationReady = !gitEnabled || !repositoryNameError;
-  const canSaveDraft = titleValid && requirementValid && agentsValid && collaborationGitReady &&
+  const canSaveDraft = titleValid && requirementValid && agentsValid &&
     repositoryConfigurationReady && !projectReferenceError;
   const runtimeCatalogNotice = runtimeCatalogState === "ready"
     ? catalogDefaultHarnessId(harnesses, defaultHarnessId)
@@ -1155,7 +1147,6 @@ export function NewProjectPage({
   const startNotices = [...new Set([
     runtimeCatalogNotice,
     orchestrationError && `Workflow：${orchestrationError}`,
-    !collaborationGitReady && "当前 Workflow 包含协作组，请先启用 Git 机制",
     gitEnabled && githubAccountsLoading ? "GitHub 账号目录仍在加载。" : !githubAccountReady && "请选择一个授权正常的 GitHub 账号",
     ...runtimeConfigErrors,
     ...runtimeConfigWarnings
@@ -2109,11 +2100,11 @@ export function NewProjectPage({
           <section className="form-section project-git-section">
             <div className="form-section-head">
               <span className="section-number">03</span>
-              <div><h2 id="project-git-heading">Git 机制</h2><p>管理项目版本与研究产物；协作组需要先启用 Git。</p></div>
+              <div><h2 id="project-git-heading">Git 机制</h2><p>管理项目版本与研究产物。</p></div>
             </div>
             <label className={`git-opt-in-card ${gitEnabled ? "is-enabled" : ""}`}>
-              <span><strong>启用 Git 机制</strong><small>{gitEnabled && gitRequiredByCollaborations ? "当前 Workflow 包含协作组，请先移除所有协作组再关闭 Git 机制。" : "使用 Git 管理代码与研究产物，支持独立 Agent 和协作组执行。"}</small></span>
-              <input type="checkbox" role="switch" aria-label="启用 Git 机制" checked={gitEnabled} disabled={gitEnabled && gitRequiredByCollaborations} title={gitEnabled && gitRequiredByCollaborations ? "请先移除所有协作组再关闭 Git 机制" : undefined} onChange={(event) => setGitMode(event.target.checked)} />
+              <span><strong>启用 Git 机制</strong><small>使用 Git 管理代码与研究产物。</small></span>
+              <input type="checkbox" role="switch" aria-label="启用 Git 机制" checked={gitEnabled} onChange={(event) => setGitMode(event.target.checked)} />
               <b>{gitEnabled ? "已开启" : "未开启"}</b>
             </label>
             {gitEnabled && (

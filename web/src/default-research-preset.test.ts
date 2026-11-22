@@ -24,7 +24,7 @@ describe("default research preset", () => {
   });
   it("preserves the weak decision and two-round evidence loop through form normalization", () => {
     const graph = normalizeAgentOrchestration(DEFAULT_RESEARCH_WORKFLOW);
-    expect(agentOrchestrationError(graph, false)).toBeUndefined();
+    expect(agentOrchestrationError(graph)).toBeUndefined();
     expect(validateWorkflowLoops(graph)).toEqual([]);
     expect(graph.routes.因果裁判).toEqual([{ target: "证据复核员", kind: "weak" }, { target: "研究总编", kind: "weak" }]);
     expect(workflowLoopMembers(graph, graph.loops![0]!)).toEqual(["证据复核员", "定点补证员"]);

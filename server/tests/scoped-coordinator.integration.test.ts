@@ -9,7 +9,7 @@ import { ProjectStorage } from "../src/storage.js";
 import { EventHub } from "../src/event-hub.js";
 import { SkillCatalog } from "../src/skill-catalog.js";
 import { cloneAgentOrchestrationTemplate } from "../src/agent-orchestration.js";
-import { mergeAgentConfigs } from "../src/validation.js";
+import { mergeAgentConfigs, normalizeAgentOrchestrationTemplate } from "../src/validation.js";
 import { emptyProjectComputeUsage } from "../src/inspire-compute-usage.js";
 import { ScopedRuntimeGit } from "./helpers/scoped-runtime-git.js";
 import { mergedPullSynchronizationOperationId, prepareOperation, finalizeOperation } from "../src/collaboration-git/operation.js";
@@ -27,7 +27,7 @@ afterEach(async () => {
 const repository = { provider: "github" as const, providerId: 1, owner: "example", name: "openfars", private: true,
   defaultBranch: "main", htmlUrl: "https://github.com/example/openfars", cloneUrl: "https://github.com/example/openfars.git", observedAt: "2026-09-30T00:00:00Z" };
 
-async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?: string; blockScopedOpen?: string; blockFinalOpen?: string; blockScopedTurns?: number; weakRootIntervention?: boolean; childHandoff?: boolean; omitFirstRootGit?: boolean; omitFirstFinish?: string; blockFinalAgent?: string; queueIdeaSibling?: boolean; legacyRoot?: boolean; now?: () => number } = {}) {
+async function fixture(options: { workspace?: boolean; nestedLoop?: boolean; mainCreatesGroups?: boolean; blockScopedAgent?: string; blockScopedOpen?: string; blockFinalOpen?: string; blockScopedTurns?: number; weakRootIntervention?: boolean; childHandoff?: boolean; omitFirstRootGit?: boolean; omitFirstFinish?: string; blockFinalAgent?: string; queueIdeaSibling?: boolean; legacyRoot?: boolean; now?: () => number } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-scoped-coordinator-")); roots.push(root);
   const hub = new EventHub(); const storage = new ProjectStorage(root, hub); await storage.initialize();
   const id = "prj_12345678901234567890123456789012";
@@ -48,6 +48,14 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
       nodes: [{ kind: "agent", nodeId: "H_idea", agentId: "idea" }], input: { source: "input", edges: [{ kind: "parallel", target: "H_idea" }] },
       routes: { H_idea: [{ kind: "strong", target: "finish" }] } } }
   ] };
+  if (options.nestedLoop) {
+    const workflow = orchestration.scopedWorkflow.groups[1].workflow;
+    workflow.nodes.push({ kind: "agent", nodeId: "H_review", agentId: "review" }, { kind: "agent", nodeId: "H_exit", agentId: "idea" });
+    workflow.routes.H_idea = [{ kind: "strong", target: "H_review" }];
+    workflow.routes.H_review = [{ kind: "strong", target: "H_idea" }];
+    workflow.routes.H_exit = [{ kind: "strong", target: "finish" }];
+    workflow.loops = [{ id: "repeat", from: "H_review", to: "H_idea", maxIterations: 2, exitTo: "H_exit" }];
+  }
   if (options.childHandoff) {
     const parent = orchestration.scopedWorkflow.groups[0].workflow;
     parent.input.edges = [{ kind: "parallel", target: "G_H" }];
@@ -68,6 +76,7 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
     delete orchestration.routes.G;
     orchestration.routes.main = [{ kind: "weak", target: "execution" }, { kind: "weak", target: "finish" }];
   }
+  if (options.nestedLoop) Object.assign(orchestration, normalizeAgentOrchestrationTemplate(orchestration));
   const desiredWorkflow = structuredClone(orchestration);
   if (options.mainCreatesGroups) {
     orchestration.collaborations = []; orchestration.scopedWorkflow.groups = [];
@@ -76,6 +85,10 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
   }
   const agents = mergeAgentConfigs(undefined, orchestration);
   for (const agent of Object.values(agents)) { agent.sessionPersistence = false; agent.skills = []; agent.autoSkills = []; agent.mcpServers = []; agent.decisionBy = "agent"; }
+  if (options.nestedLoop) {
+    agents.main.decisionBy = "main";
+    agents.main.sessionPersistence = true;
+  }
   if (options.mainCreatesGroups) {
     agents.main.gatewayId = "gwy_" + "a".repeat(32);
     agents.main.gatewaySnapshot = { id: agents.main.gatewayId, name: "Accepted Main gateway", url: "https://controlled.invalid/v1",
@@ -88,6 +101,10 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
     runCounts: {}, mainInvocationSeq: 0, agents, orchestration, userInputs: [], tokenUsage: { ...zero, byAgent: {} },
     computeUsage: emptyProjectComputeUsage(), workflowRevision: 1,
     git: { enabled: true, status: "authorizing", initialization: { operationId: `git-init-${id}`, attempt: 1, completedSteps: [] } } };
+  if (options.workspace) {
+    state.git = { enabled: false, status: "disabled" };
+    state.phase = "collaboration:ready";
+  }
   await storage.createProject(state);
   const opened: CollaborationResidentOpenInput[] = []; const active = new Set<string>(); const seenCwd = new Map<string, string>();
   const opening: CollaborationResidentOpenInput[] = [];
@@ -104,11 +121,11 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
     if (options.childHandoff && input.controlScope?.role === "scoped-agent" && !input.controlScope.executionId.startsWith("group-final-") && input.request.agent === "execution") {
       const projection = await coordinator.database().projectState(id);
       const child = projection.scopedGroupRuns!.find((group) => group.groupId === "H")!;
-      expect(child.status).toBe("completed"); expect(projection.scopedGroupFinalMerges?.some((merge) => merge.groupRunId === child.id)).toBe(true);
+      expect(child.status).toBe("completed"); expect(projection.scopedGroupFinalMerges?.some((merge) => merge.groupRunId === child.id) ?? false).toBe(!options.workspace);
     }
     if (input.inputs) await validateStagedInvocationInputs({ projectId: id, invocationId: input.request.invocationId,
       ...input.inputs, ...(input.request.project.orchestration.schemaVersion === 3
-        ? { fixedAgentId: input.request.agent } : {}) });
+        ? { fixedAgentId: input.request.agent, ...(options.workspace ? { projectWorkspace: path.join(storage.projectDir(id), "workspaces") } : {}) } : {}) });
     else await prepareInvocationInputs(input.request);
     if (input.controlScope?.role === "scoped-leader" || input.controlScope?.role === "scoped-main") {
       const inbox = await fs.readFile(input.request.inboxPath, "utf8");
@@ -175,6 +192,12 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
           const actions: ControlActionEnvelope[] = [];
           const rootTask = scope?.role === "execution-artifact" || scope?.role === "standalone-route";
           const businessTask = rootTask || scope?.role === "scoped-agent";
+          if (options.nestedLoop && options.workspace && input.request.agent === "execution" && businessTask) {
+            const name = rootTask ? "root-result.txt" : "group-result.txt";
+            await fs.writeFile(path.join(input.request.workspacePath, name), "Verified workspace result");
+            actions.push(await accept(input, turn, { tool: "publish_artifact", path: name,
+              title: name, kind: "text", description: "Result from this execution" }));
+          }
           const omitOwnFinish = options.omitFirstFinish === input.request.agent && scope?.role === "scoped-agent" &&
             !scope.executionId.startsWith("group-final-") && !finishOmitted;
           if (omitOwnFinish) finishOmitted = true;
@@ -182,7 +205,7 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
             // Completion records the Agent's handoff without changing Git.
             actions.push(await accept(input, turn, { tool: "finish_task", summary: `Verified ${input.request.agent}'s assigned task` }));
           }
-          if ((scope?.role === "execution-artifact" || scope?.role === "standalone-route") && !(options.omitFirstRootGit && !rootGitOmitted)) {
+          if (!options.workspace && (scope?.role === "execution-artifact" || scope?.role === "standalone-route") && !(options.omitFirstRootGit && !rootGitOmitted)) {
             const prior = git.pulls.get(scope.executionId);
             const delivered = prior?.status === "merged" && prior.headSha === git.localRefs.get(prior.head) &&
               git.localRefs.get("main") === git.refs.get("main");
@@ -201,7 +224,7 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
             actions.push(await accept(input, turn, { tool: "github_merge_pr", providerNumber: git.pulls.get(final.id)!.providerNumber,
               reason: "Integrate the Leader-assigned canonical group delivery" }));
           }
-          if (scope?.role === "scoped-agent" && !scope.executionId.startsWith("group-final-") &&
+          if (!options.workspace && scope?.role === "scoped-agent" && !scope.executionId.startsWith("group-final-") &&
             !(turn.prompt.includes("Missing formal mechanism actions:") && git.pulls.get(scope.executionId)?.status === "merged")) {
             const execution = (await coordinator.database().scopedExecution(id, scope.executionId))!;
             const group = (await coordinator.database().scopedGroupRun(id, scope.groupRunId))!;
@@ -218,7 +241,7 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
           if (scope?.role === "scoped-leader") {
             if (input.request.workflowContext?.purpose === "complete") {
               const proof = await coordinator.database().scopedGroupFinalMergeFact(id, scope.groupRunId);
-              const action: ControlAction = proof
+              const action: ControlAction = proof || options.workspace
                 ? { tool: "complete_group", groupRunId: scope.groupRunId, coordinatorEpoch: scope.coordinatorEpoch,
                     output: `Committed ${input.request.agent}` }
                 : { tool: "request_group_integration", groupRunId: scope.groupRunId, coordinatorEpoch: scope.coordinatorEpoch,
@@ -274,6 +297,7 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
     executionInputBuilder: new ProductionCollaborationExecutionInputBuilder(storage, new SkillCatalog([])),
     validateWorkflowConfiguration: async (_state, proposal) => { expect(proposal.agents.main.harness).toBe(state.agents.main.harness); },
     gitFactory: (options) => {
+      if (!state.git?.enabled) throw new Error("A workspace workflow attempted to construct a Git provider");
       const previous = git;
       git = new ScopedRuntimeGit(coordinator.database(), id);
       if (previous) git.restoreProviderState(previous);
@@ -325,7 +349,8 @@ async function fixture(options: { mainCreatesGroups?: boolean; blockScopedAgent?
     // This controlled fixture uses a minimal route graph, rather than the
     // public import graph. Reload its persisted bytes for the coordinator's
     // recovery entry without adding unrelated import-format validation.
-    Object.assign(state, JSON.parse(await fs.readFile(path.join(storage.projectDir(id), "state.json"), "utf8")));
+    Object.assign(state, options.nestedLoop ? await storage.loadState(id)
+      : JSON.parse(await fs.readFile(path.join(storage.projectDir(id), "state.json"), "utf8")));
     coordinator = createCoordinator();
     coordinators.push(coordinator); await coordinator.initialize();
     await coordinator.recoverProject(state);
@@ -352,6 +377,7 @@ describe("v3 project coordinator production entry", () => {
     publication.mockRestore();
     const nativeSessions = structuredClone(f.state.agentSessionIds);
     const opensBeforeArchive = f.opened.length;
+    const beforeArchive = structuredClone(f.state);
     const stop = vi.spyOn(f.coordinator as unknown as { cancelProjectLocked(...args: unknown[]): Promise<void> }, "cancelProjectLocked");
     // A stale checkpoint can still say cancelling although its exact Stop is durable.
     f.state.status = "cancelling";
@@ -362,6 +388,7 @@ describe("v3 project coordinator production entry", () => {
     expect(f.state.agentSessionIds).toEqual(nativeSessions);
     expect((await f.coordinator.database().projectState(f.state.id)).resumableCancellation?.stoppedAt).toBeTruthy();
     await expect(f.coordinator.resumeProject(f.state)).rejects.toThrow("unarchive it first");
+    await expect(f.coordinator.resumeProject(beforeArchive)).rejects.toThrow("unarchive it first");
     expect(f.opened).toHaveLength(opensBeforeArchive);
     const restarted = await f.restart();
     expect(f.state.archivedAt).toBeTruthy();
@@ -448,6 +475,50 @@ describe("v3 project coordinator production entry", () => {
     expect(f.state.taskCompletions?.[owner.id]).toBeDefined();
     expect(owner.status).toBe("succeeded");
   });
+
+  it.each([false, true])("runs the same nested Loop and child handoff with workspace delivery %s", async workspace => {
+    const f = await fixture({ workspace, nestedLoop: true, childHandoff: true });
+    await f.coordinator.createProject(f.state, workspace ? { enabled: false } : { enabled: true, provider: "github" });
+    try { await expect.poll(() => f.state.status, { timeout: 20_000 }).toBe("completed"); }
+    catch (error) {
+      const p = await f.coordinator.database().projectState(f.state.id);
+      throw new Error(JSON.stringify({ phase: f.state.phase, error: f.state.lastError, issues: p.scopedGroupIssues,
+        opened: f.opened.map(r => r.controlScope?.role), failures: (await f.coordinator.database().failureAttempts(f.state.id)).slice(-2).map(f => f.redactedMessage) }), { cause: error });
+    }
+    const p = await f.coordinator.database().projectState(f.state.id);
+    expect(p.scopedGroupRuns?.map(g => [g.groupId, g.status])).toEqual([["G", "completed"], ["H", "completed"]]);
+    const trace = await f.storage.readEvents(f.state.id);
+    const completed = trace.filter(event => event.data?.sourceType === "scoped.group.completed");
+    expect(completed.length).toBeGreaterThanOrEqual(2);
+    for (const event of completed) expect(event.message).toBe("协作组已完成");
+    const merges = trace.filter(event => event.data?.sourceType === "scoped.group.final_merged");
+    expect(merges).toHaveLength(workspace ? 0 : 2);
+    for (const event of merges) expect(event.message).toBe("协作组最终 PR 已合并并同步");
+    expect(p.scopedArrivals?.filter(a => a.targetKind === "agent").map(a => a.targetNodeId)).toEqual(["H_idea", "H_review", "H_idea", "H_review", "H_exit", "G_execution"]);
+    const successor = f.opened.find(r => r.controlScope?.role === "scoped-agent" && r.request.agent === "execution")!;
+    expect(successor.request.contextSources?.find(s => s.key === "predecessor-handoff")?.records).toEqual([expect.objectContaining({ output: expect.stringContaining("Committed idea") })]);
+    if (workspace) {
+      expect(f.git()).toBeUndefined();
+      expect(p.operations).toHaveLength(0);
+      expect(p.scopedGroupRuns?.some(g => g.groupBranch || g.integrationTarget || g.baseCommit)).toBe(false);
+      expect(p.scopedExecutions?.some(e => e.executionBranch)).toBe(false);
+      expect(p.scopedAgentReports).toHaveLength(6);
+      expect(p.scopedAgentTaskCompletions).toHaveLength(6);
+      expect(f.state.artifacts?.map(record => record.path).sort()).toEqual(["group-result.txt", "root-result.txt"]);
+      for (const record of f.state.artifacts!) {
+        expect(record.sha256).toBe(createHash("sha256").update("Verified workspace result").digest("hex"));
+      }
+      expect(p.scopedGroupFinalMerges ?? []).toHaveLength(0);
+      const opened = f.opened.length;
+      const restarted = await f.restart();
+      const persisted = await restarted.database().projectState(f.state.id);
+      expect(f.state.status).toBe("completed");
+      expect(f.opened).toHaveLength(opened);
+      expect(persisted.scopedArrivals).toEqual(p.scopedArrivals);
+      expect(persisted.operations).toHaveLength(0);
+      expect(f.state.artifacts?.map(record => record.path).sort()).toEqual(["group-result.txt", "root-result.txt"]);
+    } else expect(p.scopedGroupFinalMerges).toHaveLength(2);
+  }, 30_000);
 
   it("delivers a merged child group's current results to its parent-scope successor without changing Agent identity", async () => {
     const f = await fixture({ childHandoff: true }); await f.coordinator.createProject(f.state, { enabled: true, provider: "github" });
@@ -657,8 +728,9 @@ describe("v3 project coordinator production entry", () => {
     } finally { f.releaseBlocked(); await pauseOutcome; }
   }, 25_000);
 
-  it("pauses at the native safe point and resumes the same scoped invocation before any final or successor mutation", async () => {
-    const f = await fixture({ blockScopedAgent: "idea" }); await f.coordinator.createProject(f.state, { enabled: true, provider: "github" });
+  it.each([false, true])("pauses at the native safe point and resumes the same scoped invocation with workspace delivery %s", async workspace => {
+    const f = await fixture({ workspace, blockScopedAgent: "idea" });
+    await f.coordinator.createProject(f.state, workspace ? { enabled: false } : { enabled: true, provider: "github" });
     await expect.poll(() => f.state.agentSessionIds?.idea, { timeout: 10_000 }).toBe("session-idea");
     const pause = f.coordinator.pauseProject(f.state);
     const pauseOutcome = pause.catch((error: unknown) => error);

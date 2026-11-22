@@ -184,6 +184,25 @@ describe("trace follow navigation", () => {
     expect(trace.top).toBe(800);
   });
 
+  it("keeps the current reading position when an older page arrives after the reader scrolls", () => {
+    const trace = traceFixture();
+    // Geometry includes user scrolling and the new row inserted above this article.
+    const article = trace.scroll.querySelector("article")!;
+    let before = 0;
+    vi.spyOn(article, "getBoundingClientRect").mockImplementation(() => new DOMRect(0, 850 + before - trace.top, 400, 100));
+    const onLoadOlder = vi.fn(async () => undefined);
+    const props = { ...trace.props, hasOlder: true, onLoadOlder };
+    trace.rerender(<TraceView {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "加载更早轨迹" }));
+    expect(onLoadOlder).toHaveBeenCalledOnce();
+    trace.rerender(<TraceView {...props} historyLoading />);
+    trace.position(720);
+    before = 100;
+    trace.rerender(<TraceView {...props} events={[{ ...props.events[0], seq: 0, type: "agent.trace", message: "Older" }, ...props.events]} />);
+    expect(trace.top).toBe(820);
+    expect(trace.follow).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("observes the trace viewport as well as content and repins after resizing", () => {
     const trace = traceFixture();
     expect(trace.observed.has(trace.scroll)).toBe(true);

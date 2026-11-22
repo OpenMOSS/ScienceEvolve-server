@@ -606,6 +606,32 @@ describe("local protocol router", () => {
     expect(normalizeProtocolStreamEvent("responses", { error: "bad key" })).toMatchObject({ type: "error", error: "bad key" });
   });
 
+  it("preserves legitimate literal budget tags and code across mixed Chat content chunks", () => {
+    const literal = "budget:token_budget20</budget:token_budget>";
+    const chunks = [
+      [{ type: "thinking", text: "private part 1" }, { type: "text", text: "示例\n" }],
+      [{ type: "thinking", thinking: "private part 2" }, { type: "text", text: "code: " + literal }],
+      "\nDone."
+    ];
+    const events = chunks.flatMap(content => normalizeProtocolStreamEvents("chat-completions", { choices: [{ delta: { content } }] }));
+    expect(events.filter(e => e.type === "text_delta").map(e => e.text).join("")).toBe("示例\ncode: " + literal + "\nDone.");
+    expect(events.filter(e => e.type === "reasoning_delta").map(e => e.text).join("")).toBe("private part 1private part 2");
+  });
+
+  it.each(["stream", "complete"])("keeps a typed thinking block out of a public Chat reply (%s)", delivery => {
+    const publicText = "已核对 budget 字段。";
+    const content = [{ type: "thinking", text: "budget:token_budget20</budget:token_budget>" },
+      { type: "text", text: publicText }];
+    if (delivery === "stream") {
+      const events = normalizeProtocolStreamEvents("chat-completions", { choices: [{ delta: { content } }] });
+      expect(events.filter(event => event.type === "text_delta").map(event => event.text).join("")).toBe(publicText);
+    } else {
+      const result = convertProtocolResponse({ choices: [{ message: { role: "assistant", content }, finish_reason: "stop" }] },
+        "chat-completions", "responses", "fixture-model");
+      expect(result.output_text).toBe(publicText);
+    }
+  });
+
   it("recognizes common hidden reasoning extensions without treating them as visible text", () => {
     expect(normalizeProtocolStreamEvent("chat-completions", {
       choices: [{ delta: { reasoning_content: "private chat reasoning" } }]
@@ -864,6 +890,24 @@ describe("local protocol router", () => {
       type: "response.incomplete",
       response: { id: "r-incomplete", status: "incomplete" }
     })).toMatchObject({ type: "completed", stopReason: "incomplete" });
+  });
+
+  it("preserves the first event and its raw frame for simple and mixed Chat replies", () => {
+    const message = { content: "visible" };
+    const usage = { completion_tokens: 1 };
+    const choice = { message, finish_reason: "stop" };
+    const frame = { choices: [choice], usage };
+    expect(normalizeProtocolStreamEvents("chat-completions", frame)).toEqual([{ type: "text_delta", text: "visible", raw: frame }]);
+    const mixed = { ...message, reasoning: "thinking" };
+    const mixedFrame = { ...frame, choices: [{ ...choice, message: mixed }] };
+    const events = normalizeProtocolStreamEvents("chat-completions", mixedFrame);
+    expect(events).toStrictEqual([
+      { type: "text_delta", text: "visible", raw: { ...frame, choices: [{ ...choice, message: mixed, delta: { ...mixed, tool_calls: undefined } }] } },
+      { type: "reasoning_delta", text: "thinking", raw: mixedFrame },
+      { type: "completed", stopReason: "stop", usage, raw: { ...frame, choices: [{ ...choice, message: mixed, delta: {} }] } }
+    ]);
+    expect(normalizeProtocolStreamEvent("chat-completions", mixedFrame)).toStrictEqual(events[0]);
+    expect(normalizeProtocolStreamEvents("chat-completions", { usage: {} })).toEqual([{ type: "unknown", raw: { usage: {} } }]);
   });
 
   it("keeps every tool call when a Chat stream packs multiple deltas into one frame", () => {

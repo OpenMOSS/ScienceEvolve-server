@@ -285,6 +285,146 @@ describe("HTTP API", () => {
     expect(calls).toHaveLength(3);
   });
 
+  it("streams a committed card while another project is blocked and completes with the same facts as JSON", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "scienceevolve-card-stream-")); temporaryRoots.push(root);
+    const eventHub = new EventHub(), storage = new ProjectStorage(root, eventHub), skills = testSkillCatalog();
+    const orchestrator = new Orchestrator(storage, skills, new HoldingRunner(), { retryBaseMs: 1, retryMaxMs: 10 });
+    await orchestrator.initialize();
+    const app = createApp({ orchestrator, storage, eventHub, skills, config: { modelSuggestions: [], maxEventHistory: 2 } });
+    const server = app.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/projects?view=summary`;
+    const headers = { Accept: "application/x-ndjson, application/json" };
+    try {
+      const ids: string[] = [];
+      for (const title of ["Blocked", "Ready"]) {
+        const created = await request(server).post("/api/projects").send({ title, requirement: "Read committed progress.",
+          agents: Object.fromEntries(AGENT_NAMES.map(role => [role, { model: "test-model", skills: [] }])) }).expect(202);
+        const id: string = created.body.project.id;
+        await orchestrator.cancel(id);
+        await orchestrator.waitForIdle(id);
+        ids.push(id);
+      }
+      const release = storage.reserveProjectMutation(ids[0]);
+      try {
+        const stream = await fetch(url, { headers });
+        expect(stream.headers.get("Content-Type")).toContain("application/x-ndjson");
+        expect(stream.headers.get("Vary")).toContain("Accept");
+        const reader = stream.body!.pipeThrough(new TextDecoderStream()).getReader();
+        let buffer = "";
+        while (!buffer.includes("\n")) {
+          const chunk = await reader.read();
+          expect(chunk.done).toBe(false);
+          buffer += chunk.value;
+        }
+        const first = JSON.parse(buffer.trim());
+        expect(first).toMatchObject({ type: "project", project: { id: ids[1] } });
+        expect(storage.hasActiveProjectMutation(ids[0])).toBe(true);
+        release();
+        while (true) { const chunk = await reader.read(); if (chunk.done) break; buffer += chunk.value; }
+        const events = buffer.trim().split("\n").map(line => JSON.parse(line));
+        const json = await (await fetch(url)).json();
+        expect(events.map(event => event.type)).toEqual(["project", "project", "complete"]);
+        expect(json.projects).toHaveLength(2);
+        expect(events.slice(0, 2).map(row => row.project)).toEqual(expect.arrayContaining(json.projects));
+      } finally { release(); }
+
+      const blocked = storage.reserveProjectMutation(ids[0]);
+      const controller = new AbortController();
+      const list = vi.spyOn(orchestrator, "listProjectSummaries");
+      try {
+        const cancelled = await fetch(url, { headers, signal: controller.signal });
+        const reader = cancelled.body!.getReader();
+        await reader.read();
+        const pending = list.mock.results[0].value as ReturnType<Orchestrator["listProjectSummaries"]>;
+        const ended = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+        controller.abort();
+        await ended;
+        expect(storage.hasActiveProjectMutation(ids[0])).toBe(true);
+      } finally { controller.abort(); blocked(); list.mockRestore(); }
+
+      const unblockCard = storage.reserveProjectMutation(ids[0]);
+      const cardController = new AbortController();
+      const readCard = vi.spyOn(orchestrator, "getProjectSummary");
+      try {
+        const cardUrl = new URL(url);
+        cardUrl.pathname += "/" + ids[0];
+        const pending = fetch(cardUrl, { signal: cardController.signal });
+        await vi.waitFor(() => expect(readCard).toHaveBeenCalledTimes(1));
+        const closed = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+        const released = expect(readCard.mock.results[0].value).rejects.toMatchObject({ name: "AbortError" });
+        cardController.abort();
+        await Promise.all([closed, released]);
+        expect(storage.hasActiveProjectMutation(ids[0])).toBe(true);
+      } finally { cardController.abort(); unblockCard(); readCard.mockRestore(); }
+
+      await orchestrator.archive(ids[0]);
+      const events = (await (await fetch(url, { headers })).text()).trim().split("\n").map(line => JSON.parse(line));
+      expect(events.map(row => row.project?.id ?? row.type)).toEqual([ids[1], "complete"]);
+      const all = (await (await fetch(url + "&includeArchived=true", { headers })).text()).trim().split("\n").map(line => JSON.parse(line));
+      expect(all.find(row => row.project?.id === ids[0]).project.archivedAt).toEqual(expect.any(String));
+
+      vi.spyOn(orchestrator, "listProjectSummaries").mockImplementationOnce(async (_includeArchived, emit) => {
+        await emit!((await orchestrator.getProjectSummary(ids[1]))!);
+        throw new Error("checkpoint unavailable");
+      });
+      const failed = (await (await fetch(url, { headers })).text()).trim().split("\n").map(line => JSON.parse(line));
+      expect(failed.map(row => row.type)).toEqual(["project", "error"]);
+      expect(failed[1].message).toBe("checkpoint unavailable");
+    } finally {
+      await orchestrator.shutdown();
+      server.closeAllConnections();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  });
+
+  it("serves trace pages and opens the live stream independently of project detail reads", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "scienceevolve-trace-read-"));
+    temporaryRoots.push(root);
+    const eventHub = new EventHub();
+    const storage = new ProjectStorage(root, eventHub);
+    const skills = testSkillCatalog();
+    const config = { retryBaseMs: 1, retryMaxMs: 10 };
+    const orchestrator = new Orchestrator(storage, skills, new HoldingRunner(), config);
+    await orchestrator.initialize();
+    const app = createApp({ orchestrator, storage, eventHub, skills, config: { modelSuggestions: [], maxEventHistory: 2 } });
+    const server = app.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    try {
+      const created = await request(server).post("/api/projects").send({
+        title: "Trace pages", requirement: "Read the committed events of a running project.",
+        agents: Object.fromEntries(AGENT_NAMES.map(role => [role, { model: "test-model", skills: [] }]))
+      }).expect(202);
+      const id: string = created.body.project.id;
+      await expect.poll(async () => (await storage.readEvents(id)).length).toBeGreaterThan(1);
+      const reader = new Orchestrator(storage, skills, new HoldingRunner(), config);
+      expect(await reader.hasProject(id)).toBe(true);
+      const details = vi.spyOn(orchestrator, "getProject").mockRejectedValue(new Error("Project detail read failed"));
+      const release = storage.reserveProjectMutation(id);
+      try {
+        const trace = `/api/projects/${id}/events`;
+        const first = await request(server).get(`${trace}/bootstrap?limit=1`).expect(200);
+        expect(first.body.events).toHaveLength(1);
+        const older = await request(server).get(`${trace}/history?before=${first.body.events[0].seq}&limit=1`).expect(200);
+        expect(older.body.events[0].seq).toBeLessThan(first.body.events[0].seq);
+        const live = await fetch(`${base}${trace}?after=${first.body.lastSeq}`);
+        try {
+          expect(live.status).toBe(200);
+          expect(live.headers.get("content-type")).toContain("text/event-stream");
+        } finally { await live.body?.cancel(); }
+        for (const endpoint of ["events/bootstrap", "events/history?before=1", "events"]) {
+          await request(server).get(`/api/projects/prj_ffffffffffffffffffffffffffffffff/${endpoint}`).expect(404);
+        }
+        expect(details).not.toHaveBeenCalled();
+      } finally { release(); details.mockRestore(); }
+    } finally {
+      await orchestrator.shutdown();
+      server.closeAllConnections();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  });
+
   it("validates creation, exposes project snapshots, replays SSE, and cancels explicitly", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "scienceevolve-api-"));
     temporaryRoots.push(root);
@@ -623,8 +763,8 @@ describe("HTTP API", () => {
         builtin: true
       });
       expect(defaultPresets.presets[0].agents.main.instructions.length).toBeGreaterThan(0);
-      expect(defaultPresets.presets[0].agents.execution).toMatchObject({
-        permission: "compute",
+      expect(defaultPresets.presets[0].agents.文献研究员).toMatchObject({
+        permission: "workspace",
         webSearch: true
       });
 
@@ -935,7 +1075,6 @@ describe("HTTP API", () => {
       );
       expect(prematureArchive.status).toBe(409);
 
-      const liveState = await orchestrator.getProject(projectId);
       const executionWorkspace = await storage.roleWorkspace(
         projectId,
         "execution",
@@ -1074,9 +1213,10 @@ describe("HTTP API", () => {
       // Git-on API reads must fail closed. A legacy role workspace is not an
       // accepted execution/PR source and must disappear from both catalog and
       // content endpoints instead of being used as a fallback.
-      const priorGit = liveState!.git;
-      liveState!.git = { enabled: true, status: "ready", provider: "github" };
-      await storage.saveState(liveState!);
+      const checkpoint = await storage.loadState(projectId);
+      const priorGit = checkpoint.git;
+      checkpoint.git = { enabled: true, status: "ready", provider: "github" };
+      await storage.saveState(checkpoint);
       const gitCatalogResponse = await fetch(
         `${base}/api/projects/${projectId}/artifacts?agent=execution`
       );
@@ -1086,8 +1226,8 @@ describe("HTTP API", () => {
         `${base}/api/projects/${projectId}/artifacts/content?path=workspace-report.md&origin=workspace&agent=execution`
       );
       expect(gitLegacyFallbackResponse.status).toBe(404);
-      liveState!.git = priorGit;
-      await storage.saveState(liveState!);
+      checkpoint.git = priorGit;
+      await storage.saveState(checkpoint);
 
       const streamController = new AbortController();
       const streamResponse = await fetch(
@@ -1362,11 +1502,15 @@ describe("HTTP API", () => {
     temporaryRoots.push(root);
     const eventHub = new EventHub();
     const storage = new ProjectStorage(root, eventHub);
-    const calls: Array<{ projectId: string; message: string }> = [];
+    const calls: Array<{ projectId: string; message: string; mode: string; requestId?: string }> = [];
     const projectId = "prj_00000000000000000000000000000002";
     const orchestrator = {
-      addProjectUserInput: async (id: string, message: string) => {
-        calls.push({ projectId: id, message });
+      addProjectUserInput: async (id: string, message: string, mode: string, requestId?: string) => {
+        calls.push({ projectId: id, message, mode, requestId });
+        if (mode === "chat") {
+          if (message === "stale") throw new CollaborationStateError("INVALID_STATE_TRANSITION", "Project has completed");
+          return { id, mainConversation: [{ id: "chat_1", message, status: "queued" }] };
+        }
         return {
           id: projectId,
           userInputs: [
@@ -1414,9 +1558,17 @@ describe("HTTP API", () => {
       expect(calls).toEqual([
         {
           projectId,
-          message: "Add a robustness ablation to this research task."
+          message: "Add a robustness ablation to this research task.", mode: "wait"
         }
       ]);
+      const chat = (message: string) => fetch(endpoint, { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "chat", message, requestId: "ui-1" }) });
+      const accepted = await chat("How far along are we?");
+      expect(accepted.status).toBe(202);
+      expect(await accepted.json()).toMatchObject({ project: { mainConversation: [{ message: "How far along are we?", status: "queued" }] } });
+      expect(calls.at(-1)).toMatchObject({ mode: "chat", requestId: "ui-1" });
+      const stale = await chat("stale");
+      expect(stale.status).toBe(409); expect(await stale.json()).toMatchObject({ code: "INVALID_STATE_TRANSITION" });
     } finally {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));

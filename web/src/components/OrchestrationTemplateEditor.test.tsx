@@ -29,7 +29,7 @@ describe("text Workflow Agent configuration", () => {
     expect(next.routes.extra_researcher).toEqual([{ target: "main", kind: "strong" }]);
     expect(onAgentsChange.mock.calls[0]![0].extra_researcher).toBeDefined();
     if (schemaVersion === 3) expect(next.scopedWorkflow!.rootAgentIds).toContain("extra_researcher");
-    expect(agentOrchestrationError(next, schemaVersion === 3)).toBeUndefined();
+    expect(agentOrchestrationError(next)).toBeUndefined();
     expect(value.agents).toHaveLength(51);
   });
 });

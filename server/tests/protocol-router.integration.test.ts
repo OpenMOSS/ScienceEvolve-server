@@ -2653,6 +2653,42 @@ describe("protocol proxy loopback integration", () => {
     expect(body).not.toContain('"type":"response.incomplete"');
   });
 
+  it.each(["nested", "top-level", "configured-key", "unspecified"] as const)(
+    "reports a safe upstream Responses error to the client, trace and runtime (%s)", async position => {
+      const gatewayApiKey = "fixture-opaque-gateway-key";
+      const detail = "Provider queue unavailable";
+      const error = { code: "queue_capacity", message: position === "configured-key" ? detail + " " + gatewayApiKey : detail };
+      const frame = position === "nested" ? { type: "response.failed", response: { status: "failed", error } }
+        : position === "unspecified" ? { type: "response.failed", response: { status: "failed" } }
+        : { type: "error", error };
+      const modelFetch = vi.fn(async () => new Response("data: " + JSON.stringify(frame) + "\n\n", {
+        headers: { "content-type": "text/event-stream" }
+      }));
+      const traces: string[] = [];
+      proxy = await startProtocolProxy({
+        sourceProtocol: "chat-completions", targetProtocol: "responses", gatewayApiKey,
+        gatewayUrl: "https://gateway.invalid/v1", validateGatewayTarget: async () => undefined, modelFetch,
+        onTrace: (_kind, message, data) => {
+          if (message === "Protocol proxy received a provider stream error") traces.push(String(data?.error));
+        }
+      });
+      const response = await fetch(proxy.baseUrl + "/chat/completions", {
+        method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + proxy.token },
+        body: JSON.stringify({ model: "fixture-model", stream: true, messages: [{ role: "user", content: "hello" }] })
+      });
+      const client = await response.text();
+      const failure = proxy.getFailure?.();
+      expect(failure).toMatchObject({ code: "MODEL_PROVIDER_FAILED", httpStatus: 200 });
+      expect(traces).toHaveLength(1);
+      for (const message of [client, traces[0], failure?.message]) {
+        expect.soft(message).toContain(position === "unspecified" ? "provider request failed" : detail);
+        if (position !== "unspecified") expect.soft(message).toContain("queue_capacity");
+        expect.soft(message).not.toContain(gatewayApiKey);
+      }
+      expect(modelFetch).toHaveBeenCalledTimes(1);
+    }
+  );
+
   it.each([false, true])("preserves an orphaned native tool result as explicit feedback without inventing a Responses call (stream=%s)", async stream => {
     const forwarded: Array<Record<string, unknown>> = [];
     const traces: Array<{ message: string; data?: Record<string, unknown> }> = [];

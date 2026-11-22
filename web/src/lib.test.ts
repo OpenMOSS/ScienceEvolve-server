@@ -23,35 +23,9 @@ import {
   normalizeProject,
   normalizeQueueSnapshot,
   normalizeStatus,
-  orchestrationWithoutGit,
   protocolLabel
 } from "./lib";
 import type { AgentEvent, GatewayRecord, HarnessCatalogEntry } from "./types";
-
-describe("ordinary workflows without Git", () => {
-  it("removes only an empty scoped envelope, retaining all Agent identities, routes, Loops and layout", () => {
-    const original = normalizeAgentOrchestration(DEFAULT_AGENT_ORCHESTRATION);
-    const scoped = { ...original, schemaVersion: 3 as const, scopedWorkflow: {
-      schemaVersion: 1 as const, rootAgentIds: original.agents.map(agent => agent.name), groups: []
-    } };
-    expect(orchestrationWithoutGit(scoped)).toEqual(original);
-    expect(scoped.schemaVersion).toBe(3);
-    expect(scoped.scopedWorkflow.groups).toEqual([]);
-    expect(orchestrationWithoutGit(original)).toBe(original);
-  });
-
-  it("never drops groups or changes graph membership to disable Git", () => {
-    const original = structuredClone(DEFAULT_AGENT_ORCHESTRATION);
-    original.collaborations = [{ id: "research", displayName: "Research", memberAgentIds: ["idea", "execution"], renamePolicy: "editable" }];
-    expect(() => orchestrationWithoutGit(original)).toThrow("请先移除所有协作组");
-    const unplaced = { ...original, collaborations: [], schemaVersion: 3 as const, scopedWorkflow: {
-      schemaVersion: 1 as const, rootAgentIds: ["main"], groups: []
-    } };
-    expect(() => orchestrationWithoutGit(unplaced)).toThrow("请将所有已配置的 Agent 放回普通 Workflow");
-    expect(unplaced.scopedWorkflow.rootAgentIds).toEqual(["main"]);
-    expect(unplaced.agents).toEqual(DEFAULT_AGENT_ORCHESTRATION.agents);
-  });
-});
 
 describe("API data normalization", () => {
   it("keeps the formal lifecycle, experiment stages and proven reception separate from business claims and clones the shared view", () => {

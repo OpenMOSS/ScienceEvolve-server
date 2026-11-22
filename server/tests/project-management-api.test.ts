@@ -8,9 +8,10 @@ import { createApp } from "../src/app.js";
 import { EventHub } from "../src/event-hub.js";
 import { ProjectStorage } from "../src/storage.js";
 import type { Orchestrator } from "../src/orchestrator.js";
+import { projectListSummary } from "../src/project-list-summary.js";
 import type { SkillCatalog } from "../src/skill-catalog.js";
 import type { GitHubAccountStore } from "../src/github-accounts.js";
-import type { ProjectState } from "../src/types.js";
+import type { ProjectState, ProjectView } from "../src/types.js";
 
 const roots: string[] = [];
 
@@ -34,8 +35,11 @@ describe("project archive and deletion HTTP APIs", () => {
       agents: { main: { prompt: "private configuration" } },
       git: { enabled: true, repository: { name: "demo" } }, pullRequests: [{ id: "pr_1", htmlUrl: "https://github.com/a/demo/pull/1" }]
     };
+    const getProject = vi.fn(async () => ({ ...project, collaboration: { ...project.collaboration, stateRevision: 3 } }));
+    const getProjectSummary = vi.fn(async () => projectListSummary({ ...project, collaboration: { stateRevision: 3 } } as unknown as ProjectView));
+    const listProjectSummaries = vi.fn(async () => [projectListSummary(project as unknown as ProjectView)]);
     const app = createApp({
-      orchestrator: { listProjects: vi.fn(async () => [project]) } as unknown as Orchestrator,
+      orchestrator: { listProjects: vi.fn(async () => [project]), getProject, getProjectSummary, listProjectSummaries } as unknown as Orchestrator,
       storage: new ProjectStorage(root, eventHub), eventHub, skills: {} as SkillCatalog,
       config: { modelSuggestions: [], maxEventHistory: 100 }
     });
@@ -48,6 +52,15 @@ describe("project archive and deletion HTTP APIs", () => {
     expect(summary.body.projects[0]).not.toHaveProperty("agents");
     expect(JSON.stringify(summary.body).length).toBeLessThan(JSON.stringify(full.body).length / 100);
     expect(full.body.projects[0]).toEqual(project);
+    const card = await request(app).get(`/api/projects/${project.id}?view=summary`).expect(200);
+    const detail = await request(app).get(`/api/projects/${project.id}?view=state`).expect(200);
+    expect(listProjectSummaries.mock.calls).toEqual([[true]]);
+    expect(getProjectSummary.mock.calls).toEqual([[project.id, expect.any(AbortSignal)]]);
+    expect(getProject.mock.calls).toEqual([[project.id]]);
+    expect(card.body.project).toEqual({ ...summary.body.projects[0], collaboration: { stateRevision: 3 } });
+    expect(card.body.project.overallProgress).toEqual(detail.body.project.overallProgress);
+    expect(card.body.project.collaboration.stateRevision).toBe(detail.body.project.collaboration.stateRevision);
+    expect(card.body).not.toHaveProperty("events");
   });
 
   it("maps both legacy and current active-project archive conflicts to HTTP 409", async () => {

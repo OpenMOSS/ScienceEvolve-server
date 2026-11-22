@@ -721,12 +721,14 @@ describe("WorkflowCanvasEditor interactions", () => {
     expect(compact.container.querySelector('[data-node-id="b"]')).toBeNull();
   });
 
-  it("diagnoses Git-off collaboration and never offers an existing-group migration control", () => {
+  it("allows Git-off collaboration and never offers an existing-group migration control", () => {
     const orchestration = eightAgentCollaborationFixture();
-    expect(agentOrchestrationError(orchestration, false)).toContain("启用 Git 机制");
+    expect(agentOrchestrationError(orchestration)).toBeUndefined();
     const view = renderEditor(orchestration, eightAgentConfigs());
     fireEvent.click(screen.getByRole("button", { name: "新增协作组" }));
-    expect(screen.getByText("创建协作组需要先启用 Git 机制")).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "新增协作组" });
+    expect(dialog).toBeVisible();
+    fireEvent.click(within(dialog).getByRole("button", { name: "取消" }));
     fireEvent.click(view.container.querySelector('[data-node-id="research_group"]')!);
     const members = screen.getByLabelText("协作组成员");
     expect(within(members).queryByRole("checkbox")).toBeNull();

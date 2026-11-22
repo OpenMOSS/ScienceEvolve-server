@@ -156,7 +156,7 @@ describe("CanvasInspector", () => {
     expect(onGitRepositoryConfigure).toHaveBeenCalledOnce();
   });
 
-  it("requires Git while groups exist and keeps it enabled after the last group is removed", () => {
+  it("lets the user toggle Git with or without a group", () => {
     const orchestration = normalizeAgentOrchestration(undefined);
     const grouped = structuredClone(orchestration);
     grouped.collaborations = [{ id: "research", displayName: "Research", memberAgentIds: ["idea", "execution"], renamePolicy: "editable" }];
@@ -164,10 +164,10 @@ describe("CanvasInspector", () => {
     const { rerender } = render(<CanvasInspector orchestration={grouped} gitEnabled onGitEnabledChange={onGitEnabledChange} />);
     const gitSwitch = screen.getByRole("switch", { name: "画布启用 Git 机制" });
     expect(gitSwitch).toBeChecked();
-    expect(gitSwitch).toBeDisabled();
-    expect(screen.getByText("当前 Workflow 包含协作组，请先移除所有协作组再关闭 Git 机制。")).toBeVisible();
+    expect(gitSwitch).toBeEnabled();
     fireEvent.click(gitSwitch);
-    expect(onGitEnabledChange).not.toHaveBeenCalled();
+    expect(onGitEnabledChange).toHaveBeenCalledWith(false);
+    onGitEnabledChange.mockClear();
     rerender(<CanvasInspector orchestration={orchestration} gitEnabled onGitEnabledChange={onGitEnabledChange} />);
     expect(gitSwitch).toBeChecked();
     expect(gitSwitch).toBeEnabled();

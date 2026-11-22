@@ -126,6 +126,22 @@ describe("retained serial task recovery", () => {
     expect(received[0].data).toMatchObject({ executionId: originalTask, previousInvocationId: failedInvocation,
       inputSha256: staged[0].data!.inputSha256, nativeSessionId: "original-worker" });
     expect(staged[0].seq).toBeLessThan(received[0].seq);
+
+    const completedWorker = f.calls[1];
+    expect(f.calls.map(call => call.agent)).toEqual(["worker", "worker", "main"]);
+    const delivery = events.filter(event => ["handoff.saved", "control.action.committed", "invocation.completed"].includes(event.type));
+    expect(delivery.filter(event => event.type === "invocation.completed").map(event => event.data?.invocationId))
+      .toEqual([completedWorker.invocationId, f.calls[2].invocationId]);
+    expect(delivery.some(event => event.type === "control.action.committed" && event.data?.tool === "complete_project")).toBe(true);
+    await restarted.runtime.shutdown();
+    const reopened = await f.restart();
+    await reopened.runtime.waitForIdle(project.id);
+    expect(await reopened.storage.readHandoff(project.id, completedWorker.invocationId, "worker"))
+      .toContain("Verified the existing result.txt; no repeated write.");
+    expect((await reopened.storage.readEvents(project.id)).filter(event =>
+      ["handoff.saved", "control.action.committed", "invocation.completed"].includes(event.type))).toEqual(delivery);
+    expect(await reopened.runtime.getProject(project.id)).toMatchObject({ status: "completed", executionCounts: { worker: 1, main: 1 } });
+    expect(f.calls).toHaveLength(3);
   });
 
   it("preserves the pending Worker handoff through a failed Main repair and spends no fresh repair after explicit resume", async () => {
@@ -167,7 +183,10 @@ describe("retained serial task recovery", () => {
     const f = await fixture(async request => result(request, decide
       ? { tool: "complete_project", rationale: "Actual decision now made." }
       : { tool: "finish_task", summary: "This native turn ended; no project decision was made." }));
-    const project = await f.runtime.createProject(input(false));
+    const mainOnly = input(false);
+    const project = await f.runtime.createProject({ ...mainOnly, agents: { main: mainOnly.agents.main },
+      orchestration: { ...mainOnly.orchestration, agents: [{ name: "main", template: "main" }], routes: { main: [] },
+        decisionPlans: { main: mainOnly.orchestration.decisionPlans.main } } });
     await waitUntilIdleOrCalls(f.runtime, project.id, f.calls, 2);
     const stopped = await f.runtime.getProject(project.id);
     expect(stopped).toMatchObject({ status: "interrupted", phase: "main-decision-required", runCounts: { main: 2 },

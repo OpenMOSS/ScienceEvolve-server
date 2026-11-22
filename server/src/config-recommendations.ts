@@ -18,21 +18,13 @@ import {
 
 export { ConfigRecommendationError } from "./internal/shared/configuration-recommendation.js";
 
-export const configRecommendationInputSchema = savedResearchTaskInputSchema.innerType().extend({
+export const configRecommendationInputSchema = savedResearchTaskInputSchema.extend({
   inputUploadId: z.string().regex(/^[a-f0-9]{48}$/).optional(),
   inputDescription: z.string().trim().max(2000).optional(),
   projectId: z.string().regex(/^prj_[a-f0-9]{32}$/).optional(),
   configurationFingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   // Older clients may echo their selector, but cannot choose a second AI source.
   advisor: z.object({ gatewayId: z.string().trim().regex(/^gwy_[a-f0-9]{32}$/), model: z.string().trim().min(1).max(200) }).strict().optional()
-}).superRefine((task, context) => {
-  if (task.orchestration.collaborations.length > 0 && !task.git.enabled) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["git", "enabled"],
-      message: "协作组要求启用 Git 机制"
-    });
-  }
 });
 export type ConfigRecommendationInput = z.infer<typeof configRecommendationInputSchema>;
 export interface ConfigRecommendationResult {

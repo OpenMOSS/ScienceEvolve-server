@@ -1060,9 +1060,9 @@ export interface ScopedGroupRun {
   activationRequestId: string;
   workflowRevision: number;
   leaderAgentId: AgentId;
-  baseCommit: string;
-  groupBranch: string;
-  integrationTarget: string;
+  baseCommit?: string;
+  groupBranch?: string;
+  integrationTarget?: string;
   status: string;
 }
 
@@ -1087,7 +1087,7 @@ export interface ScopedExecution {
   arrivalRequestId: string;
   agentId: AgentId;
   ownershipEpoch: number;
-  executionBranch: string;
+  executionBranch?: string;
   worktreePath: string;
   status: string;
 }
@@ -1202,7 +1202,7 @@ export interface MemberExecution {
   purpose: "delivery" | "final-integration";
   ownershipEpoch: number;
   status: MemberExecutionStatus;
-  executionBranch: string;
+  executionBranch?: string;
   worktreePath: string;
   pullRequestId?: PullRequestId;
   invocationId?: InvocationId;
@@ -1373,6 +1373,8 @@ export interface Project {
   workflowRevision?: number;
   activeNodeRunId?: NodeRunId;
   mainAssistance?: MainAssistanceRecord[];
+  mainConversation?: Array<{ id: string; message: string; createdAt: string;
+    status: "queued" | "processing" | "replied" | "failed" | "unknown"; receivedAt?: string; reply?: string; error?: string }>;
   workflowGates?: import("../../server/src/internal/shared/workflow-gate.js").GateRun[];
   nodeRuns?: NodeRun[];
   groupRuns?: GroupRun[];

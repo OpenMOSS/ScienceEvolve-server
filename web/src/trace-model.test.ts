@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentEvent } from "./types";
-import { buildTraceEntries, isDiagnosticTraceEvent, toolOutput } from "./trace-model";
+import { buildTraceEntries, canonicalTraceEvent, isDiagnosticTraceEvent, toolOutput } from "./trace-model";
 
 function trace(seq: number, kind: string, message = "", fields: Record<string, unknown> = {}): AgentEvent {
   return { seq, type: "agent.trace", agent: "researcher", message, ts: `2026-11-09T00:00:${String(seq).padStart(2, "0")}Z`,
@@ -84,6 +84,24 @@ describe("research trace content and invocation identity", () => {
       lifecycle(4, "invocation.completed")]);
     const activity = entries.find(entry => entry.kind === "activity");
     expect(activity).toMatchObject({ displayState: "process", tools: [expect.objectContaining({ seq: 3 })] });
+  });
+
+  it("keeps truncation with its own preview and only carries confirmed empty results", () => {
+    const mergedTool = (preview: string, final: { outputPreview?: string }) => {
+      const tool = { callId: "call-1", name: "read" };
+      const [entry] = buildTraceEntries([
+        trace(1, "tool.updated", "", { tool: { ...tool, status: "updated", outputPreview: preview, truncated: Boolean(preview) } }),
+        trace(2, "tool.completed", "", { tool: { ...tool, status: "completed", ...final } })
+      ]);
+      if (entry?.kind !== "activity") throw new Error("Expected a tool activity");
+      return entry.tools[0]!;
+    };
+    expect(toolOutput(mergedTool("partial", {}))).toEqual({ text: "partial", truncated: true });
+    expect(toolOutput(mergedTool("partial", { outputPreview: "complete" }))).toEqual({ text: "complete", truncated: false });
+    const empty = canonicalTraceEvent(mergedTool("partial", { outputPreview: "" }))?.tool;
+    expect(empty?.outputPreview).toBe("");
+    expect(empty?.truncated).toBeUndefined();
+    expect(canonicalTraceEvent(mergedTool("", {}))?.tool?.outputPreview).toBeUndefined();
   });
 
   it("honors an explicit final response even when its group contains tools", () => {

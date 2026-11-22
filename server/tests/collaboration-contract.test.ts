@@ -78,14 +78,14 @@ describe("Git opt-in and collaboration dependency", () => {
     ["project creation", createProjectSchema],
     ["saved task", savedResearchTaskInputSchema],
     ["recommendation", configRecommendationInputSchema]
-  ] as const)("%s allows Git without groups and requires it for groups", (_name, schema) => {
+  ] as const)("%s preserves groups independently of Git", (_name, schema) => {
     for (const enabled of [false, true]) {
       const parsed = schema.parse(createInput(undefined, enabled));
       expect(parsed.git.enabled).toBe(enabled);
       expect(parsed.orchestration.collaborations).toEqual([]);
     }
     expect(schema.parse(createInput(validCollaboration(), true)).orchestration.collaborations).toHaveLength(1);
-    expect(() => schema.parse(createInput(validCollaboration(), false))).toThrow("协作组要求启用 Git 机制");
+    expect(schema.parse(createInput(validCollaboration(), false)).orchestration).toEqual(schema.parse(createInput(validCollaboration(), true)).orchestration);
   });
 });
 
@@ -246,9 +246,9 @@ describe("OpenFARS collaboration contract v2", () => {
     }
   });
 
-  it("requires explicit v2 versioning and Git opt-in for collaboration groups", () => {
+  it("requires explicit v2 versioning and accepts the same flat group with Git disabled", () => {
     const gitOff = validCollaboration();
-    expect(() => createProjectSchema.parse(createInput(gitOff, false))).toThrow(/要求启用 Git 机制/);
+    expect(createProjectSchema.parse(createInput(gitOff, false)).orchestration).toEqual(createProjectSchema.parse(createInput(gitOff, true)).orchestration);
 
     const missingCollaborations = validCollaboration() as unknown as Record<string, unknown>;
     delete missingCollaborations.collaborations;

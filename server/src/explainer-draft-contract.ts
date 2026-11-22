@@ -1,10 +1,10 @@
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { orchestrationShapeSchema, savedResearchTaskInputSchema } from "./validation.js";
 
-const fields = savedResearchTaskInputSchema.innerType().shape;
+const fields = savedResearchTaskInputSchema.shape;
 // The public draft parser starts with z.unknown().transform() for legacy graph
 // migration. Publish its actual structural validator rather than an empty any.
-const contracts = { draft: savedResearchTaskInputSchema.innerType().extend({ orchestration: orchestrationShapeSchema }), orchestration: orchestrationShapeSchema,
+const contracts = { draft: savedResearchTaskInputSchema.extend({ orchestration: orchestrationShapeSchema }), orchestration: orchestrationShapeSchema,
   agents: fields.agents, git: fields.git, skillDefinitions: fields.skillDefinitions, mcpDefinitions: fields.mcpDefinitions };
 export const EXPLAINER_SCHEMA_KEYS = Object.keys(contracts);
 const schemas = new Map<string, Record<string, unknown>>();

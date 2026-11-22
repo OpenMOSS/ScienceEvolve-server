@@ -19,7 +19,7 @@ export function runtimeProjectFixture(): Project {
   const executions = arrivals.map((arrival) => ({ id: `exec-${arrival.agentId}`, projectId: "prj_runtime", groupRunId: arrival.groupRunId,
     arrivalRequestId: arrival.requestId, agentId: arrival.agentId, ownershipEpoch: 1,
     executionBranch: `executions/${arrival.agentId}`, worktreePath: "/tmp/worktree", status: "running" }));
-  return normalizeProject({ id: "prj_runtime", title: "Runtime fixture", status: "running", currentAgent: "main", orchestration,
+  return normalizeProject({ id: "prj_runtime", title: "Runtime fixture", status: "running", phase: "model:running", currentAgent: "main", orchestration,
     runCounts: {}, agentProgress: { main: { state: "running", runs: 0 }, writing: { state: "waiting", runs: 0 } },
     scopedGroupRuns: groups, scopedArrivals: arrivals, scopedExecutions: executions,
     scopedManagementTurns: [{ projectId: "prj_runtime", groupRunId: "run-research", agentId: "main", invocationId: "manage-1", coordinatorEpoch: 1, status: "active" }],

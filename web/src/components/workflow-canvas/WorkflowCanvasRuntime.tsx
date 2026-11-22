@@ -113,8 +113,10 @@ function ScopedCollaborationRuntimeDetail({ node, runtime, project, expanded, on
       </li>)}
     </ul>}
     {run && <details className="workflow-runtime-group-facts"><summary>执行详情</summary>
-      <small>分支：{run.groupBranch || "等待创建"}</small>
-      <small>目标：{run.integrationTarget || "等待观测"}</small>
+      {project.git?.enabled ? <>
+        <small>分支：{run.groupBranch || "等待创建"}</small>
+        <small>目标：{run.integrationTarget || "等待观测"}</small>
+      </> : <small>交付方式：项目工作区</small>}
       <small>Workflow revision：{run.workflowRevision}</small>
     </details>}
   </aside>;

@@ -875,7 +875,7 @@ function ScopedWorkflowEditorSurface({
             draggingNodeId={drag?.id} connectionSourceId={linkStart?.source} connectionTargetId={linkTarget}
             invalidTargetId={invalidLink ? linkTarget : undefined} readOnly={locked} suppressGroupMembers
             resolvePresentation={node => node.id === "input" ? { title: "进入协作组", description: "仅此处可发出并行入口边", modelLabel: "PARALLEL", color: "#316ac4", softColor: "#eaf1ff" }
-              : node.id === "finish" ? { title: "结束协作组", description: "等待所有必要路径与 Git 集成", modelLabel: "END", color: "#a65365", softColor: "#f9eaed" }
+              : node.id === "finish" ? { title: "结束协作组", description: "等待所有必要路径完成交付", modelLabel: "END", color: "#a65365", softColor: "#f9eaed" }
               : node.gate ? { title: node.gate.name, description: node.gate.verifier.kind === "code" ? "前序 Agent 执行检查代码" : `检查 Agent：${node.gate.verifier.agentId}`, modelLabel: "GATE", color: "#b56f17", softColor: "#fff2d9" }
               : node.collaboration ? { title: node.displayName ?? node.name, description: "子协作组 · 可进入内部编排", modelLabel: "GROUP", initials: "组", color: "#5c5bd6", softColor: "#eeedff" }
               : { title: node.displayName ?? node.name, description: "引用同一 Agent · 保留原 session", modelLabel: "AGENT", color: "#25714e", softColor: "#e7f1e9" }}

@@ -76,6 +76,7 @@ describe("visible research output cards", () => {
     expect(screen.getByText("完成")).not.toBeVisible();
     fireEvent.click(screen.getByText("工具调用"));
     expect(screen.getByText("完成")).toBeVisible();
+    expect(screen.getByText("（空结果）")).toBeVisible();
     expect(view.container.querySelector(".agent-thought-panel")).toBeNull();
     expect(view.container.querySelector(".agent-tool-disclosure")).toBeNull();
   });
@@ -97,5 +98,15 @@ describe("visible research output cards", () => {
     expect(screen.getByText("Sample result")).toBeVisible();
     fireEvent.click(screen.getByText("工具调用"));
     expect(screen.getByText("Sample result")).not.toBeVisible();
+  });
+
+  it.each([
+    { status: "completed" },
+    { status: "started", outputPreview: "" },
+    { status: "completed", outputPreview: "", truncated: true }
+  ])("does not label a missing, unfinished or truncated tool result as empty ($status)", tool => {
+    render(<AgentActivityCard entry={entry(`tool.${tool.status}`, "", { callId: "call-one", name: "read", ...tool })} projectCycle={1} />);
+    expect(screen.queryByText("（空结果）")).not.toBeInTheDocument();
+    expect(screen.queryByText("查看工具结果")).not.toBeInTheDocument();
   });
 });

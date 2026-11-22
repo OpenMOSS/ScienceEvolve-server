@@ -1,9 +1,11 @@
+import { mergeProjectSnapshot } from "./project-runtime";
 import { AGENT_TEMPLATES, type Project, type QueueSnapshot } from "./types";
 import { isProjectViewStatus } from "./project-status";
 
 interface ProjectListSnapshot {
   projects: Project[];
   tokenRefreshedAt: number;
+  partial?: true;
 }
 
 const lists = new Map<string, ProjectListSnapshot>();
@@ -59,11 +61,16 @@ function displayProject(value: unknown): Project {
   });
   const scoped = orchestration.schemaVersion === 3 && orchestration.scopedWorkflow
     ? object(orchestration.scopedWorkflow) : undefined;
+  const runtime = p.runtime === undefined ? undefined : object(p.runtime);
+  const collaboration = p.collaboration === undefined ? undefined : object(p.collaboration);
   const usage = p.tokenUsage === undefined ? undefined : object(p.tokenUsage);
   const intervention = p.userIntervention === undefined ? undefined : object(p.userIntervention);
   if (intervention && intervention.status !== "pending" && intervention.status !== "answered") throw new Error("Invalid intervention");
   return {
     id: string(p.id), title: string(p.title), requirement: string(p.requirement),
+    ...(runtime ? { runtime: { stateRevision: number(runtime.stateRevision), executionCount: number(runtime.executionCount),
+      status, phase: string(p.phase), currentAgent: optionalString(p.currentAgent), activities: [] } } : {}),
+    ...(collaboration ? { collaboration: { stateRevision: number(collaboration.stateRevision) } } : {}),
     status, phase: string(p.phase), cycle: number(p.cycle), turn: 0,
     createdAt: optionalString(p.createdAt), updatedAt: optionalString(p.updatedAt), archivedAt: optionalString(p.archivedAt),
     currentAgent: optionalString(p.currentAgent), queuedAgent: optionalString(p.queuedAgent),
@@ -107,14 +114,31 @@ export function readCachedProjectList(): ProjectListSnapshot | undefined {
   }
 }
 
-export function cacheProjectList(projects: Project[], tokenRefreshedAt: number): void {
+export function cacheProjectList(projects: Project[], tokenRefreshedAt: number, complete = true): Project[] {
   const key = cacheKey();
+  const current = readCachedProjectList();
+  if (current?.projects.length) {
+    const previous = new Map(current.projects.map(project => [project.id, project]));
+    projects = projects.map(project => mergeProjectSnapshot(previous.get(project.id), project));
+  }
+  if (!complete) {
+    lists.set(key, { projects, tokenRefreshedAt, partial: true });
+    return projects;
+  }
   lists.set(key, { projects, tokenRefreshedAt });
   try {
     localStorage.setItem(key, JSON.stringify({ version: 1, projects: projects.map(displayProject), tokenRefreshedAt }));
   } catch {
     // Disabled/full storage must not prevent navigation from reusing the memory snapshot.
   }
+  return projects;
+}
+
+/** Share confirmed progress with the next list render without persisting editable configuration. */
+export function cacheProjectDetail(project: Project): void {
+  const current = readCachedProjectList();
+  if (!current?.projects.some(row => row.id === project.id)) return;
+  cacheProjectList(current.projects.map(row => row.id === project.id ? project : row), current.tokenRefreshedAt, !current.partial);
 }
 
 export function readCachedProjectQueue(): QueueSnapshot | undefined {

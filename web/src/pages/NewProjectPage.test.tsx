@@ -1184,7 +1184,7 @@ describe("NewProjectPage agent configuration", () => {
     expect(canvasDialog.querySelector('[data-node-id="execution"]')).not.toBeNull();
     await user.click(within(canvasDialog).getAllByRole("button", { name: "关闭 Workflow 编辑器" })[0]!);
     expect(screen.getByRole("switch", { name: "启用 Git 机制" })).toBeChecked();
-    expect(screen.getByRole("switch", { name: "启用 Git 机制" })).toBeDisabled();
+    expect(screen.getByRole("switch", { name: "启用 Git 机制" })).toBeEnabled();
 
     await user.type(screen.getByLabelText("项目名称"), "Git 协作组提交验收");
     await user.type(
@@ -1300,12 +1300,16 @@ describe("NewProjectPage agent configuration", () => {
     expect(onCreated).toHaveBeenCalledWith("prj_git_without_group");
   });
 
-  it.each(["text", "canvas"] as const)("starts an ordinary workflow after disabling Git from the %s editor of a group-free v3 draft", async editor => {
+  it.each(["text", "canvas"] as const)("preserves the v3 graph when disabling Git from the %s editor", async editor => {
     const orchestration = structuredClone(DEFAULT_AGENT_ORCHESTRATION);
     upgradeLegacyGroups(orchestration);
+    addScopedGroup(orchestration, { id: "evidence_group", displayName: "Evidence group",
+      leaderAgentId: "main", memberAgentIds: ["idea", "execution"] });
+    orchestration.routes.evidence_group = [{ target: "review", kind: "strong" }];
+    orchestration.routes.main.push({ target: "evidence_group", kind: "weak" });
     const savedTask: SavedResearchTask = {
-      schemaVersion: 2, kind: "scienceevolve-saved-research-task", id: "task_empty_scope_git",
-      title: "已移除全部协作组", requirement: "保留普通 Agent 和所有连接，在不启用 Git 时启动这个研究流程。",
+      schemaVersion: 2, kind: "scienceevolve-saved-research-task", id: "task_grouped_git",
+      title: "保留协作组", requirement: "保留协作组、成员和所有连接，在不启用 Git 时启动这个研究流程。",
       agents: defaultPresetAgentsWithCatalogHarness, orchestration,
       git: { enabled: true, provider: "github", accountId: GITHUB_ACCOUNT_ID,
         repositoryName: "retained-repository", repositoryVisibility: "public" },
@@ -1338,9 +1342,7 @@ describe("NewProjectPage agent configuration", () => {
     await waitFor(() => expect(createProject).toHaveBeenCalledTimes(1));
     const input = vi.mocked(createProject).mock.calls[0]![0];
     expect(input.git).toEqual({ enabled: false });
-    const { scopedWorkflow: _scopedWorkflow, ...ordinary } = orchestration;
-    expect(input.orchestration).toMatchObject({ ...ordinary, schemaVersion: 2 });
-    expect(input.orchestration?.scopedWorkflow).toBeUndefined();
+    expect(input.orchestration).toMatchObject(orchestration);
   });
 
   it("opens the GitHub account library when Git is enabled without a ready account", async () => {

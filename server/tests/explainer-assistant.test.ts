@@ -473,7 +473,7 @@ describe("Project Explainer agent tools and durable project drafts", () => {
     await expect(f.store.call(f.context.id, "undo_draft", mutation(1, "undo-operation"))).rejects.toThrow("没有可撤销");
   });
 
-  it("lets the agent form and save a real three-member collaboration while keeping research unstarted", async () => {
+  it.each([true, false])("saves a three-member collaboration from the assistant with Git enabled %s", async enabled => {
     const f = await setup();
     const graph = structuredClone(f.context.draft.orchestration);
     graph.collaborations = [{ id: "analysis_group", displayName: "并行分析", memberAgentIds: ["idea", "execution", "writing"], renamePolicy: "editable" }];
@@ -481,12 +481,12 @@ describe("Project Explainer agent tools and durable project drafts", () => {
     graph.routes.main = [{ target: "analysis_group", kind: "weak" }, { target: "review", kind: "weak" }];
     for (const name of ["idea", "execution", "writing"]) { (graph.routes as Record<string, unknown>)[name] = null; (graph.decisionPlans as Record<string, unknown>)[name] = null; }
     graph.routes.analysis_group = [{ target: "review", kind: "strong" }]; graph.decisionPlans.analysis_group = "汇总三名成员证据后交给独立复核。";
-    await f.store.call(f.context.id, "update_draft", mutation(0, "group-operation", { title: "并行分析", requirement: "三个 Agent 并行分析后独立复核", git: { enabled: true }, orchestration: graph }));
+    await f.store.call(f.context.id, "update_draft", mutation(0, "group-operation", { title: "并行分析", requirement: "三个 Agent 并行分析后独立复核", git: { enabled }, orchestration: graph }));
     await f.store.call(f.context.id, "save_draft", mutation(1, "save-group-operation"));
     const [task] = await f.tasks.list();
     expect(task.orchestration.collaborations[0].memberAgentIds).toEqual(["idea", "execution", "writing"]);
     expect(task.orchestration.routes.main.map(edge => edge.target)).toEqual(["analysis_group", "review"]);
-    expect(task.git.enabled).toBe(true); expect(await fs.readdir(f.root)).not.toContain("projects");
+    expect(task.git.enabled).toBe(enabled); expect(await fs.readdir(f.root)).not.toContain("projects");
   });
 
   it("keeps a saved draft updated and makes undo persistent instead of only changing the chat text", async () => {

@@ -650,7 +650,6 @@
 .collaboration-add-button { display: inline-flex; min-height: 28px; align-items: center; justify-content: center; gap: 4px; padding: 5px 8px; border: 1px solid #c7c4eb; border-radius: 7px; color: #5d59ad; background: #fff; cursor: pointer; font-size: 9px; font-weight: 750; }
 .collaboration-add-button:hover:not(:disabled) { border-color: #7773c6; background: #eeedff; }
 .collaboration-add-button:disabled { cursor: not-allowed; opacity: .45; }
-.collaboration-git-hint { display: flex; align-items: center; gap: 5px; margin: 0; padding: 6px 7px; border-radius: 6px; color: #777091; background: rgba(255,255,255,.7); font-size: 9px; }
 .collaboration-library-item { margin: 0 8px 7px; border-color: #d8d6f1; background: #f7f6ff; }
 .collaboration-library-section .collaboration-library-item { margin: 0; background: rgba(255,255,255,.82); }
 .collaboration-library-members { display: block; margin-top: 3px; overflow: hidden; color: #6966a8; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }

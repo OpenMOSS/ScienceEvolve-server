@@ -1055,24 +1055,8 @@ export function normalizeAgentOrchestration(
   };
 }
 
-/** Leaving Git mode may remove an empty scoped envelope, never business nodes
- * or routes. A non-flat scope must first be edited into an ordinary workflow. */
-export function orchestrationWithoutGit(value: AgentOrchestrationTemplate): AgentOrchestrationTemplate {
-  if ((value.collaborations?.length ?? 0) > 0 || (value.scopedWorkflow?.groups.length ?? 0) > 0) {
-    throw new Error("请先移除所有协作组再关闭 Git 机制");
-  }
-  if (value.schemaVersion !== 3) return value;
-  const roots = new Set(value.scopedWorkflow?.rootAgentIds);
-  if (roots.size !== value.agents.length || value.agents.some(agent => !roots.has(agent.name))) {
-    throw new Error("关闭 Git 前，请将所有已配置的 Agent 放回普通 Workflow。");
-  }
-  const { scopedWorkflow: _scopedWorkflow, ...ordinary } = value;
-  return { ...ordinary, schemaVersion: 2 };
-}
-
 export function agentOrchestrationError(
-  value: AgentOrchestrationTemplate,
-  gitEnabled?: boolean
+  value: AgentOrchestrationTemplate
 ): string | undefined {
   if (value.canvas?.connections?.input === false) {
     return "用户输入尚未连接到 Agent";
@@ -1122,9 +1106,6 @@ export function agentOrchestrationError(
       members.add(member);
     }
     if (value.schemaVersion !== 3 && local.size < 2) return `${group.id} 必须包含至少两个不同的普通 Agent`;
-  }
-  if ((value.collaborations?.length ?? 0) > 0 && gitEnabled === false) {
-    return "协作组要求启用 Git 机制";
   }
   const outerIds = new Set(workflowOuterNodeIds(value));
   const configured = (name: string) => outerIds.has(name);
@@ -2639,10 +2620,9 @@ function normalizeExecutions(value: unknown): MemberExecution[] {
       purpose: raw.purpose === "final-integration" ? "final-integration" as const : "delivery" as const,
       ownershipEpoch: asNonNegativeInteger(raw.ownershipEpoch),
       status,
-      executionBranch: asString(raw.executionBranch),
       worktreePath: asString(raw.worktreePath),
       ...copyOptionalStrings(raw, [
-        "groupRunId", "pullRequestId", "invocationId", "sessionId",
+        "executionBranch", "groupRunId", "pullRequestId", "invocationId", "sessionId",
         "predecessorExecutionId", "successorExecutionId", "failureReason", "queuedAt",
         "startedAt", "updatedAt", "completedAt", "waitReason", "output"
       ])
@@ -3027,6 +3007,7 @@ export function normalizeProject(value: unknown): Project {
     activeNodeRunId: optionalString(data.activeNodeRunId),
     ...normalizeScopedRuntime(data),
     scopedPullRequests: normalizePullRequests(data.scopedPullRequests),
+    ...(Array.isArray(data.mainConversation) ? { mainConversation: structuredClone(data.mainConversation) as NonNullable<Project["mainConversation"]> } : {}),
     ...(Array.isArray(data.mainAssistance) ? { mainAssistance: structuredClone(data.mainAssistance) as NonNullable<Project["mainAssistance"]> } : {}),
     ...(Array.isArray(data.workflowGates) ? { workflowGates: structuredClone(data.workflowGates) as NonNullable<Project["workflowGates"]> } : {}),
     nodeRuns: normalizeNodeRuns(data.nodeRuns),

@@ -294,7 +294,7 @@ describe("SavedResearchTaskStore", () => {
     expect(listed.map((task) => task.title)).toEqual(["公开 Main 任务"]);
   });
 
-  it("round-trips a collaboration task's required Git creation choice", async () => {
+  it("round-trips the same collaboration task with either Git creation choice", async () => {
     const root = await fs.mkdtemp(
       path.join(os.tmpdir(), "scienceevolve-saved-tasks-collaboration-")
     );
@@ -308,7 +308,9 @@ describe("SavedResearchTaskStore", () => {
       orchestration
     };
 
-    await expect(store.create(input)).rejects.toThrow(/要求启用 Git 机制/);
+    const workspace = await store.create({ ...input, git: { enabled: false } });
+    expect(workspace.git).toEqual({ enabled: false });
+    expect(await new SavedResearchTaskStore(root).get(workspace.id)).toEqual(workspace);
     const created = await store.create({
       ...input,
       git: {
@@ -324,6 +326,7 @@ describe("SavedResearchTaskStore", () => {
       repositoryName: "collaboration-task",
       repositoryVisibility: "public"
     });
+    expect(created.orchestration).toEqual(workspace.orchestration);
     expect(await new SavedResearchTaskStore(root).get(created.id)).toEqual(created);
   });
 

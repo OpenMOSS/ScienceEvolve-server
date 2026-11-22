@@ -11,7 +11,7 @@ import { agentConfigSchema, agentNameSchema, savedResearchTaskInputSchema } from
 import { ProjectExplainerConfigurationError, type ProjectExplainerRecommendationPort } from "./project-explainer.js";
 import { ConfigRecommendationError, generateConfigurationRecommendation, parseConfigurationRecommendationAnswer } from "./internal/shared/configuration-recommendation.js";
 
-export const agentToolRecommendationInputSchema = savedResearchTaskInputSchema.innerType()
+export const agentToolRecommendationInputSchema = savedResearchTaskInputSchema
   .omit({ skillDefinitions: true, mcpDefinitions: true }).extend({
     // Tool planning may precede the project's name/brief. Preserve missing
     // draft context as evidence instead of creating or inventing a project.

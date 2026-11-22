@@ -82,6 +82,12 @@ export function compileWorkflowPrompt(
   policy: InvocationPolicy,
   options: { inlineInbox?: string; recoveryNote?: string } = {}
 ): string {
+  if (request.kind === "main" && request.resumeThreadId && request.terminalControlRepair) {
+    const rejection = request.terminalControlRepair.rejectedAction;
+    const targets = request.control?.mainCapabilities?.routeCandidates ?? request.control?.candidates;
+    if (rejection) return `上一轮的流程工具调用未成功。${rejection}。请更正后重新提交决定。${targets?.length ? "本轮可选路由目标为 " + targets.join("、") + "。" : ""}`;
+    return "上一轮还没有提交下一步决定。请根据刚才的判断，用本轮可用的流程工具提交决定。";
+  }
   const mechanismTurn = Boolean(request.terminalPushObservation || request.terminalPushCoordination || request.worktreeClosing);
   const mandate = mechanismTurn ? "" : normalizeNativeToolGuidance(request.project.agents[request.agent].instructions);
   const task = options.inlineInbox ?? "";

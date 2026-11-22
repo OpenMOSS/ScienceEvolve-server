@@ -1149,6 +1149,7 @@ try { const result = process.argv[3] === "publish" ? database.rollForwardAccepte
       parse.mockClear();
       const active = f.database.activeWorkflowAdjustments("p", undefined, "user");
       expect(active).toEqual([all[80]]);
+      expect(f.database.activeWorkflowAdjustments("p", undefined, "independent")).toEqual(active);
       expect(parse.mock.calls.filter(([raw]) => raw.includes(marker) && raw.includes('"submission":'))).toHaveLength(0);
       const next = { ...f.input("active-next"), replacesRequestId: request.requestId };
       f.database.submitUserWorkflowAdjustment(next);

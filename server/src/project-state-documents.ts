@@ -13,7 +13,7 @@ export type ProjectStateDocumentName = "project.checkpoint" | "sii.ledger" | "se
 export interface ProjectStateDomain {
   projectId: string;
   protocol: "project-state-v1";
-  scheduler: "git" | "serial";
+  scheduler: "git" | "scoped" | "serial";
   createdAt: string;
 }
 export interface ProjectStateDocument {
@@ -186,7 +186,7 @@ export function projectStateCheckpointProjection(document: ProjectStateDocument,
   // Sessions, private bytes and exact document CAS remain available.
   const collaborationOwned = new Set<string>(["status", "phase", "currentAgent", "activeInvocationId"]);
   const lifecycle = Object.fromEntries(fields.filter(k => state[k] !== undefined &&
-    (scheduler !== "git" || !collaborationOwned.has(k))).map(k => [k, structuredClone(state[k])])) as Partial<ProjectState>;
+    (scheduler === "serial" || !collaborationOwned.has(k))).map(k => [k, structuredClone(state[k])])) as Partial<ProjectState>;
   return projectStatePublicValue({ version: document.version, revision: document.revision, lifecycle,
     ...(state.activeAgentExecution ? { activeAgentExecution: structuredClone(state.activeAgentExecution) } : {}) }) as ProjectStateCheckpointProjection;
 }

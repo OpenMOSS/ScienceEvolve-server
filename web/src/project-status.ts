@@ -1,3 +1,7 @@
+import { usesCollaborationScheduler } from "../../server/src/internal/shared/project-runtime-status.js";
+
+export { usesCollaborationScheduler };
+
 /** Web snapshots also accept initial and historical display-only states.
  * Server lifecycle ownership is checked by project-status.test.ts; do not
  * extend this vocabulary with unrelated task, receipt or execution states.
@@ -30,8 +34,8 @@ export function canStopProject(project: { status: ProjectViewStatus; phase?: str
 }
 
 export function canArchiveProject(project: {
-  status: ProjectViewStatus; git?: { enabled: boolean };
+  status: ProjectViewStatus; git?: { enabled: boolean }; orchestration?: { schemaVersion?: number };
 }): boolean {
   return project.status === "completed" || project.status === "cancelled" ||
-    project.status === "paused" && project.git?.enabled === true;
+    project.status === "paused" && usesCollaborationScheduler(project);
 }
