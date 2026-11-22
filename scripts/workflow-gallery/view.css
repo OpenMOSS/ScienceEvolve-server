@@ -1,0 +1,33 @@
+* { box-sizing: border-box; }
+body { margin: 0; background: #edf2ee; color: #223b2c; font-family: 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif; }
+.gallery { padding: 28px 32px 22px; background: #f4f7f4; }
+.brand { font-size: 20px; font-weight: 800; color: #246545; }
+.brand span { margin-left: 20px; font-size: 12px; letter-spacing: 1.8px; color: #627769; }
+h1 { font-size: 30px; line-height: 1.35; margin: 16px 0 8px; }
+.scope { font-size: 15px; line-height: 1.65; max-width: 1260px; margin: 0 0 18px; }
+h2 { margin: 0; font-size: 17px; }
+h2 small { font-size: 12px; font-weight: 500; margin-left: 14px; color: #67786c; }
+.method { background: #e7efe8; border: 1px solid #cfddcf; border-radius: 12px; padding: 17px 20px; }
+.method ol { display: flex; list-style: none; padding: 0; margin: 14px 0; gap: 25px; }
+.method li { flex: 1; position: relative; display: flex; align-items: center; gap: 9px; padding: 12px; background: #fff; border: 1px solid #cad8cc; border-radius: 7px; font-size: 15px; line-height: 1.5; }
+.method li:not(:last-child)::after { content: '→'; position: absolute; right: -21px; color: #557760; }
+.method li b { font-size: 12px; color: #738577; }
+.method p { font-size: 14px; line-height: 1.65; margin: 0; }
+.graph { margin-top: 18px; border: 1px solid #d4dfd5; border-radius: 12px; overflow: hidden; background: #fff; }
+.graph-heading { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #dde6dd; }
+.graph-heading p { font-size: 12px; margin: 7px 0 0; color: #5c7363; }
+.graph-heading > b { font-size: 12px; color: #647568; }
+.gallery .workflow-canvas { border: 0; border-radius: 0; max-height: none; background-color: #f8faf8; }
+.gallery .workflow-canvas-presentation .agent-node { width: 276px; height: 132px; min-height: 132px; grid-template-columns: 30px minmax(0, 1fr); padding: 13px 12px; gap: 8px; cursor: default; }
+.gallery .workflow-canvas-presentation .node-copy { min-width: 0; }
+.gallery .workflow-canvas-presentation .node-title-row { display: block; }
+.gallery .workflow-canvas-presentation .node-copy strong { font-size: 16px; line-height: 20px; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+.gallery .workflow-canvas-presentation .node-copy span { font-size: 12px; line-height: 19px; }
+.gallery .workflow-canvas-presentation .node-copy small { font-size: 11px; line-height: 18px; }
+.gallery .workflow-canvas-presentation .node-badge { display: inline-block; font-size: 8px; line-height: 12px; padding: 0 4px; margin: 2px 0; }
+.gallery .workflow-canvas-presentation .node-avatar { width: 30px; height: 30px; font-size: 11px; }
+.gallery .workflow-canvas-presentation .node-fixed-mark { display: none; }
+.gallery .edge-layer { overflow: visible; }
+.legend { display: flex; gap: 28px; padding: 12px 20px; border-top: 1px solid #dfe7df; font-size: 12px; }
+.strong { color: #25714e; } .weak { color: #91601a; } .parallel { color: #2159b5; } .dispatch { color: #607968; } .finish { color: #a65365; }
+footer { display: flex; justify-content: space-between; gap: 20px; font-size: 11px; padding-top: 15px; color: #607466; }
