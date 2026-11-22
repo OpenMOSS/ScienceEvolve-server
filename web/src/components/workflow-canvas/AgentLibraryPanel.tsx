@@ -1,4 +1,4 @@
-import { GitBranch, Plus, Search, Trash2, UsersRound, X } from "lucide-react";
+import { Plus, Search, Trash2, UsersRound, X } from "lucide-react";
 import { Fragment, useState, type CSSProperties } from "react";
 import type { AgentDefinition, AgentOrchestrationTemplate, AgentTemplate } from "../../types";
 import { agentMeta } from "../../lib";
@@ -14,11 +14,10 @@ const COLORS: Record<string, [string, string]> = {
   cyan: ["#177588", "#e1f4f5"], violet: ["#76599d", "#f1ebf8"], rose: ["#a65365", "#f9eaed"], slate: ["#526674", "#eaf0f3"]
 };
 
-export function AgentLibraryPanel({ orchestration, selectedId, readOnly = false, gitEnabled = false, searchable = false, onSelectMain, onSelectCollaboration, onAddCopy, onRemoveTemplate, onShowCreate, onShowCreateCollaboration }: {
+export function AgentLibraryPanel({ orchestration, selectedId, readOnly = false, searchable = false, onSelectMain, onSelectCollaboration, onAddCopy, onRemoveTemplate, onShowCreate, onShowCreateCollaboration }: {
   orchestration: AgentOrchestrationTemplate;
   selectedId?: string;
   readOnly?: boolean;
-  gitEnabled?: boolean;
   searchable?: boolean;
   onSelectMain: () => void;
   onSelectCollaboration: (id: string) => void;
@@ -51,9 +50,8 @@ export function AgentLibraryPanel({ orchestration, selectedId, readOnly = false,
     {onShowCreateCollaboration && <section className="collaboration-library-section" aria-label="协作组库">
       <div className="collaboration-library-heading">
         <span><UsersRound size={14} /><strong>协作组</strong><em>{collaborations.length}</em></span>
-        <button type="button" className="collaboration-add-button" onClick={onShowCreateCollaboration} disabled={readOnly} title={gitEnabled ? "新增协作组" : "先启用 Git 机制"} aria-label="新增协作组"><Plus size={13} /><span>新建</span></button>
+        <button type="button" className="collaboration-add-button" onClick={onShowCreateCollaboration} disabled={readOnly} title="新增协作组" aria-label="新增协作组"><Plus size={13} /><span>新建</span></button>
       </div>
-      {!gitEnabled && <p className="collaboration-git-hint"><GitBranch size={12} />启用 Git 机制后可创建协作组</p>}
       {collaborations.map((group) => {
         const refs = collaborationMemberRefs(orchestration, group);
         const scoped = orchestration.schemaVersion === 3;

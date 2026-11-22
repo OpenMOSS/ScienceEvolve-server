@@ -1,3 +1,5 @@
+import { ProjectInteractionComposer } from "../components/ProjectInteractionComposer";
+import { normalizeMarkdownMath } from "../markdown-math";
 import {
   type FormEvent,
   type KeyboardEvent,
@@ -22,6 +24,8 @@ import {
   CheckCircle2,
   CircleStop,
   LoaderCircle,
+  Plus,
+  X,
   RefreshCw,
   Send
 } from "lucide-react";
@@ -53,7 +57,7 @@ import type {
   Catalog
 } from "../types";
 
-export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
+export function ProjectExplainerPanel({ projectId, active = true, onClose }: { projectId: string; active?: boolean; onClose?: () => void }) {
   const [events, setEvents] = useState<ProjectExplainerEvent[]>(() => restoreExplainerMessages(readCachedResource<ProjectExplainerEvent[]>(`project-explainer:${projectId}:events`) ?? []));
   const [runtimeConfig, setRuntimeConfig] = useState<ProjectExplainerRuntimeConfig | undefined>(() => readCachedResource(`project-explainer:${projectId}:config`));
   const [configDraft, setConfigDraft] = useState<ProjectExplainerConfigInput>();
@@ -64,11 +68,9 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
   const [gatewayRefreshError, setGatewayRefreshError] = useState("");
   const [configError, setConfigError] = useState("");
   const [configNotice, setConfigNotice] = useState("");
-  // Keep the running page compact; tests open the editor so field-level
-  // validation remains directly exercisable without an extra click.
-  const [configEditorOpen, setConfigEditorOpen] = useState(
-    () => import.meta.env.MODE === "test"
-  );
+  const [configEditorOpen, setConfigEditorOpen] = useState(false);
+  const configOpenRef = useRef<HTMLButtonElement>(null);
+  const configCloseRef = useRef<HTMLButtonElement>(null);
   const [question, setQuestion] = useState("");
   const [historyLoading, setHistoryLoading] = useState(true);
   const [streaming, setStreaming] = useState(false);
@@ -83,6 +85,10 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
   const historyRequestRef = useRef(0);
   const gatewayRefreshRequestRef = useRef(0);
   const currentProjectRef = useRef(projectId); currentProjectRef.current = projectId;
+
+  useEffect(() => {
+    if (active && configEditorOpen) configCloseRef.current?.focus();
+  }, [active, configEditorOpen]);
 
   const loadRuntimeConfig = useCallback(async () => {
     try {
@@ -193,9 +199,9 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     const transcript = transcriptRef.current;
-    if (!transcript) return;
+    if (!active || !transcript) return;
     transcript.scrollTop = transcript.scrollHeight;
-  }, [events]);
+  }, [active, events]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -280,7 +286,7 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
       setQuestion("");
       setRemoteActive(false);
       setHistoryLoading(false);
-      setResetNotice("解说上下文已刷新，可以重新询问。");
+      setResetNotice("已开始新的解说会话。");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "解说上下文刷新失败");
     } finally {
@@ -504,13 +510,13 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
   };
 
   return (
-    <section className="project-explainer-panel" aria-label="项目解说 Agent">
+    <section className="project-explainer-panel project-interaction-surface" aria-label="项目解说 Agent">
       <div className="project-explainer-heading">
         <div>
           <span className="project-explainer-icon"><Bot size={18} /></span>
           <span>
-            <small>PROJECT EXPLAINER · {activeHarnessLabel}</small>
-            <strong>询问这个科研项目</strong>
+            <strong>项目解说</strong>
+            <small>只读问答</small>
           </span>
         </div>
         <div className="project-explainer-heading-actions">
@@ -519,51 +525,51 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
             className="project-explainer-reset"
             onClick={() => void resetConversation()}
             disabled={streaming || stopping || remoteActive || resetting || historyLoading}
-            aria-label="刷新解说上下文"
+            aria-label="新建解说会话"
             title="清空当前解说上下文并开始新会话"
           >
-            <RefreshCw className={resetting ? "spin" : undefined} size={13} />
-            刷新
+            {resetting ? <RefreshCw className="spin" size={13} /> : <Plus size={13} />}
+            新建会话
           </button>
-          <span className="project-explainer-policy">只读 · 无 Skills · 无 MCP</span>
+          {onClose && <button type="button" className="project-interaction-close" aria-label="关闭项目面板" title="关闭" onClick={onClose}><X size={17} /></button>}
         </div>
       </div>
       <div className="project-explainer-config-summary" aria-label="Project Explainer 当前运行配置">
         <div className="project-explainer-config-summary-copy">
-          <span className="project-explainer-config-kicker">只读运行配置</span>
-          <strong>{activeHarnessLabel} · {runtimeConfig?.model || configDraft?.model || "未选择 model"}</strong>
+          <strong>{activeHarnessLabel} · {runtimeConfig?.model || configDraft?.model || "未选择模型"}</strong>
           <small>
             {selectedGateway?.name || "未选择全局网关"} · {selectedGateway ? protocolLabel(selectedGateway.protocol) : "等待路由"}
             {routeNeeded && selectedHarness?.nativeProtocol && selectedGateway ? ` · ${protocolLabel(selectedHarness.nativeProtocol)} → ${protocolLabel(selectedGateway.protocol)}` : ""}
           </small>
         </div>
-        <span className={`project-explainer-config-state ${runtimeConfig?.available ? "available" : "pending"}`}>
-          {configStateLabel}
-        </span>
+        {runtimeConfig?.validationWarning ? (
+          <details className="project-explainer-validation">
+            <summary><AlertTriangle size={13} aria-hidden="true" />{configStateLabel}</summary>
+            <p>{runtimeConfig.validationWarning}</p>
+          </details>
+        ) : <span className={`project-explainer-config-state ${runtimeConfig?.available ? "available" : "pending"}`}>{configStateLabel}</span>}
         <button
           type="button"
           className="project-explainer-config-open"
-          onClick={() => setConfigEditorOpen(true)}
+          ref={configOpenRef}
+          onClick={() => setConfigEditorOpen(open => !open)}
           aria-expanded={configEditorOpen}
           aria-controls="project-explainer-runtime-config"
         >
-          切换配置
+          {configEditorOpen ? "收起配置" : "切换配置"}
         </button>
       </div>
-      {runtimeConfig?.validationWarning && <p className="project-explainer-config-warning" role="status">{runtimeConfig.validationWarning}</p>}
       <form
         id="project-explainer-runtime-config"
         className="project-explainer-runtime-config"
         data-open={configEditorOpen ? "true" : "false"}
         role="dialog"
-        aria-modal="true"
         onSubmit={saveRuntimeConfig}
         aria-label="Project Explainer 运行配置"
       >
         <div className="project-explainer-runtime-heading">
           <span>
             <strong>只读运行配置</strong>
-            <small>仅影响后续项目问答，不影响 Main/Worker 工作流</small>
           </span>
           <span className="project-explainer-runtime-heading-actions">
             <em className={runtimeConfig?.available ? "available" : "unavailable"}>
@@ -572,10 +578,11 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
             <button
               type="button"
               className="project-explainer-config-close"
-              onClick={() => setConfigEditorOpen(false)}
+              ref={configCloseRef}
+              onClick={() => { setConfigEditorOpen(false); configOpenRef.current?.focus(); }}
               aria-label="关闭 Project Explainer 配置"
             >
-              关闭
+              返回对话
             </button>
           </span>
         </div>
@@ -690,6 +697,7 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
       <div
         className="project-explainer-transcript"
         ref={transcriptRef}
+        hidden={configEditorOpen}
         aria-live="polite"
         aria-label="项目解说对话"
       >
@@ -704,7 +712,7 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
             if (action) return <ExplainerActionCard key={entry.id} action={action} />;
             if (entry.kind === "user") {
               return (
-                <div className="project-explainer-message user" key={entry.id}>
+                <div className="project-explainer-message user project-interaction-user-message" key={entry.id}>
                   <small>你</small>
                   <p>{entry.text}</p>
                   {!!entry.data?.clientPending && <small>{entry.data.clientPending === "sending" ? "发送中…" : "发送未确认，请检查后重试"}</small>}
@@ -714,13 +722,13 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
             if (entry.kind === "assistant") {
               return (
                 <div className="project-explainer-message assistant" key={entry.id}>
-                  <small><Bot size={12} /> {activeHarnessLabel}</small>
+                  <small><Bot size={14} aria-hidden="true" /> 项目解说</small>
                   <div className="markdown-body">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm, remarkMath]}
                       rehypePlugins={[rehypeSanitize, rehypeKatex]}
                     >
-                      {entry.text || (streaming ? "…" : "")}
+                      {normalizeMarkdownMath(entry.text || (streaming ? "…" : ""))}
                     </ReactMarkdown>
                   </div>
                 </div>
@@ -748,35 +756,31 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
           <div className="project-explainer-empty">
             <Bot size={24} />
             <strong>可直接询问项目现状、实验、论文或评审依据</strong>
-            <small>所选解说 Agent 只能读取本项目 workspaces，不会修改科研文件或流程。</small>
           </div>
         )}
         <ProjectExplainerReplyStatus events={events} active={streaming || remoteActive} />
       </div>
-      <form className="project-explainer-compose" onSubmit={submit}>
-        <textarea
-          value={question}
-          onChange={(event) => {
-            setQuestion(event.target.value);
-            if (error) setError("");
-            if (resetNotice) setResetNotice("");
-          }}
-          onKeyDown={handleQuestionKeyDown}
-          rows={2}
-          maxLength={50_000}
-          disabled={streaming || stopping || remoteActive || resetting || !runtimeConfig?.available}
-          placeholder={
-            remoteActive
+      <form className="project-interaction-form project-explainer-input" onSubmit={submit} hidden={configEditorOpen}>
+        <ProjectInteractionComposer
+          textarea={{
+            value: question,
+            onChange: (event) => {
+              setQuestion(event.target.value);
+              if (error) setError("");
+              if (resetNotice) setResetNotice("");
+            },
+            onKeyDown: handleQuestionKeyDown,
+            rows: 2,
+            maxLength: 50_000,
+            disabled: streaming || stopping || remoteActive || resetting || !runtimeConfig?.available,
+            placeholder: remoteActive
               ? "另一个页面中的解说正在回答…"
               : runtimeConfig && !runtimeConfig.available
-                ? "请先修复并保存上方 Project Explainer 配置…"
-              : "例如：当前实验做到哪一步？论文结论由哪些结果支持？"
-          }
-          aria-label="向项目解说 Agent 提问"
-        />
-        <div>
-          <small>Enter 发送 · Shift+Enter 换行</small>
-          {streaming || stopping ? (
+                ? "请先保存可用的解说配置"
+                : "询问进度、实验结果或论文依据…",
+            "aria-label": "向项目解说 Agent 提问"
+          }}
+          action={streaming || stopping ? (
             <Button
               type="button"
               variant="secondary"
@@ -797,7 +801,7 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
               询问解说
             </Button>
           )}
-        </div>
+        />
         {error && <span className="project-explainer-error" role="alert">{error}</span>}
         {resetNotice && (
           <span className="project-explainer-reset-notice" role="status">

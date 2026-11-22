@@ -1,4 +1,5 @@
 import { archivedWorkflowSessionMatches, validArchivedWorkflowAgentSessions } from "./workflow-session-archive.js";
+import type { WorkflowConfigurationVersion } from "./workflow-adjustments.js";
 import {
   closeSync,
   fstatSync,
@@ -103,6 +104,13 @@ interface ActiveInvocationCommit {
   settled: Promise<void>;
   resolveSettled: () => void;
   recoveryError?: Error;
+}
+
+/** Database reads run before entering publication; the exact workflow version
+ * is rechecked by the writer inside the checkpoint transaction. */
+interface CheckpointValidation {
+  beforeWrite(): Promise<void>;
+  workflowVersion: WorkflowConfigurationVersion;
 }
 
 interface ActiveProjectMutation {
@@ -598,21 +606,35 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
     if (!this.checkpointBases.has(state)) this.checkpointBases.set(state, JSON.parse(JSON.stringify(state)));
   }
 
-  async saveState(state: ProjectState, beforeCommit?: () => void): Promise<void> {
+  /** Rebase an admitted project's Resume on the checkpoint written by its Stop. */
+  async reloadStoppedCheckpoint(state: ProjectState): Promise<void> {
+    const beforeRead = { base: this.checkpointBases.get(state), submitted: structuredClone(state) };
+    const latest = await this.readStateSnapshot(state.id);
+    if (!isRecord(latest) || latest.id !== state.id || typeof latest.controlProtocol !== "string" ||
+      latest.controlProtocol !== state.controlProtocol || typeof latest.phase !== "string" || typeof latest.status !== "string") {
+      throw new Error(`Project ${state.id} has an invalid lifecycle checkpoint`);
+    }
+    if (latest.status !== "paused") throw new Error("Cannot resume before native stop is confirmed");
+    this.refreshCheckpoint(state, beforeRead, latest);
+  }
+
+  /** beforeCommit is a synchronous, database-free publication check. */
+  async saveState(state: ProjectState, beforeCommit?: () => void, validation?: CheckpointValidation): Promise<void> {
     await this.mutateProject(state.id, async () => {
       beforeCommit?.();
       state.updatedAt = nowIso();
       await this.atomicJson(
         path.join(this.projectDir(state.id), "state.json"),
         state,
-        beforeCommit
+        beforeCommit,
+        validation
       );
     });
   }
 
   /** Refresh the durable request/config snapshot after an Agent configuration update. */
-  async refreshRequestSnapshot(state: ProjectState, beforeCommit?: () => void): Promise<void> {
-    beforeCommit?.();
+  async refreshRequestSnapshot(state: ProjectState, beforeCommit?: () => void | Promise<void>): Promise<void> {
+    await beforeCommit?.();
     await this.atomicText(
       path.join(this.projectDir(state.id), "request.md"),
       this.requestMarkdown(state),
@@ -845,10 +867,12 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
 
   private async stableProjectRead<T>(
     projectId: string,
-    read: () => Promise<T>
+    read: () => Promise<T>,
+    signal?: AbortSignal
   ): Promise<T> {
     while (true) {
-      await this.waitForProjectReadBarrier(projectId);
+      await this.waitForProjectReadBarrier(projectId, signal);
+      signal?.throwIfAborted();
       const epoch = this.projectEpoch(projectId);
       let outcome:
         | { ok: true; value: T }
@@ -872,9 +896,10 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
 
   async withStableProjectSnapshot<T>(
     projectId: string,
-    read: () => Promise<T>
+    read: () => Promise<T>,
+    signal?: AbortSignal
   ): Promise<T> {
-    return this.stableProjectRead(projectId, read);
+    return this.stableProjectRead(projectId, read, signal);
   }
 
   private async stableEventSnapshotSize(
@@ -2180,6 +2205,22 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
     return manifestPath;
   }
 
+  async registerWorkspaceArtifact(state: ProjectState, envelope: ControlActionEnvelope): Promise<ArtifactRecord> {
+    const action = envelope.action;
+    if (action.tool !== "publish_artifact" || envelope.projectId !== state.id || state.git?.enabled)
+      throw new Error("Workspace publication requires the publishing project's workspace action");
+    const source = await this.resolveWorkspaceArtifact(state.id, envelope.agent, action.path);
+    const modifiedAt = new Date(source.mtimeMs).toISOString();
+    const record: ArtifactRecord = {
+      id: `${envelope.agent}:${source.relativePath}`, agent: envelope.agent, invocationId: envelope.invocationId,
+      path: source.relativePath, title: action.title, kind: action.kind, description: action.description,
+      size: source.size, mediaType: source.mediaType, sha256: createHash("sha256").update(await fs.readFile(source.sourcePath)).digest("hex"),
+      registeredAt: nowIso(), modifiedAt, updatedAt: modifiedAt
+    };
+    state.artifacts = [...(state.artifacts ?? []).filter(item => item.path !== record.path), record];
+    return record;
+  }
+
   async resolveWorkspaceArtifact(
     projectId: string,
     role: AgentName,
@@ -3197,9 +3238,9 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
     return projectId && (await this.projectStateStore?.domain(projectId)) ? { projectId, name } : undefined;
   }
 
-  protected async atomicJson(filePath: string, value: unknown, beforeCommit?: () => void): Promise<void> {
+  protected async atomicJson(filePath: string, value: unknown, beforeCommit?: () => void, validation?: CheckpointValidation): Promise<void> {
     if (path.basename(filePath) !== "state.json" || value === null || typeof value !== "object") {
-      return this.writeAtomicJson(filePath, value, beforeCommit);
+      return this.writeAtomicJson(filePath, value, beforeCommit, validation);
     }
     // Freeze the submitted JSON before the first async lookup or queue wait.
     // Keep the live object separately for refreshing it after publication.
@@ -3213,7 +3254,7 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
     this.checkpointWrites.set(value, pending);
     try {
       if (previous) await previous.settled;
-      await this.writeAtomicJson(filePath, value, beforeCommit, checkpoint);
+      await this.writeAtomicJson(filePath, value, beforeCommit, validation, checkpoint);
     } finally {
       pending.shift();
       if (!pending.length) this.checkpointWrites.delete(value);
@@ -3222,7 +3263,8 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
   }
 
   private async writeAtomicJson(filePath: string, value: unknown, beforeCommit?: () => void,
-    checkpoint?: PendingCheckpoint): Promise<void> {
+    validation?: CheckpointValidation, checkpoint?: PendingCheckpoint): Promise<void> {
+    if (validation) await validation.beforeWrite();
     const target = await this.formalDocumentPath(filePath);
     if (target) {
       // The read barrier tracks overlapping mutations; it is not a write
@@ -3236,6 +3278,7 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
         if (previous) await previous;
         const prior = await this.projectStateStore!.read(target.projectId, target.name);
         if (!prior) throw new Error("Registered project has no authoritative document");
+        await validation?.beforeWrite();
         beforeCommit?.();
         if (checkpoint && checkpoint.base === undefined)
           throw new Error(`Project ${target.projectId} checkpoint save has no loaded baseline; reload state and apply only the intended changes`);
@@ -3244,11 +3287,13 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
           : value;
         const prepared = await prepareProjectStateDocumentView(filePath, next, prior);
         try {
+          await validation?.beforeWrite();
           beforeCommit?.();
-          // Commit the exact snapshot even if the live object changed.
+          // The worker checks workflow authority and CAS under its writer lock.
+          // Publication can check live memory, but cannot query that worker.
           await this.projectStateStore!.write(target.projectId, target.name, prepared.value, prior.version, document => {
             beforeCommit?.(); prepared.publish(document);
-          });
+          }, validation?.workflowVersion);
           if (checkpoint) this.refreshCheckpoint(value as ProjectState, checkpoint, prepared.value);
         } finally { prepared.discard(); }
       } finally {
@@ -3272,7 +3317,10 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
           throw new Error(`Project checkpoint ${filePath} save has no loaded baseline; reload state and apply only the intended changes`);
         const next = current === undefined ? checkpoint.submitted
           : mergeProjectCheckpoint(checkpoint.base, current, checkpoint.submitted);
-        await this.atomicText(filePath, `${JSON.stringify(next, null, 2)}\n`, beforeCommit);
+        await this.atomicText(filePath, `${JSON.stringify(next, null, 2)}\n`, async () => {
+          await validation?.beforeWrite();
+          beforeCommit?.();
+        });
         this.refreshCheckpoint(value as ProjectState, checkpoint, next);
       } finally {
         release();
@@ -3283,7 +3331,7 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
     await this.atomicText(filePath, `${JSON.stringify(value, null, 2)}\n`, beforeCommit);
   }
 
-  private refreshCheckpoint(state: ProjectState, checkpoint: PendingCheckpoint, saved: unknown): void {
+  private refreshCheckpoint(state: ProjectState, checkpoint: Pick<PendingCheckpoint, "base" | "submitted">, saved: unknown): void {
     const { submitted, base } = checkpoint;
     const refreshed = mergeProjectCheckpoint(submitted, saved, state, "project", true) as ProjectState;
     for (const key of Object.keys(state)) if (!(key in refreshed)) delete (state as unknown as Record<string, unknown>)[key];
@@ -3389,7 +3437,7 @@ function isCurrentMainProjectState(value: unknown): value is ProjectState {
   const scoped = orchestration.schemaVersion === 3;
   let scopedOuterNames: string[] | undefined;
   if (scoped) {
-    if (!isRecord(value.git) || value.git.enabled !== true) return false;
+    if (!isRecord(value.git) || typeof value.git.enabled !== "boolean") return false;
     try {
       scopedOuterNames = workflowOuterNodeIds(normalizeAgentOrchestrationTemplate(orchestration));
     } catch {

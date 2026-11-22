@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { ensureExecutionSummary, getGitHubRepositoryStatus, getProjectGitGraph } from "../../api";
+import { ensureExecutionSummary, getGitHubRepositoryStatus, getProjectGitGraph, searchTreeRequest } from "../../api";
 import { DEFAULT_AGENT_ORCHESTRATION, DEFAULT_AGENTS } from "../../lib";
 import type { AgentEvent, Project } from "../../types";
 import { runtimeProjectFixture } from "../../test/runtime-project";
@@ -12,6 +12,7 @@ import {
 } from "./WorkflowCanvasRuntime";
 
 vi.mock("../../api", () => ({
+  searchTreeRequest: vi.fn(),
   getCatalog: vi.fn(async () => ({ mainSystemPrompt: "FIXED_MAIN_SYSTEM", defaultHarnessId: "codex", harnesses: [] })),
   getHarnessPrompt: vi.fn(async () => ({ status: "source-unavailable", reason: "Native source unavailable in runtime fixture" })),
   ensureExecutionSummary: vi.fn(async () => ({ invocationId: "inv_idea", status: "completed", text: "已完成实验，等待复核。" })),
@@ -354,6 +355,41 @@ function collaborationRuntimeProject(): Project {
 }
 
 describe("WorkflowCanvasRuntime fixed preview", () => {
+  it("opens the live search tree from both runtime Workflow headers and keeps the Workflow open on Escape", async () => {
+    const direction = { id: "speed", kind: "direction" as const, parentId: "root", name: "Speed" };
+    const enabled = { ...project, searchTree: { root: { name: "Initial plan" }, directions: [direction] } };
+    vi.mocked(searchTreeRequest).mockReset().mockResolvedValue({ revision: "a".repeat(40), root: { id: "root", kind: "root", name: "Initial plan", inputs: [] }, nodes: [direction] });
+    render(<WorkflowCanvasRuntime project={enabled} events={events} />);
+    expect(searchTreeRequest).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "查看项目搜索树" }));
+    expect(await screen.findByRole("button", { name: "方向：Speed" })).toBeInTheDocument();
+    expect(searchTreeRequest).toHaveBeenCalledWith(project.id, { operation: "overview" });
+    fireEvent.click(screen.getByRole("button", { name: "返回 Workflow" }));
+    fireEvent.click(screen.getByLabelText("运行 Workflow 缩略画布，点击打开大画布"));
+    const workflow = screen.getByRole("dialog", { name: "运行 Workflow 画布" });
+    const frame = within(workflow).getByLabelText("运行 Workflow 大画布");
+    fireEvent.click(within(workflow).getByRole("button", { name: "查看项目搜索树" }));
+    expect(await screen.findByRole("button", { name: "方向：Speed" })).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "项目搜索树" }), { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "项目搜索树" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "运行 Workflow 画布" })).toBe(workflow);
+    expect(within(workflow).getByLabelText("运行 Workflow 大画布")).toBe(frame);
+  });
+
+  it("explains why the tree is unavailable without querying storage for projects that did not enable one", () => {
+    vi.mocked(searchTreeRequest).mockClear();
+    render(<WorkflowCanvasRuntime project={project} events={events} />);
+    const entry = screen.getByRole("button", { name: "查看项目搜索树" });
+    expect(entry).toBeDisabled();
+    expect(entry).toHaveTextContent("搜索树 · 未启用");
+    expect(entry).toHaveAttribute("title", expect.stringContaining("创建时未启用搜索树"));
+    fireEvent.click(entry);
+    expect(screen.queryByRole("dialog", { name: "项目搜索树" })).toBeNull();
+    fireEvent.click(screen.getByLabelText("运行 Workflow 缩略画布，点击打开大画布"));
+    expect(within(screen.getByRole("dialog", { name: "运行 Workflow 画布" })).getByRole("button", { name: "查看项目搜索树" })).toBeDisabled();
+    expect(searchTreeRequest).not.toHaveBeenCalled();
+  });
+
   it("follows the active node in a large workflow and opens the full canvas", () => {
     const large = { ...project, orchestration: { ...project.orchestration,
       agents: [...project.orchestration.agents, ...Array.from({ length: 8 }, (_, index) => ({
@@ -824,7 +860,7 @@ describe("WorkflowCanvasRuntime fixed preview", () => {
         causeClass: "None",
         startedAt: "2026-09-24T10:02:30.000Z",
         finishedAt: "2026-09-24T10:03:00.000Z",
-        metadata: {}
+        metadata: { resolvedAttemptId: "attempt-init-1" }
       }],
       failureSummary: {
         currentStatus: "healthy",
@@ -838,7 +874,7 @@ describe("WorkflowCanvasRuntime fixed preview", () => {
     render(<WorkflowCanvasRuntime project={failureProject} events={[]} />);
 
     const history = screen.getByLabelText("失败与重试历史");
-    expect(within(history).getByText("历史操作末次记录均为成功")).toBeInTheDocument();
+    expect(within(history).getByText("历史失败均有确认的后续成功记录")).toBeInTheDocument();
     const attempts = within(history).getAllByRole("listitem");
     expect(attempts).toHaveLength(2);
     expect(attempts[0]).toHaveTextContent("Git 尝试失败");

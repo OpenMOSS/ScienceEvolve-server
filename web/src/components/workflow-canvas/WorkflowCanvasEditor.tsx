@@ -1,4 +1,5 @@
-import { Atom, Download, Save, X } from "lucide-react";
+import { WorkflowGateEditor } from "./WorkflowGateEditor";
+import { Atom, Download, GitBranch, Save, SlidersHorizontal, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import type {
   AgentConfig,
@@ -140,6 +141,8 @@ export interface WorkflowCanvasEditorProps {
   onAgentsChange: (value: AgentsConfig) => void;
   onWorkflowNameChange?: (value: string) => void;
   onOpenTextEditor?: () => void;
+  /** Open the project-owned search plan without adding it to Workflow routes. */
+  onOpenSearchTree?: () => void;
   onClose?: () => void;
   onSave?: () => void;
   onDownload?: () => void;
@@ -156,7 +159,7 @@ export interface WorkflowCanvasEditorProps {
   onGeometryObservation?: (observation: CanvasGeometryObservation) => void;
   /** Optional deterministic trace of the layered/tidy/viewport phases. */
   onLayoutSnapshot?: (snapshot: CanvasLayoutOperationSnapshot) => void;
-  /** Creation-time immutable Git choice. Collaboration requires this to be true. */
+  /** Creation-time immutable Git choice. */
   gitEnabled?: boolean;
   onGitEnabledChange?: (enabled: boolean) => void;
   githubAccounts?: GitHubAccountRecord[];
@@ -228,6 +231,7 @@ export function WorkflowCanvasEditor({
   onAgentsChange,
   onWorkflowNameChange,
   onOpenTextEditor,
+  onOpenSearchTree,
   onClose,
   onSave,
   onDownload,
@@ -331,14 +335,13 @@ export function WorkflowCanvasEditor({
     });
   };
   const setCanvasGitMode = (enabled: boolean) => {
-    if (!enabled && (orchestration.collaborations?.length ?? 0) > 0) return;
     onGitEnabledChange?.(enabled);
     setNotice("有未保存修改");
     if (enabled) openGitRepositoryDialog(true);
     else setGitRepositoryDialog(undefined);
   };
   const closeGitRepositoryDialog = () => {
-    if (gitRepositoryDialog?.disableGitOnCancel && !(orchestration.collaborations?.length)) onGitEnabledChange?.(false);
+    if (gitRepositoryDialog?.disableGitOnCancel) onGitEnabledChange?.(false);
     setGitRepositoryDialog(undefined);
   };
   const confirmGitRepositoryDialog = () => {
@@ -1753,7 +1756,6 @@ export function WorkflowCanvasEditor({
     const memberAgentIds = orchestration.agents
       .map((entry) => entry.name)
       .filter((name) => newGroupMembers.has(name));
-    if (!gitEnabled) { setNotice("创建协作组需要先启用 Git 机制"); return; }
     if (!isAgentIdentifier(id) || id === "main" || id === "input" || id === "finish") {
       setNotice("请输入唯一的协作组 ID"); return;
     }
@@ -2246,6 +2248,7 @@ export function WorkflowCanvasEditor({
   const resolvePresentation = useCallback((node: CanvasNode): CanvasNodePresentation => {
     if (node.kind === "input") return { title: "用户输入", description: "用户提交的任务、约束和已有资料。", modelLabel: "input", color: "#446b9b", softColor: "#eaf0f7" };
     if (node.kind === "finish") return { title: "结束", description: "被指定的终止外层节点完成后进入这里。", modelLabel: "工作流结束", color: "#a65365", softColor: "#f9eaed" };
+    if (node.gate) return { title: node.gate.name, description: node.gate.verifier.kind === "code" ? "前序 Agent 执行检查代码" : `检查 Agent：${node.gate.verifier.agentId}`, modelLabel: "GATE", initials: "G", color: "#b56f17", softColor: "#fff2d9" };
     if (node.collaboration) return { title: node.displayName ?? node.name, description: node.memberNodeRefs ? `${node.memberNodeRefs.length} 个直接节点` : `${node.memberAgentIds?.length ?? 0} 名现有 Agent 协作`, modelLabel: "COLLABORATION", initials: "组", color: "#5c5bd6", softColor: "#eeedff" };
     const definition = orchestration.agents.find((entry) => entry.name === node.name);
     if (node.name === "main") return { title: "Main Agent", description: definition?.description ?? "理解目标、协调上下文，并在每轮选择一个外层节点。", modelLabel: agents[node.name]?.model ?? "gpt-5.6-sol", initials: "MA", color: "#25714e", softColor: "#e7f1e9" };
@@ -2346,6 +2349,7 @@ export function WorkflowCanvasEditor({
       </div>
       <div className="header-actions">
         <span className="save-state" aria-live="polite"><i className={saving ? "is-saving" : ""} />{saving ? "保存中" : notice ? "有未保存修改" : "已同步"}</span>
+        {onOpenSearchTree && <button type="button" className="download-button" onClick={onOpenSearchTree} aria-label="编辑搜索树"><GitBranch size={15} /><span>搜索树</span></button>}
         {onDownload && <button type="button" className="download-button" onClick={onDownload} title="下载 Workflow 配置"><Download size={15} /><span>下载配置</span></button>}
         {onSave && <button type="button" className="primary-button" onClick={onSave} disabled={saving || effectiveReadOnly || layoutBusy || nameDraftInvalid}><Save size={15} />{saving ? "保存中" : "保存流程"}</button>}
         {onClose && <button type="button" className="canvas-close-button" onClick={onClose} title="关闭 Workflow 编辑器" aria-label="关闭 Workflow 编辑器"><X size={16} /></button>}
@@ -2370,7 +2374,7 @@ export function WorkflowCanvasEditor({
       <div className="canvas-agent-dialog-panel collaboration-dialog-panel" onKeyDown={(event) => {
         if (event.key !== "Enter") return;
         event.preventDefault();
-        if (gitEnabled && newGroupId.trim() && newGroupDisplayName.trim() && newGroupMembers.size >= 2 && newGroupLeaderId) createCollaboration();
+        if (newGroupId.trim() && newGroupDisplayName.trim() && newGroupMembers.size >= 2 && newGroupLeaderId) createCollaboration();
       }}>
         <div className="dialog-heading"><div><p className="eyebrow">COLLABORATION</p><h2 id="canvas-collaboration-dialog-title">新增协作组</h2></div><button type="button" className="icon-button" onClick={() => setShowAddCollaboration(false)} title="关闭" aria-label="关闭"><X size={16} /></button></div>
         <label><span>组 ID</span><input aria-label="新协作组 ID" value={newGroupId} onChange={(event) => setNewGroupId(event.target.value)} placeholder="例如 evidence_team" maxLength={32} required /></label>
@@ -2383,9 +2387,8 @@ export function WorkflowCanvasEditor({
         </fieldset>
         <label><span>本组 Leader（不执行业务）</span><select aria-label="新协作组 Leader" value={newGroupLeaderId} onChange={(event) => setNewGroupLeaderId(event.target.value)}><option value="">选择现有 Agent</option>{orchestration.agents.filter((entry) => !newGroupMembers.has(entry.name)).map((entry) => <option key={entry.name} value={entry.name}>{entry.name}</option>)}</select></label>
         {orchestration.schemaVersion !== 3 && (orchestration.collaborations?.length ?? 0) > 0 && <fieldset className="collaboration-member-fieldset"><legend>旧平铺组升级：为每组选择非成员 Leader</legend>{orchestration.collaborations?.map((group) => <label key={group.id}>{group.displayName}<select aria-label={`${group.displayName} 迁移 Leader`} value={legacyLeaderSelections[group.id] ?? ""} onChange={(event) => setLegacyLeaderSelections((current) => ({ ...current, [group.id]: event.target.value }))}><option value="">选择 Agent</option>{orchestration.agents.filter((entry) => !group.memberAgentIds.includes(entry.name)).map((entry) => <option key={entry.name} value={entry.name}>{entry.name}</option>)}</select></label>)}</fieldset>}
-        {!gitEnabled && <p className="edge-type-help" role="status">创建协作组需要先启用 Git 机制</p>}
         <p className="edge-type-help">新组添加的是现有 Agent 的图节点引用；原范围节点、连线和 session 不会删除。新组会作为独立复合节点加入外层画布。</p>
-        <div className="dialog-actions"><button type="button" className="secondary-button" onClick={() => setShowAddCollaboration(false)}>取消</button><button type="button" className="primary-button" disabled={!gitEnabled || !newGroupId.trim() || !newGroupDisplayName.trim() || newGroupMembers.size < 2 || !newGroupLeaderId} onClick={createCollaboration}>创建可编排协作组</button></div>
+        <div className="dialog-actions"><button type="button" className="secondary-button" onClick={() => setShowAddCollaboration(false)}>取消</button><button type="button" className="primary-button" disabled={!newGroupId.trim() || !newGroupDisplayName.trim() || newGroupMembers.size < 2 || !newGroupLeaderId} onClick={createCollaboration}>创建可编排协作组</button></div>
       </div>
     </div>
   );
@@ -2447,7 +2450,7 @@ export function WorkflowCanvasEditor({
       </div>
     </div>
   ) : null;
-  const inspector = (
+  const inspector = selectedNode?.gate && !selectedEdge ? <aside className="inspector"><WorkflowGateEditor key={JSON.stringify(selectedNode.gate)} workflow={orchestration} gateId={selectedNode.gate.id} readOnly={effectiveReadOnly || layoutBusy} onChange={value => commit(next => { Object.assign(next, value); })} /></aside> : (
 <CanvasInspector
         organizeAgentSettings={Boolean(inspectorTabs)}
         node={inspectorNode}
@@ -2550,7 +2553,9 @@ export function WorkflowCanvasEditor({
   const canvasBody = (
     <div ref={workspaceRef} className="workspace workflow-editor-workspace">
       <aside className="left-panel">
-        <AgentLibraryPanel searchable={Boolean(inspectorTabs)} orchestration={orchestration} selectedId={selectedId} readOnly={effectiveReadOnly || layoutBusy} gitEnabled={gitEnabled} onSelectMain={() => { setSelectedId("main"); setSelectedEdgeId(undefined); setEditingGroupMemberId(undefined); }} onSelectCollaboration={(id) => { if (orchestration.schemaVersion === 3 && orchestration.scopedWorkflow?.groups.some((group) => group.id === id && group.parentGroupId)) setActiveScopedGroupId(id); else { setSelectedId(id); setSelectedEdgeId(undefined); setEditingGroupMemberId(undefined); } }} onAddCopy={addAgentCopy} onRemoveTemplate={removeAgentTemplate} onShowCreate={() => { setShowAddAgent(true); setNewAgentName(""); setNewAgentDescription(""); setTimeout(() => agentNameInputRef.current?.focus(), 0); }} onShowCreateCollaboration={() => { if (!gitEnabled) { setSelectedId(undefined); setSelectedEdgeId(undefined); setNotice("创建协作组需要先启用 Git 机制"); return; } setNewGroupId(""); setNewGroupDisplayName(""); setNewGroupMembers(new Set()); setNewGroupLeaderId(""); setShowAddCollaboration(true); }} />
+        <button type="button" className={`workflow-settings-entry${selectedId === undefined && !selectedEdgeId ? " is-active" : ""}`} onClick={() => { setSelectedId(undefined); setSelectedEdgeId(undefined); setEditingGroupMemberId(undefined); }}><SlidersHorizontal size={15} /><span><strong>流程设置</strong><small>交付、介入与 Git 机制</small></span></button>
+        <WorkflowGateEditor workflow={orchestration} readOnly={effectiveReadOnly || layoutBusy} onChange={value => commit(next => { Object.assign(next, value); })} onSelect={id => { setSelectedId(id); setSelectedEdgeId(undefined); }} />
+        <AgentLibraryPanel searchable={Boolean(inspectorTabs)} orchestration={orchestration} selectedId={selectedId} readOnly={effectiveReadOnly || layoutBusy} onSelectMain={() => { setSelectedId("main"); setSelectedEdgeId(undefined); setEditingGroupMemberId(undefined); }} onSelectCollaboration={(id) => { if (orchestration.schemaVersion === 3 && orchestration.scopedWorkflow?.groups.some((group) => group.id === id && group.parentGroupId)) setActiveScopedGroupId(id); else { setSelectedId(id); setSelectedEdgeId(undefined); setEditingGroupMemberId(undefined); } }} onAddCopy={addAgentCopy} onRemoveTemplate={removeAgentTemplate} onShowCreate={() => { setShowAddAgent(true); setNewAgentName(""); setNewAgentDescription(""); setTimeout(() => agentNameInputRef.current?.focus(), 0); }} onShowCreateCollaboration={() => { setNewGroupId(""); setNewGroupDisplayName(""); setNewGroupMembers(new Set()); setNewGroupLeaderId(""); setShowAddCollaboration(true); }} />
         {orchestration.schemaVersion !== 3 && (orchestration.collaborations?.length ?? 0) > 0 && <button type="button" className="workflow-settings-entry" disabled={effectiveReadOnly || lockedGroupIds.size > 0} onClick={() => setShowLegacyUpgrade(true)}>升级旧协作组为组内 Workflow</button>}
         {addAgentDialog}
         {addCollaborationDialog}

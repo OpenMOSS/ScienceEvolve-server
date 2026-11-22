@@ -162,6 +162,7 @@ export function WorkflowAdjustmentRecords({ records, total, loadedCount, current
         className={`adjustment-record status-${record.status}${selected?.requestId === record.requestId ? " is-selected" : ""}`} aria-label={`${sourceLabel(record)}的修改 ${record.requestId}`}>
         <div className="adjustment-record-title"><time dateTime={record.submittedAt} title={new Date(record.submittedAt).toString()}>{timestamp(record.submittedAt)}</time>{selected?.requestId === record.requestId && <span className="adjustment-record-selected">当前查看</span>}</div>
         <div className="adjustment-record-facts"><strong>{sourceLabel(record)} · {adjustmentStatusLabel[record.status]}</strong><span>{record.appliedVersion ? `r${record.appliedVersion.revision} · ` : ""}{record.changeCount} 项变更</span></div>
+        <p className="adjustment-record-version">基础 r{record.base.revision}{record.appliedVersion ? ` → 应用 r${record.appliedVersion.revision}` : record.status === "applied" ? " · 已应用" : " · 尚未应用"}</p>
         {record.waitingReason && <p className="adjustment-record-reason">{record.waitingReason}</p>}
         <div className="adjustment-record-actions">{renderActions(record)}</div>
       </article>)}</section>)}</div>

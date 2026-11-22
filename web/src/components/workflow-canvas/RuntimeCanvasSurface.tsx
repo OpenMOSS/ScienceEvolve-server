@@ -218,6 +218,7 @@ export function RuntimeCanvasSurface({
     if (node.kind === "finish") {
       return { title: scopeId ? "结束协作组" : "结束", description: "真实终止路径", modelLabel: "END", color: "#a65365", softColor: "#f9eaed" };
     }
+    if (node.gate) return { title: node.gate.name, description: node.gate.verifier.kind === "code" ? "前序 Agent 检查" : `检查 Agent：${node.gate.verifier.agentId}`, modelLabel: "GATE", initials: "G", color: "#b56f17", softColor: "#fff2d9" };
     if (node.collaboration) {
       return { title: node.displayName ?? node.name, description: `${node.memberAgentIds?.length ?? 0} 名成员协作`, modelLabel: collaborationProgressById[node.id]?.phaseLabel ?? runtimeNodeLabel(reconciledNodeStates[node.id]), initials: "组", color: "#5c5bd6", softColor: "#eeedff" };
     }

@@ -1,3 +1,5 @@
+import { WorkflowGateRuns } from "./WorkflowGateRuns";
+import { SearchTreeDialog } from "../SearchTreeDialog";
 import { currentScopedGroupRun, scopedGroupDisplayState } from "../../scoped-runtime";
 import {
   useCallback,
@@ -80,6 +82,7 @@ function RuntimeNodeDetail({
 }) {
   const presentation = resolvePresentation(node);
   const state = runtime.nodeStates[node.id] ?? "waiting";
+  if (node.gate) return <WorkflowGateRuns runs={(project.workflowGates ?? []).filter(run => run.gate.id === node.gate!.id)} />;
   if (node.collaboration) {
     return <CollaborationRuntimeDetail node={node} runtime={runtime} project={project} events={events} />;
   }
@@ -107,7 +110,7 @@ function ScopedCollaborationRuntimeDetail({ node, runtime, project, expanded, on
     </div>
     {expanded && <ul className="workflow-runtime-group-members" aria-label="协作组成员状态">
       {group?.workflow.nodes.map((ref) => <li key={ref.nodeId}>
-        {ref.kind === "collaboration" ? scopedGroupName(project, ref.groupId) : agentMeta(ref.agentId,
+        {ref.kind === "gate" ? `Gate ${ref.gateId}` : ref.kind === "collaboration" ? scopedGroupName(project, ref.groupId) : agentMeta(ref.agentId,
           project.orchestration.agents.find((agent) => agent.name === ref.agentId)?.template).name}
         <small>{runtimeNodeLabel(scopedReferenceDisplayState(project, groupId, ref.nodeId))}</small>
       </li>)}
@@ -266,8 +269,9 @@ function RuntimeCanvasDialog({
   onClose,
   expandedGroupIds,
   onToggleGroup,
+  onOpenSearchTree,
   initialReplay = false
-}: RuntimeCanvasSurfaceProps & { events: AgentEvent[]; onClose: () => void; initialReplay?: boolean }) {
+}: RuntimeCanvasSurfaceProps & { events: AgentEvent[]; onClose: () => void; onOpenSearchTree: () => void; initialReplay?: boolean }) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [replayOpen, setReplayOpen] = useState(initialReplay);
   const [activeScopedGroupId, setActiveScopedGroupId] = useState<string>();
@@ -319,6 +323,7 @@ function RuntimeCanvasDialog({
   const resolvePresentation = useCallback((node: CanvasNode): CanvasNodePresentation => {
     if (node.kind === "input") return { title: scopedView ? "进入协作组" : "用户输入", description: "流程输入", modelLabel: "INPUT", color: "#446b9b", softColor: "#eaf0f7" };
     if (node.kind === "finish") return { title: scopedView ? "结束协作组" : "结束", description: "真实终止路径", modelLabel: "END", color: "#a65365", softColor: "#f9eaed" };
+    if (node.gate) return { title: node.gate.name, description: node.gate.verifier.kind === "code" ? "前序 Agent 检查" : `检查 Agent：${node.gate.verifier.agentId}`, modelLabel: "GATE", initials: "G", color: "#b56f17", softColor: "#fff2d9" };
     if (node.collaboration) return { title: node.displayName ?? node.name, description: `${node.memberAgentIds?.length ?? 0} 名成员协作`, modelLabel: runtimeNodeLabel(viewRuntime.nodeStates[node.id]), initials: "组", color: "#5c5bd6", softColor: "#eeedff" };
     const definition = project.orchestration.agents.find((entry) => entry.name === node.name);
     const meta = agentMeta(node.name, node.template ?? "general");
@@ -354,6 +359,8 @@ function RuntimeCanvasDialog({
             <small>{replayOpen ? "按已保存的执行记录快速回顾 · 可暂停和定位" : previewOpen ? "用户输入 → Agent 执行与输出 → 调度交接" : "动态 Workflow · 当前课题实时执行状态"}</small>
           </div>
           <div className="workflow-runtime-dialog-actions">
+          <button type="button" className="workflow-runtime-preview-toggle" aria-label="查看项目搜索树" disabled={!project.searchTree}
+            title={project.searchTree ? "查看项目当前搜索树与探索记录" : "本项目创建时未启用搜索树，无法查看或在创建后补开"} onClick={onOpenSearchTree}><GitBranch size={14} />{project.searchTree ? "搜索树" : "搜索树 · 未启用"}</button>
           <button type="button" className="workflow-runtime-preview-toggle" aria-pressed={replayOpen} onClick={() => { setReplayOpen(!replayOpen); setPreviewOpen(false); }}>
             <History size={14} />{replayOpen ? "返回实时 Workflow" : "历史回顾"}
           </button>
@@ -481,6 +488,7 @@ export function WorkflowCanvasRuntime({ project, events, harnesses, runtime: run
   const [modalOpen, setModalOpen] = useState(false);
   const [initialReplay, setInitialReplay] = useState(false);
   const [gitTreeOpen, setGitTreeOpen] = useState(false);
+  const [searchTreeOpen, setSearchTreeOpen] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string>();
   const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(new Set());
   useEffect(() => {
@@ -557,6 +565,17 @@ export function WorkflowCanvasRuntime({ project, events, harnesses, runtime: run
             <Button type="button" variant="ghost" data-size="small" icon={<History size={14} aria-hidden="true" />}
               onClick={() => { setInitialReplay(true); setModalOpen(true); }}>历史回顾</Button>
           </div>
+          <div className="workflow-runtime-map-actions"><span>
+            {runtime.currentNodeId
+              ? `${runtimeNodeLabel(runtime.nodeStates[runtime.currentNodeId])} · ${runtime.currentNodeId}`
+              : runtime.queuedNodeId
+                ? `${runtimeNodeLabel(runtime.nodeStates[runtime.queuedNodeId])} · ${runtime.queuedNodeId}`
+                : "等待运行"}
+          </span><button type="button" className="workflow-runtime-preview-toggle" aria-label="查看项目搜索树" disabled={!project.searchTree}
+            title={project.searchTree ? "查看项目当前搜索树与探索记录" : "本项目创建时未启用搜索树，无法查看或在创建后补开"} onClick={() => setSearchTreeOpen(true)}><GitBranch size={14} />{project.searchTree ? "搜索树" : "搜索树 · 未启用"}</button>
+          <button type="button" className="workflow-runtime-preview-toggle" onClick={() => { setInitialReplay(true); setModalOpen(true); }}>
+            <History size={14} />历史回顾
+          </button></div>
         </div>
         {Object.values(runtime.loopStates).length > 0 && (
           <div className="workflow-runtime-loop-summary" aria-label="Loop 运行计数">
@@ -586,8 +605,10 @@ export function WorkflowCanvasRuntime({ project, events, harnesses, runtime: run
           onToggleGroup={toggleGroup}
           onClose={closeModal}
           initialReplay={initialReplay}
+          onOpenSearchTree={() => setSearchTreeOpen(true)}
         />
       )}
+      {searchTreeOpen && project.searchTree && <SearchTreeDialog key={project.id} projectId={project.id} onClose={() => setSearchTreeOpen(false)} />}
       {gitTreeOpen && <GitTreeDialog project={project} onClose={() => setGitTreeOpen(false)} />}
     </>
   );

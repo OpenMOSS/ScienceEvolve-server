@@ -6182,6 +6182,7 @@ label.experiment-mcp-control[data-disabled="true"] {
 }
 
 .trace-scroll {
+  overflow-anchor: none;
   min-height: 360px;
   max-height: calc(100vh - 218px);
   flex: 1;

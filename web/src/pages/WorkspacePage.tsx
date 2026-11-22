@@ -1,38 +1,27 @@
+import { MainAssistancePanel } from "../components/MainAssistancePanel";
+import { WorkflowGateRuns } from "../components/workflow-canvas/WorkflowGateRuns";
+import { SearchTreePanel } from "../components/SearchTree";
 import { artifactRelativeResourceUrl } from "../artifact-html";
 import { getArtifactHtmlPreviewUrl } from "../api";
 import {
-  canonicalTraceEvent,
-  isDiagnosticTraceEvent,
-  isGatewayUsageTraceEvent,
   traceDataString,
   traceDataStrings,
   isThoughtEvent,
-  isHiddenReasoningTraceEvent,
   isToolEvent,
   thoughtSummary,
   toolCommand,
-  toolLabel,
-  toolStatus,
-  toolOutput,
-  traceDetailParts,
-  mergeCanonicalToolEvents,
-  buildTraceEntries,
-  type AgentActivityEntry,
-  type AgentExecutionEntry,
-  type TraceEntry
+  toolLabel
 } from "../trace-model";
-export { buildTraceEntries } from "../trace-model";
-export type { TraceEntry } from "../trace-model";
 import { currentScopedGroupRun, scopedGroupDisplayState, scopedNodeDisplayState, scopedRosterMembers } from "../scoped-runtime";
+import { readCachedProjectList, cacheProjectDetail } from "../project-list-cache";
 import { applyLiveRuntimeSnapshot, mergeProjectSnapshot } from "../project-runtime";
+import { WorkspacePreview } from "../components/WorkspacePreview";
 import { createProjectRefreshScheduler } from "../project-refresh";
 import { acceptedGitHandoff, projectResultSelection } from "../project-results";
 import { resolvePerformanceMetrics, useProjectPerformance } from "../project-performance";
 import { projectLifecycleState, runtimeDisplayState } from "../../../server/src/internal/shared/project-runtime-status.js";
 import {
   type FormEvent,
-  type KeyboardEvent,
-  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -41,16 +30,11 @@ import {
   useState
 } from "react";
 import ReactMarkdown from "react-markdown";
-import { ProjectExplainerReplyStatus, ProjectExplainerTrace } from "../components/ProjectExplainerTrace";
-import { isExplainerConversationMessage, mergeExplainerMessages, reconcileExplainerHistory,
-  pendingExplainerMessage, explainerActionFromEvent, notifyExplainerAction, restoreExplainerMessages } from "../components/project-explainer-events";
-import { ExplainerActionCard } from "../components/ExplainerActionCard";
 import { agentPermissionLabel } from "../../../server/src/internal/shared/agent-permission-metadata.js";
 import rehypeKatex from "rehype-katex";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { normalizeMarkdownMath } from "../markdown-math";
 import {
   Activity,
   AlertTriangle,
@@ -72,7 +56,6 @@ import {
   FileCode2,
   Maximize2,
   FileText,
-  Filter,
   Folder,
   FolderOpen,
   Gauge,
@@ -87,7 +70,6 @@ import {
   Pause,
   Play,
   Plus,
-  Radio,
   RefreshCw,
   RotateCcw,
   Search,
@@ -98,7 +80,6 @@ import {
 } from "lucide-react";
 import {
   addProjectUserInput,
-  cancelProjectExplainer,
   createUserSkill,
   getArtifact,
   getDisplayedFile,
@@ -109,22 +90,14 @@ import {
   getArtifactSummary,
   getCatalog,
   getProject,
-  getProjectEventDetails,
-  getProjectExplainerConfig,
-  getProjectExplainerHistory,
   getQueue,
   projectAction,
-  refreshGatewayModels,
-  resetProjectExplainer,
   respondToUserIntervention,
-  streamProjectExplainerQuestion,
-  updateProjectExplainerConfig,
   updateProjectAgentConfigs,
   updateProjectCollaborationGroup,
   type CollaborationGroupUpdate
 } from "../api";
 import {
-  AgentBadge,
   AgentIcon,
   Brand,
   Button,
@@ -138,14 +111,14 @@ import { ProjectInteractionComposer } from "../components/ProjectInteractionComp
 import { AgentCallGraph } from "../components/AgentCallGraph";
 import { ScionTabs } from "../components/ScionTabs";
 import { ProjectStopDialog } from "../components/ProjectStopDialog";
-import { canStopProject } from "../project-status";
+import { canStopProject, usesCollaborationScheduler } from "../project-status";
 import { WorkflowAdjustmentEditor } from "../components/WorkflowAdjustmentEditor";
 import { AgentToolRecommendation } from "../components/AgentToolRecommendation";
 import { ProjectAuthorizationNotice } from "../components/ProjectAuthorizationNotice";
 import { ProjectServiceFailureNotice } from "../components/ProjectServiceFailureNotice";
 import { withProjectAuthorizationWaiting } from "../lib";
 import { AgentPromptPanels } from "../components/workflow-canvas/AgentPromptPanels";
-import { cacheResource, readCachedResource } from "../resource-cache";
+import { readCachedResource } from "../resource-cache";
 import { ExperimentMcpControl } from "../components/ExperimentMcpControl";
 import { ExplainerRecommendationSettings, RecommendationProvider } from "../components/RecommendationContext";
 import { CollaborationDissolutionPlanner } from "../components/workflow-canvas/CollaborationDissolutionPlanner";
@@ -172,16 +145,10 @@ import {
   formatRelativeTime,
   formatTokenCount,
   agentMcpServerKey,
-  gatewayCombinationTestState,
-  gatewayHarnessTestState,
-  gatewayModelTestOptions,
-  harnessOptionsForPurpose,
   harnessSupportsPurpose,
   humanFileSize,
   isAgentTemplate,
   isLarkSkill,
-  normalizeInvocationPerformance,
-  protocolLabel,
   projectWaitingLabel,
   SYSTEM_CONTROLLER_AGENT
 } from "../lib";
@@ -198,35 +165,32 @@ import type {
   ArtifactDirectoryEntry,
   ArtifactDirectoryPage,
   DisplayItem,
-  ConnectionState,
   Project,
-  ProjectExplainerEvent,
-  ProjectExplainerRuntimeConfig,
-  ProjectExplainerConfigInput,
-  AgentHarness,
   GatewayRecord,
   HarnessCatalogEntry,
-  Catalog,
   QueueSnapshot,
   SkillDefinition,
   DisplaySelection,
   FixedMcpDefinition,
   HandoffRecord,
-  LiveAssistantStream,
   InvocationPerformance,
-  PerformanceAggregate,
   ScopedExecution
 } from "../types";
 import { useProjectEvents } from "../useProjectEvents";
+import { PerformanceMetrics } from "../components/PerformanceMetrics";
+import { DEFAULT_TRACE_DISPLAY_LIMIT, TraceView } from "./WorkspaceTrace";
+import { ProjectExplainerPanel } from "./ProjectExplainerPanel";
+
+export { buildTraceEntries } from "../trace-model";
+export type { TraceEntry } from "../trace-model";
+export { AgentActivityCard, TraceView } from "./WorkspaceTrace";
+export { ProjectExplainerPanel } from "./ProjectExplainerPanel";
 
 type CollaborationGroupUpdateIntent =
   | Omit<Extract<CollaborationGroupUpdate, { action: "rename" }>, "requestId">
   | Omit<Extract<CollaborationGroupUpdate, { action: "dissolve" }>, "requestId">;
 
 type CenterTab = "trace" | "artifacts" | "results";
-const TRACE_DISPLAY_LIMITS = [100, 500, 1_000, 2_000, 5_000] as const;
-type TraceDisplayLimit = (typeof TRACE_DISPLAY_LIMITS)[number];
-const DEFAULT_TRACE_DISPLAY_LIMIT: TraceDisplayLimit = 1_000;
 const ARTIFACT_PAGE_SIZE = 100;
 const ARTIFACT_DIRECTORY_PAGE_SIZE = 50;
 
@@ -424,80 +388,6 @@ function displayAgentName(agent?: AgentName): string {
   return agent === SYSTEM_CONTROLLER_AGENT ? "main" : agent ?? "";
 }
 
-function ConnectionBadge({ state }: { state: ConnectionState }) {
-  const config = {
-    live: { label: "实时连接", icon: <Radio size={13} /> },
-    connecting: { label: "连接中", icon: <LoaderCircle className="spin" size={13} /> },
-    reconnecting: {
-      label: "正在重连",
-      icon: <RefreshCw className="spin-slow" size={13} />
-    },
-    offline: { label: "连接断开", icon: <CloudOff size={13} /> }
-  }[state];
-  return (
-    <span className={`connection-badge connection-${state}`}>
-      {config.icon}
-      {config.label}
-    </span>
-  );
-}
-
-
-function formatLatency(milliseconds: number | undefined): string {
-  if (milliseconds === undefined) return "—";
-  if (milliseconds < 1_000) return `${Math.round(milliseconds)} ms`;
-  return `${(milliseconds / 1_000).toFixed(milliseconds < 10_000 ? 2 : 1)} s`;
-}
-
-function formatTokenSpeed(
-  value: number | undefined,
-  approximate: boolean
-): string {
-  if (value === undefined) return "—";
-  return `${approximate ? "≈" : ""}${value.toFixed(1)} tok/s`;
-}
-
-function PerformanceMetrics({
-  performance,
-  averageFallback,
-  latestToken,
-  hideInactiveSpeed = false,
-  showApproximation = true,
-  compact = false
-}: {
-  performance?: InvocationPerformance;
-  averageFallback?: InvocationPerformance | PerformanceAggregate;
-  latestToken?: InvocationPerformance;
-  hideInactiveSpeed?: boolean;
-  showApproximation?: boolean;
-  compact?: boolean;
-}) {
-  const average = averageFallback?.averageTokensPerSecond ?? performance?.averageTokensPerSecond;
-  const averageSource = averageFallback?.averageTokensPerSecond !== undefined
-    ? averageFallback.tokenSource
-    : performance?.tokenSource ?? "estimated";
-  const fallbackLatency = averageFallback && "invocationId" in averageFallback
-    ? averageFallback.firstTokenLatencyMs
-    : undefined;
-  const latency = latestToken?.firstTokenLatencyMs ?? performance?.firstTokenLatencyMs ?? fallbackLatency;
-  const active = performance?.status === "active" && performance.requestActive !== false;
-  return (
-    <div className={`performance-metrics ${compact ? "compact" : ""}`}>
-      <span title="最近一次实际测得的首 Token 延迟"><small>首 Token 延迟</small><strong>{formatLatency(latency)}</strong></span>
-      {(active || !hideInactiveSpeed) && <span>
-        <small>当前速度</small>
-        <strong>
-          {active && performance.streaming
-            ? formatTokenSpeed(performance.currentTokensPerSecond, showApproximation)
-            : active
-              ? "非流式"
-              : "—"}
-        </strong>
-      </span>}
-      <span><small>平均速度</small><strong>{formatTokenSpeed(average, showApproximation && averageSource !== "official")}</strong></span>
-    </div>
-  );
-}
 
 type ScopedRosterState = ReturnType<typeof scopedGroupDisplayState>;
 
@@ -602,6 +492,7 @@ function buildScopedRosterGroup(
         label: SCOPED_ROSTER_STATE_LABELS[state] ?? runtimeNodeLabel(state)
       }];
     }
+    if (node.kind === "gate") return [];
     const child = buildScopedRosterGroup(project, node.groupId, nextAncestry);
     return child ? [child] : [];
   });
@@ -701,18 +592,16 @@ export function AgentRoster({
             <span />
             {workflowOuterNodes(project.orchestration).length} 个外层节点
           </span>
-          {project.status === "draft" && !project.configurationLocked && (
-            <button
-              type="button"
-              className="agent-model-edit-trigger"
-              onClick={onEditModels}
-              aria-label="编辑 Agent 模型、Prompt、Skills 与 MCP"
-            >
-              <Cpu size={13} />
-              编辑配置
-            </button>
-          )}
-          {project.git?.enabled && project.status === "draft" && !project.configurationLocked && (
+          <button
+            type="button"
+            className="agent-model-edit-trigger"
+            onClick={onEditModels}
+            aria-label="编辑 Agent 模型、Prompt、Skills 与 MCP"
+          >
+            <Cpu size={13} />
+            编辑配置
+          </button>
+          {usesCollaborationScheduler(project) && project.status === "draft" && !project.configurationLocked && (
             <button
               type="button"
               className="agent-model-edit-trigger"
@@ -1423,7 +1312,7 @@ export function AgentModelEditor({
         agents: recommendationAgents, orchestration: project.orchestration, git: { enabled: project.git?.enabled === true } }}
       gateways={gateways} harnesses={harnesses}
       catalogVersion={JSON.stringify([skills, mcpDirectory])}
-      disabled={saving || project.status !== "draft" || project.configurationLocked === true}
+      disabled={saving}
       onApplyTools={(agent, selection) => {
         if (!project.agents[agent]) return;
         setDraftSkills(current => ({ ...current, [agent]: selection.skills }));
@@ -1884,1027 +1773,6 @@ export function AgentModelEditor({
     </RecommendationProvider>
   );
 }
-
-function eventPresentation(event: AgentEvent): {
-  title: string;
-  icon: React.ReactNode;
-  tone: string;
-  diagnosticOnly?: true;
-} {
-  const type = event.type.toLowerCase();
-  const traceKind =
-    typeof event.data?.kind === "string" ? event.data.kind.toLowerCase() : "";
-  const canonical = canonicalTraceEvent(event);
-  if (isGatewayUsageTraceEvent(event)) {
-    return { title: "网关 Token 计量", icon: <Activity size={16} />, tone: "neutral" };
-  }
-  if (type === "control.action.staged") {
-    return { title: "操作待提交", icon: <Activity size={16} />, tone: "neutral" };
-  }
-  if (canonical?.kind === "diagnostic") {
-    return { title: "运行诊断", icon: <Activity size={16} />, tone: "neutral" };
-  }
-  if (canonical?.kind.startsWith("tool.")) {
-    return { title: "工具调用", icon: <TerminalSquare size={16} />, tone: "tool" };
-  }
-  if (canonical?.kind === "assistant.message" || canonical?.kind === "assistant.delta") {
-    return { title: "Agent 过程文字", icon: <BrainCircuit size={16} />, tone: "neutral" };
-  }
-  if (type === "main.assignment.queued") {
-    return { title: "Main 正在评估当前结果并决定下一步", icon: <GitBranch size={16} />, tone: "decision" };
-  }
-  if (type === "main.assignment.committed") {
-    const target = traceDataString(event, "target");
-    const message = event.message.toLowerCase();
-    const title = target === "user" || message.includes("user intervention")
-      ? "Main 正在等待用户处理"
-      : target === "finish" || message.includes("completed")
-        ? "Main 已确认项目完成"
-        : `Main 已将下一步任务交给 ${target || "指定 Agent"}`;
-    return { title, icon: <GitBranch size={16} />, tone: "decision" };
-  }
-  if (type === "workflow.reconfigured") {
-    return { title: "Workflow 已重新配置", icon: <GitBranch size={16} />, tone: "decision" };
-  }
-  if (type === "workflow.tick") {
-    return { title: "流程进展", icon: <Activity size={16} />, tone: "neutral" };
-  }
-  if (type.includes("error") || type.includes("failed")) {
-    return { title: "运行异常", icon: <AlertTriangle size={16} />, tone: "error" };
-  }
-  if (type.includes("intervention")) {
-    return {
-      title: type.includes("answered") ? "用户已回复" : "等待用户介入",
-      icon: <MessageSquareText size={16} />,
-      tone: "decision"
-    };
-  }
-  if (type.includes("user.input")) {
-    return {
-      title: type.includes("delivered")
-        ? "用户需求已送达 main"
-        : "用户新增科研需求",
-      icon: <MessageSquareText size={16} />,
-      tone: "decision"
-    };
-  }
-  if (type.includes("artifact") || type.includes("file")) {
-    return { title: "研究产物已写入", icon: <FileText size={16} />, tone: "artifact" };
-  }
-  if (traceKind === "stderr") {
-    return { title: "运行诊断", icon: <AlertTriangle size={16} />, tone: "error" };
-  }
-  if (traceKind === "output") {
-    return { title: "智能体输出", icon: <Activity size={16} />, tone: "neutral" };
-  }
-  if (traceKind === "tool") {
-    return { title: "工具调用", icon: <TerminalSquare size={16} />, tone: "tool" };
-  }
-  const lifecycleTitles: Record<string, string> = {
-    "invocation.started": "Agent 本轮开始", "agent.started": "Agent 本轮开始",
-    "collaboration.execution.started": "成员执行开始", "agent.execution.started": "成员执行开始",
-    "invocation.completed": "Agent 本轮处理结束", "agent.completed": "Agent 本轮处理结束",
-    "collaboration.execution.completed": "成员执行结束", "agent.execution.ended": "成员执行结束",
-    "workflow.node.started": "Workflow 节点已激活", "workflow.node.completed": "Workflow 节点完成",
-    "collaboration.group.started": "协作组开始", "collaboration.group.completed": "协作组完成",
-    "session.started": "会话已建立", "iteration.started": "迭代开始",
-    "project.completed": "项目已完成", "agent.interrupted": "Agent 本轮已中断"
-  };
-  if (lifecycleTitles[type]) {
-    return { title: lifecycleTitles[type], icon: <Activity size={16} />, tone: "neutral" };
-  }
-  if (type.includes("tool")) {
-    return { title: "工具调用", icon: <TerminalSquare size={16} />, tone: "tool" };
-  }
-  if (type.includes("decision") || type.includes("state")) {
-    return { title: "流程安排更新", icon: <GitBranch size={16} />, tone: "decision" };
-  }
-  return { title: "运行记录", icon: <Activity size={16} />, tone: "neutral", diagnosticOnly: true };
-}
-
-function TraceDisclosure({
-  projectId, events, className, icon, label, children
-}: {
-  projectId: string;
-  events: AgentEvent[];
-  className: string;
-  icon: React.ReactNode;
-  label: string;
-  children: (events: AgentEvent[]) => React.ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  const [retry, setRetry] = useState(0);
-  const [result, setResult] = useState<{ key: string; events?: Map<number, AgentEvent>; error?: true }>();
-  const sequenceKey = [...new Set(events.flatMap(event => event.data?.traceDetailDeferred === true
-    ? traceDetailParts(event).filter(part => part.data?.traceDetailDeferred === true).map(part => part.seq)
-    : []))].sort((left, right) => left - right).join(",");
-  const key = `${projectId}:${sequenceKey}:${retry}`;
-  const current = result?.key === key ? result : undefined;
-  const ready = current?.events;
-  const failed = current?.error;
-  useEffect(() => {
-    if (!open || !sequenceKey || ready || failed) return;
-    const controller = new AbortController();
-    void getProjectEventDetails(projectId, sequenceKey.split(",").map(Number), controller.signal)
-      .then(details => {
-        if (!controller.signal.aborted) setResult({ key, events: new Map(details.map(event => [event.seq, event])) });
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setResult({ key, error: true });
-      });
-    return () => controller.abort();
-  }, [failed, key, open, projectId, ready, sequenceKey]);
-
-  return <details className={className} onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary className="trace-disclosure-toggle">
-      <ChevronRight size={14} className="trace-disclosure-chevron" aria-hidden="true" />
-      {icon}<strong>{label}</strong><span>{events.length}</span>
-    </summary>
-    {!sequenceKey ? children(events) : open && (ready
-      ? children(events.map(event => event.data?.traceDetailDeferred === true
-        ? traceDetailParts(event).map(part => ready.get(part.seq) ?? part).reduce(mergeCanonicalToolEvents)
-        : event))
-      : failed
-        ? <div className="trace-history-feedback" role="alert">详情加载失败 <Button variant="secondary" onClick={() => setRetry(value => value + 1)}>重试</Button></div>
-        : <div className="trace-history-feedback" role="status">正在加载详情…</div>)}
-  </details>;
-}
-
-export const AgentActivityCard = memo(function AgentActivityCard({
-  entry,
-  projectCycle,
-  projectId
-}: {
-  entry: AgentActivityEntry;
-  projectCycle: number;
-  projectId?: string;
-}) {
-  const event = entry.thought ?? entry.event;
-  const canonical = canonicalTraceEvent(event);
-  const data = event.data ?? {};
-  const cycle =
-    typeof data.cycle === "number" || typeof data.cycle === "string"
-      ? String(data.cycle)
-      : String(projectCycle);
-  const heading = entry.contentKind === "summary" ? "可见思考摘要" : entry.displayState === "streaming"
-    ? "Agent 正在输出"
-    : entry.displayState === "final"
-      ? "Agent 最终结果"
-      : entry.displayState === "incomplete"
-        ? "Agent 未完成输出"
-        : "Agent 过程文字";
-  const thought = entry.thought
-    ? thoughtSummary(entry.thought.message)
-    : "";
-  const streaming = entry.displayState === "streaming" && entry.contentKind !== "summary";
-  const outputRef = useRef<HTMLDivElement>(null);
-  const followOutput = useRef(true);
-  useLayoutEffect(() => {
-    const output = outputRef.current;
-    if (output && followOutput.current) output.scrollTop = Math.max(0, output.scrollHeight - output.clientHeight);
-    if (!streaming) followOutput.current = true;
-  }, [streaming, thought]);
-  return (
-    <article className="trace-event trace-action-event" data-trace-message-seq={entry.thought?.seq}>
-      <div className="trace-axis">
-        <span><BrainCircuit size={16} /></span>
-        <i />
-      </div>
-      <div className="trace-body">
-        <div className="trace-meta">
-          {event.agent && <AgentBadge name={event.agent} role={event.agent} subtle />}
-          <time>{formatClock(event.ts)}</time>
-          <span>Cycle {cycle}</span>
-          {!event.data?.liveEphemeral && <span>#{event.seq}</span>}
-          {canonical?.harnessId && <span className="trace-harness-tag">{canonical.harnessId}</span>}
-        </div>
-        <div className="agent-action-row">
-          {thought && <section className="agent-thought-panel">
-            <header>
-              <BrainCircuit size={15} />
-              <strong>{heading}</strong>
-              {entry.displayState === "streaming" && <span className="agent-streaming-dot" />}
-            </header>
-            {entry.contentKind === "summary" ? (
-              <details className="agent-visible-summary">
-                <summary>阅读摘要</summary>
-                <div className="agent-message-markdown"><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeSanitize, rehypeKatex]}>{normalizeMarkdownMath(thought)}</ReactMarkdown></div>
-              </details>
-            ) : (
-              <div
-                className={streaming ? "agent-message-markdown agent-streaming-output" : "agent-message-markdown"}
-                ref={streaming ? outputRef : undefined}
-                role={streaming ? "region" : undefined}
-                aria-label={streaming ? "Agent 正在输出的正文" : undefined}
-                tabIndex={streaming ? 0 : undefined}
-                onScroll={streaming ? ({ currentTarget }) => {
-                  followOutput.current = currentTarget.scrollHeight - currentTarget.clientHeight - currentTarget.scrollTop <= 8;
-                } : undefined}
-              >
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm, remarkMath]}
-                  rehypePlugins={[rehypeSanitize, rehypeKatex]}
-                >
-                  {normalizeMarkdownMath(thought)}
-                </ReactMarkdown>
-              </div>
-            )}
-            {canonical?.messageTruncated && (
-              <div className="agent-message-truncated" role="note">
-                正文展示已截断至 200,000 字符；完整内容已保存到同一调用的 Handoff，
-                可从右侧评审卡或对应“交接已保存”轨迹进入。
-              </div>
-            )}
-          </section>}
-          {entry.tools.length > 0 && <TraceDisclosure projectId={projectId ?? event.projectId ?? ""} events={entry.tools}
-            className="agent-tools-panel" label="工具调用" icon={<TerminalSquare size={15} aria-hidden="true" />}>
-            {tools => (
-              <div className="agent-tool-list" role="region" aria-label="工具调用列表" tabIndex={0}>
-                {tools.map((tool, index) => {
-                  const status = toolStatus(tool);
-                  const result = toolOutput(tool);
-                  const canonicalTool = canonicalTraceEvent(tool)?.tool;
-                  const command = canonicalTool?.name && canonicalTool.input === undefined
-                    ? ""
-                    : toolCommand(tool);
-                  const label = toolLabel(tool);
-                  const preview = (
-                    <>
-                      <strong title={label}>{label === "command_execution" ? "Shell 命令" : label}</strong>
-                      <code>{command}</code>
-                      <span className={`tool-status tool-status-${status.tone}`}>{status.label}</span>
-                    </>
-                  );
-                  return (
-                    <div className="agent-tool-item" key={canonicalTool?.callId ?? `${tool.seq}-${index}`} data-tool-status={canonicalTool?.status ?? status.tone}>
-                      {command || result ? (
-                        <details className="agent-tool-disclosure">
-                          <summary className="agent-tool-preview">
-                            <ChevronRight size={14} aria-hidden="true" />
-                            {preview}
-                          </summary>
-                          <div className="agent-tool-content">
-                            {command && <pre aria-label="工具输入">{command}</pre>}
-                            {result && (
-                              <div className="agent-tool-output">
-                                <strong>工具结果</strong>
-                                {result.truncated && <small>已截断至 40,000 字符</small>}
-                                <pre>{result.text}</pre>
-                              </div>
-                            )}
-                          </div>
-                        </details>
-                      ) : <div className="agent-tool-preview">{preview}</div>}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </TraceDisclosure>}
-        </div>
-      </div>
-    </article>
-  );
-}, (previous, next) => {
-  if (previous.projectCycle !== next.projectCycle || previous.projectId !== next.projectId) return false;
-  if (
-    previous.entry.displayState !== next.entry.displayState ||
-    previous.entry.contentKind !== next.entry.contentKind ||
-    previous.entry.event.seq !== next.entry.event.seq ||
-    previous.entry.thought?.seq !== next.entry.thought?.seq ||
-    previous.entry.thought?.message !== next.entry.thought?.message ||
-    previous.entry.tools.length !== next.entry.tools.length
-  ) {
-    return false;
-  }
-  return previous.entry.tools.every((tool, index) => {
-    const nextTool = next.entry.tools[index]!;
-    if (tool === nextTool) return true;
-    if (tool.seq !== nextTool.seq || tool.message !== nextTool.message) return false;
-    if (tool.data?.traceDetailDeferred || nextTool.data?.traceDetailDeferred) return false;
-    const before = canonicalTraceEvent(tool)?.tool;
-    const after = canonicalTraceEvent(nextTool)?.tool;
-    return before?.name === after?.name && before?.status === after?.status &&
-      before?.input === after?.input && before?.outputPreview === after?.outputPreview &&
-      before?.truncated === after?.truncated && before?.isError === after?.isError;
-  });
-});
-
-function AgentExecutionCard({ entry }: { entry: AgentExecutionEntry }) {
-  const [now, setNow] = useState(Date.now());
-  const active = entry.state === "waiting" || entry.state === "processing";
-  useEffect(() => {
-    if (!active) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, [active]);
-  const titles = {
-    waiting: "Agent 本轮开始", processing: "Agent 正在处理", completed: "Agent 本轮处理结束",
-    failed: "Agent 本轮执行失败", interrupted: "Agent 本轮已中断", incomplete: "Agent 本轮处理未完成"
-  };
-  const agent = entry.event.agent ?? entry.event.agentId;
-  const task = entry.updates.map(event => traceDataString(event, "assignedTask")).find(Boolean);
-  const reason = traceDataString(entry.event, "reason") || traceDataString(entry.event, "triggerReason");
-  const duration = Math.max(0, Math.round(((active ? now : Date.parse(entry.updatedAt)) - Date.parse(entry.event.ts)) / 1000));
-  return <article className={`trace-event trace-execution trace-${entry.state}`}>
-    <div className="trace-axis"><span><Activity size={16} /></span><i /></div>
-    <div className="trace-body">
-      <div className="trace-meta"><time>{formatClock(entry.event.ts)}</time><span>最近活动 {formatClock(entry.updatedAt)}</span>
-        {Number.isFinite(duration) && <span>{duration} 秒</span>}{agent && <AgentBadge role={agent} subtle />}</div>
-      <div className="trace-title-row"><strong>{titles[entry.state]}</strong></div>
-      {task && <p>{task}</p>}
-      {reason && <p>唤醒原因：{reason}</p>}
-      {entry.updates.length > 0 && (
-        <details className="trace-execution-details">
-          <summary className="trace-disclosure-toggle">
-            <ChevronRight size={14} className="trace-disclosure-chevron" aria-hidden="true" />
-            <strong>本轮执行记录</strong><span>{entry.updates.length}</span>
-          </summary>
-          <ul aria-label="本轮执行记录">
-            {entry.updates.map(event => (
-              <li key={event.seq}><time>{formatClock(event.ts)}</time> · {event.type}{event.message && ` · ${event.message}`}</li>
-            ))}
-          </ul>
-        </details>
-      )}
-    </div>
-  </article>;
-}
-
-const EventCard = memo(function EventCard({ event, projectCycle }: { event: AgentEvent; projectCycle: number }) {
-  const presentation = eventPresentation(event);
-  const data = event.data ?? {};
-  const detail =
-    data.path ??
-    data.tool ??
-    data.toolName ??
-    (event.type === "main.assignment.committed" ? data.target : undefined) ??
-    data.band;
-  const cycle =
-    typeof data.cycle === "number" || typeof data.cycle === "string"
-      ? String(data.cycle)
-      : String(projectCycle);
-  const performance = normalizeInvocationPerformance(data.performance);
-  return (
-    <article className={`trace-event trace-${presentation.tone}`}>
-      <div className="trace-axis">
-        <span>{presentation.icon}</span>
-        <i />
-      </div>
-      <div className="trace-body">
-        <div className="trace-meta">
-          <time>{formatClock(event.ts)}</time>
-          <span>Cycle {cycle}</span>
-          {!event.data?.liveEphemeral && <span>#{event.seq}</span>}
-        </div>
-        <div className="trace-title-row">
-          <strong>{presentation.title}</strong>
-          {event.agent && <AgentBadge role={event.agent} subtle />}
-        </div>
-        <p>{event.message || "状态已更新，等待下一步调度。"}</p>
-        {detail !== undefined && detail !== "" && (
-          <span className="trace-detail">
-            <Code2 size={13} />
-            {String(detail)}
-          </span>
-        )}
-        {performance && (
-          <div className="trace-performance" aria-label="单次调用性能">
-            <PerformanceMetrics performance={performance} />
-            <small>
-              Attempt {performance.attempt + 1} · 输出 {performance.outputTokens.toLocaleString()} tokens ·
-              {performance.tokenSource === "official" ? " Provider usage" : " 本地估算"}
-              {performance.streaming ? " · 真实流式" : " · 缓冲/非流式"}
-            </small>
-          </div>
-        )}
-      </div>
-    </article>
-  );
-});
-
-function liveAssistantEvent(stream: LiveAssistantStream, index: number): AgentEvent {
-  const streaming = stream.phase === "streaming";
-  return {
-    seq: 9_000_000_000 + stream.attempt * 10_000 + index,
-    type: "agent.trace",
-    agent: stream.agent,
-    message: stream.content,
-    ts: stream.updatedAt,
-    data: {
-      kind: "message",
-      invocationId: stream.invocationId,
-      liveEphemeral: true,
-      livePhase: stream.phase,
-      liveRole: stream.role,
-      canonicalEvent: {
-        schemaVersion: 1,
-        eventId: `${stream.invocationId}:live:${stream.attempt}:${stream.itemId}`,
-        invocationId: stream.invocationId,
-        harnessId: stream.harnessId,
-        kind: streaming ? "assistant.delta" : "assistant.message",
-        attempt: stream.attempt,
-        itemId: stream.itemId,
-        sourceType: "live.assistant",
-        message: stream.content,
-        ...(stream.truncated ? { messageTruncated: true } : {})
-      }
-    }
-  };
-}
-
-function canScrollTraceHistory(container: HTMLElement | null, target: EventTarget | null): boolean {
-  if (!container || container.scrollTop <= 0) return false;
-  // Let an inner code/result panel consume its own scroll before treating
-  // the gesture as navigation in the outer trace.
-  for (let element = target instanceof Element ? target : null;
-    element && element !== container; element = element.parentElement) {
-    if (element.scrollHeight <= element.clientHeight) continue;
-    const style = window.getComputedStyle(element);
-    if (/^(auto|scroll)$/.test(style.overflowY) &&
-      (element.scrollTop > 0 || /^(contain|none)$/.test(style.overscrollBehaviorY))) return false;
-  }
-  return true;
-}
-
-function artifactWritePath(event: AgentEvent): string {
-  const artifact = event.data?.artifact as { path?: unknown } | undefined;
-  const path = event.data?.path ?? artifact?.path;
-  return typeof path === "string" && path ? path : event.message;
-}
-
-function ArtifactWriteGroup({ events, projectCycle }: { events: AgentEvent[]; projectCycle: number }) {
-  const first = events[0]!;
-  if (events.length === 1) return <EventCard event={first} projectCycle={projectCycle} />;
-  const agent = first.agent ?? first.agentId;
-  return (
-    <article className="trace-event trace-artifact">
-      <div className="trace-axis"><span><FileText size={16} /></span><i /></div>
-      <div className="trace-body trace-artifact-group">
-        <details>
-          <summary className="trace-disclosure-toggle">
-            <ChevronRight size={14} className="trace-disclosure-chevron" aria-hidden="true" />
-            <strong>研究产物已写入</strong>
-            <span>{events.length}</span>
-            {agent && <span className="trace-artifact-agent"><AgentBadge role={agent} subtle /></span>}
-          </summary>
-          <div className="trace-artifact-list" role="region" aria-label="研究产物写入列表" tabIndex={0}>
-            <ul>
-              {events.map(event => (
-                <li key={event.seq}>
-                  <time dateTime={event.ts}>{formatClock(event.ts)}</time>
-                  <span>#{event.seq}</span>
-                  <span className="trace-artifact-path">{artifactWritePath(event)}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </details>
-      </div>
-    </article>
-  );
-}
-
-export const TraceView = memo(function TraceView({
-  events,
-  liveStreams,
-  liveEvents,
-  project,
-  connection,
-  totalEventCount,
-  hasOlder,
-  historyLoading,
-  historyError,
-  onLoadOlder
-}: {
-  events: AgentEvent[];
-  liveStreams: LiveAssistantStream[];
-  liveEvents: AgentEvent[];
-  project: Project;
-  connection: ConnectionState;
-  totalEventCount: number;
-  hasOlder: boolean;
-  historyLoading: boolean;
-  historyError: string;
-  onLoadOlder: (filters?: { agent?: string; keyword?: string }) => Promise<number | void>;
-}) {
-  const [agentFilter, setAgentFilter] = useState<"all" | AgentName>("all");
-  const [displayLimit, setDisplayLimit] = useState<TraceDisplayLimit>(
-    DEFAULT_TRACE_DISPLAY_LIMIT
-  );
-  const [search, setSearch] = useState("");
-  const [historyCount, setHistoryCount] = useState<number>();
-  const [historyBeforeSeq, setHistoryBeforeSeq] = useState<number>();
-  const [extraHistory, setExtraHistory] = useState(0);
-  const historyAnchor = useRef<{ node?: Element; offset: number; height: number; top: number }>();
-  const [follow, setFollow] = useState(true);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const followRef = useRef(follow);
-  const autoScrollRef = useRef(false);
-  const scrollFrameRef = useRef<number | null>(null);
-  const touchStartYRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    followRef.current = follow;
-  }, [follow]);
-
-  const keyword = search.trim().toLowerCase();
-  const matchesTrace = useCallback((event: AgentEvent) =>
-    !isHiddenReasoningTraceEvent(event) && (agentFilter === "all" || event.agent === agentFilter),
-  [agentFilter]);
-  const matchesMessageText = useCallback((event: AgentEvent) => {
-    const text = thoughtSummary(event.message);
-    return Boolean(text && (!keyword || text.toLowerCase().includes(keyword)));
-  }, [keyword]);
-  const matchingEvents = useMemo(() => events.filter(matchesTrace), [events, matchesTrace]);
-  const matchingDiagnosticEvents = useMemo(
-    () => matchingEvents.filter(isDiagnosticTraceEvent),
-    [matchingEvents]
-  );
-  const matchingPrimaryEvents = useMemo(
-    () => matchingEvents.filter((event) => !isDiagnosticTraceEvent(event)),
-    [matchingEvents]
-  );
-  const diagnosticEvents = useMemo(
-    () => matchingDiagnosticEvents.slice(-(displayLimit + extraHistory)),
-    [displayLimit, extraHistory, matchingDiagnosticEvents]
-  );
-  const primaryEvents = useMemo(
-    () => matchingPrimaryEvents.slice(-(displayLimit + extraHistory)),
-    [displayLimit, extraHistory, matchingPrimaryEvents]
-  );
-  const liveAssistantEvents = useMemo(() => {
-    return liveStreams
-      .filter((stream) =>
-        agentFilter === "all" || stream.agent === agentFilter
-      )
-      .map(liveAssistantEvent);
-  }, [agentFilter, liveStreams]);
-  const entries = useMemo(
-    () => buildTraceEntries([
-      ...primaryEvents,
-      ...[...liveEvents.filter(event => matchesTrace(event) && !isDiagnosticTraceEvent(event)), ...liveAssistantEvents].sort((left, right) =>
-        left.ts.localeCompare(right.ts) || left.seq - right.seq
-      )
-    ]),
-    [liveAssistantEvents, liveEvents, matchesTrace, primaryEvents]
-  );
-  const timeline = useMemo(() => {
-    if (keyword) return entries.filter(entry =>
-      entry.kind === "activity" && entry.thought && matchesMessageText(entry.thought));
-    type DiagnosticGroup = { kind: "diagnostics"; id: string; events: AgentEvent[] };
-    type ArtifactGroup = { kind: "artifact-writes"; id: string; events: AgentEvent[] };
-    const items = [
-      ...entries.map(entry => ({
-        event: entry.event,
-        entry: entry.kind === "event" && eventPresentation(entry.event).diagnosticOnly ? undefined : entry
-      })),
-      ...diagnosticEvents.map(event => ({ event, entry: undefined })),
-      ...liveEvents.filter(event => matchesTrace(event) && isDiagnosticTraceEvent(event))
-        .map(event => ({ event, entry: undefined }))
-    ].sort((left, right) =>
-      left.event.ts.localeCompare(right.event.ts) || left.event.seq - right.event.seq
-    );
-    const groups: (TraceEntry | DiagnosticGroup | ArtifactGroup)[] = [];
-    for (const { entry, event } of items) {
-      const previous = groups.at(-1);
-      if (entry?.kind === "event" && event.type === "artifact.published") {
-        const first = previous?.kind === "artifact-writes" ? previous.events[0] : undefined;
-        if (previous?.kind === "artifact-writes" && first &&
-          (first.agent ?? first.agentId) === (event.agent ?? event.agentId) &&
-          String(first.data?.cycle ?? "") === String(event.data?.cycle ?? "") &&
-          (first.invocationId ?? first.data?.invocationId) === (event.invocationId ?? event.data?.invocationId) &&
-          (first.executionId ?? first.data?.executionId) === (event.executionId ?? event.data?.executionId)) {
-          previous.events.push(event);
-        } else {
-          groups.push({ kind: "artifact-writes", id: entry.id, events: [event] });
-        }
-        continue;
-      }
-      if (entry) {
-        groups.push(entry);
-        continue;
-      }
-      if (previous?.kind === "diagnostics") {
-        previous.events.push(event);
-      } else {
-        groups.push({ kind: "diagnostics", id: `diagnostics-${event.seq}`, events: [event] });
-      }
-    }
-    if (!extraHistory) return groups;
-    const firstMessage = groups.findIndex(entry => entry.kind === "activity" &&
-      entry.thought && matchesMessageText(entry.thought));
-    return firstMessage > 0 ? groups.slice(firstMessage) : groups;
-  }, [entries, diagnosticEvents, liveEvents, matchesTrace, keyword, matchesMessageText, extraHistory]);
-  const earlierMessages = useMemo(() => {
-    if (historyBeforeSeq === undefined) return [];
-    return timeline.filter(entry => {
-      const message = entry.kind === "activity" ? entry.thought : undefined;
-      return message && !message.data?.liveEphemeral && message.seq < historyBeforeSeq && matchesMessageText(message);
-    });
-  }, [historyBeforeSeq, matchesMessageText, timeline]);
-  const visibleEventCount = primaryEvents.length + diagnosticEvents.length;
-  const latestVisibleSeq = Math.max(
-    primaryEvents.at(-1)?.seq ?? 0,
-    diagnosticEvents.at(-1)?.seq ?? 0
-  );
-  // The live snapshot is sorted by timestamp, but more than one invocation
-  // can be active at once. Looking only at the last stream misses a delta
-  // that belongs to an older stream, and live tool events are not streams at
-  // all. Track a compact version of every live item so any visible update can
-  // keep the viewport pinned while follow mode is enabled.
-  const liveStreamVersion = liveStreams
-    .map((stream) =>
-      [
-        stream.invocationId,
-        stream.attempt,
-        stream.itemId,
-        stream.phase,
-        stream.role,
-        stream.updatedAt,
-        stream.content.length
-      ].join(":"))
-    .join("|");
-  const liveEventVersion = liveEvents
-    .map((event) =>
-      [event.seq, event.ts, event.type, event.message.length].join(":")
-    )
-    .join("|");
-
-  const scrollToBottom = useCallback(() => {
-    if (!followRef.current || !scrollRef.current) return;
-    if (scrollFrameRef.current !== null) {
-      window.cancelAnimationFrame(scrollFrameRef.current);
-      scrollFrameRef.current = null;
-    }
-
-    autoScrollRef.current = true;
-    let remainingFrames = 2;
-    const settle = () => {
-      const container = scrollRef.current;
-      if (!container || !followRef.current) {
-        autoScrollRef.current = false;
-        scrollFrameRef.current = null;
-        return;
-      }
-
-      container.scrollTop = Math.max(
-        0,
-        container.scrollHeight - container.clientHeight
-      );
-      if (remainingFrames > 0) {
-        remainingFrames -= 1;
-        scrollFrameRef.current = window.requestAnimationFrame(settle);
-        return;
-      }
-
-      // Markdown/content-visibility can settle one frame after React has
-      // committed. Do one final bottom assignment before releasing the
-      // programmatic scroll guard.
-      scrollFrameRef.current = window.requestAnimationFrame(() => {
-        const latest = scrollRef.current;
-        if (latest && followRef.current) {
-          latest.scrollTop = Math.max(
-            0,
-            latest.scrollHeight - latest.clientHeight
-          );
-        }
-        scrollFrameRef.current = null;
-        autoScrollRef.current = false;
-      });
-    };
-
-    scrollFrameRef.current = window.requestAnimationFrame(settle);
-  }, []);
-
-  const pauseFollowing = useCallback(() => {
-    followRef.current = false;
-    setFollow(false);
-    if (scrollFrameRef.current !== null) {
-      window.cancelAnimationFrame(scrollFrameRef.current);
-      scrollFrameRef.current = null;
-    }
-    autoScrollRef.current = false;
-  }, []);
-
-  const pauseForHistoryNavigation = useCallback((target: EventTarget | null) => {
-    if (followRef.current && canScrollTraceHistory(scrollRef.current, target)) pauseFollowing();
-  }, [pauseFollowing]);
-
-  const keepFollowingAfterLayoutScroll = useCallback(() => {
-    const container = scrollRef.current;
-    // Focus restoration, scroll anchoring and viewport/content resizing also
-    // emit scroll events. Only explicit navigation gestures may pause follow.
-    if (!container || autoScrollRef.current || !followRef.current) return;
-    if (container.scrollHeight - container.scrollTop - container.clientHeight > 1) scrollToBottom();
-  }, [scrollToBottom]);
-
-  const toggleFollow = useCallback(() => {
-    setFollow((current) => {
-      const next = !current;
-      followRef.current = next;
-      return next;
-    });
-  }, []);
-
-  const loadEarlier = async () => {
-    const container = scrollRef.current;
-    if (!container || historyLoading || historyAnchor.current) return;
-    const top = container.getBoundingClientRect().top;
-    const node = Array.from(container.querySelector(".trace-list")?.children ?? [])
-      .find(child => child.getBoundingClientRect().bottom > top);
-    historyAnchor.current = {
-      node, offset: node ? node.getBoundingClientRect().top - top : 0,
-      height: container.scrollHeight, top: container.scrollTop
-    };
-    pauseFollowing();
-    setHistoryCount(undefined);
-    setHistoryBeforeSeq(undefined);
-    const beforeSeq = events[0]?.seq;
-    const count = await onLoadOlder({ agent: agentFilter === "all" ? undefined : agentFilter, keyword: keyword || undefined });
-    if (count === undefined) {
-      historyAnchor.current = undefined;
-      return;
-    }
-    if (count > 0) {
-      setExtraHistory(current => Math.max(current + count, events.length + count - displayLimit));
-    }
-    setHistoryCount(count);
-    setHistoryBeforeSeq(beforeSeq);
-  };
-
-  useLayoutEffect(() => {
-    const anchor = historyAnchor.current;
-    const container = scrollRef.current;
-    if (historyCount === undefined || !anchor || !container) return;
-    historyAnchor.current = undefined;
-    if (anchor.node?.isConnected) {
-      container.scrollTop += anchor.node.getBoundingClientRect().top -
-        container.getBoundingClientRect().top - anchor.offset;
-    } else {
-      container.scrollTop = anchor.top + Math.max(0, container.scrollHeight - anchor.height);
-    }
-  }, [historyCount, extraHistory]);
-
-  useEffect(() => {
-    if (historyCount === undefined) return;
-    const timeout = window.setTimeout(() => setHistoryCount(undefined), 6_000);
-    return () => window.clearTimeout(timeout);
-  }, [historyCount]);
-
-  useEffect(() => {
-    if (!follow) {
-      if (scrollFrameRef.current !== null) {
-        window.cancelAnimationFrame(scrollFrameRef.current);
-        scrollFrameRef.current = null;
-      }
-      autoScrollRef.current = false;
-      return;
-    }
-    if (!timeline.length) return;
-    scrollToBottom();
-  }, [
-    agentFilter,
-    diagnosticEvents.length,
-    displayLimit,
-    entries.length,
-    follow,
-    liveEventVersion,
-    liveStreamVersion,
-    latestVisibleSeq,
-    search,
-    scrollToBottom,
-    timeline.length
-  ]);
-
-  useEffect(() => {
-    return () => {
-      if (scrollFrameRef.current !== null) {
-        window.cancelAnimationFrame(scrollFrameRef.current);
-      }
-      scrollFrameRef.current = null;
-      autoScrollRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    // ResizeObserver catches the delayed height change caused by streamed
-    // Markdown and `content-visibility`, which can happen after the React
-    // commit/effect that scheduled the initial scroll. Observe the viewport
-    // too: opening a dialog or resizing the page can change its dimensions.
-    const container = scrollRef.current;
-    const content = container?.querySelector<HTMLElement>(".trace-list");
-    if (!container || !content || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => {
-      if (followRef.current) scrollToBottom();
-    });
-    observer.observe(content);
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, [
-    entries.length,
-    diagnosticEvents.length,
-    liveEventVersion,
-    liveStreamVersion,
-    scrollToBottom
-  ]);
-
-  const loadedHistorySuffix =
-    totalEventCount > events.length
-      ? ` · 已加载 ${events.length.toLocaleString()} / 全部 ${totalEventCount.toLocaleString()}`
-      : "";
-  const allEventsSuffix =
-    matchingEvents.length !== events.length
-      ? ` · 当前已加载范围 ${events.length.toLocaleString()}`
-      : loadedHistorySuffix;
-  const eventCountLabel =
-    keyword ? `${timeline.length.toLocaleString()} 条 Agent 消息` :
-    matchingEvents.length > visibleEventCount
-      ? `显示最新 ${visibleEventCount.toLocaleString()} / ${matchingEvents.length.toLocaleString()} 条${allEventsSuffix}`
-      : `${visibleEventCount.toLocaleString()} 条事件${allEventsSuffix}`;
-
-  return (
-    <div className="trace-view">
-      <div className="trace-toolbar">
-        <div className="trace-status">
-          <ConnectionBadge state={connection} />
-          <span>{eventCountLabel}</span>
-        </div>
-        <div className="trace-tools">
-          <label className="compact-search">
-            <Search size={15} />
-            <input
-              value={search}
-              onChange={(event) => {
-                setHistoryBeforeSeq(undefined);
-                setHistoryCount(undefined);
-                setSearch(event.target.value);
-              }}
-              disabled={historyLoading}
-              placeholder="搜索 Agent 消息"
-              maxLength={300}
-            />
-          </label>
-          <label className="compact-select">
-            <Filter size={14} />
-            <select
-              value={agentFilter}
-              onChange={(event) => {
-                setHistoryBeforeSeq(undefined);
-                setHistoryCount(undefined);
-                setAgentFilter(event.target.value as "all" | AgentName);
-              }}
-              disabled={historyLoading}
-              aria-label="按智能体筛选"
-            >
-              <option value="all">全部 Agent</option>
-              {project.orchestration.agents.map((definition) => (
-                <option value={definition.name} key={definition.name}>
-                  {definition.name} · {agentTemplateFor(project.orchestration, definition.name)}
-                </option>
-              ))}
-              {[...new Set((project.archivedAgentSessions ?? []).map(entry => entry.agentId))]
-                .filter(agent => !project.orchestration.agents.some(definition => definition.name === agent))
-                .map(agent => <option value={agent} key={agent}>{agent} · 已退役{project.archivedAgentSessions?.some(entry => entry.agentId === agent && entry.sessionCount > 0) ? "（原会话保留）" : ""}</option>)}
-            </select>
-          </label>
-          <label
-            className="compact-select trace-limit-select"
-            title="控制前端显示的最新轨迹条数"
-          >
-            <Clock3 size={14} />
-            <select
-              value={displayLimit}
-              disabled={historyLoading}
-              onChange={(event) => {
-                setExtraHistory(0);
-                setHistoryCount(undefined);
-                setHistoryBeforeSeq(undefined);
-                setDisplayLimit(
-                  Number(event.target.value) as TraceDisplayLimit
-                );
-              }}
-              aria-label="显示最新轨迹条数"
-            >
-              {TRACE_DISPLAY_LIMITS.map((limit) => (
-                <option value={limit} key={limit}>
-                  最新 {limit.toLocaleString()} 条
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            className={`follow-button ${follow ? "active" : ""}`}
-            onClick={toggleFollow}
-            aria-pressed={follow}
-            title="自动跟随最新事件"
-          >
-            <Radio size={14} />
-            跟随
-          </button>
-        </div>
-      </div>
-      {hasOlder && (
-        <div className="trace-history-loader">
-          <Button variant="ghost" disabled={historyLoading} onClick={() => void loadEarlier()}>
-            查找更早正文
-          </Button>
-        </div>
-      )}
-      {historyError && <div className="trace-history-feedback" role="alert">{historyError}</div>}
-      {(historyLoading || historyCount !== undefined) && (
-        <div className="trace-history-feedback" role="status">
-          {historyLoading ? "正在查找更早的正文…" :
-            earlierMessages.length ? `找到 ${earlierMessages.length.toLocaleString()} 条更早的 Agent 消息` :
-              hasOlder ? "这批记录中没有匹配的正文" : "没有更早的匹配消息"}
-        </div>
-      )}
-      <div
-        className="trace-scroll"
-        ref={scrollRef}
-        role="region"
-        aria-label="实时轨迹内容"
-        tabIndex={0}
-        onScroll={keepFollowingAfterLayoutScroll}
-        onWheel={(event) => {
-          if (!event.defaultPrevented && !event.ctrlKey && event.deltaY < 0) pauseForHistoryNavigation(event.target);
-        }}
-        onKeyDown={(event) => {
-          if (event.defaultPrevented || event.altKey || event.metaKey ||
-            (event.target instanceof Element && event.target.closest("input, textarea, select, button, a, summary, [contenteditable]:not([contenteditable='false'])"))) return;
-          if (["ArrowUp", "PageUp", "Home"].includes(event.key) || (event.key === " " && event.shiftKey)) pauseForHistoryNavigation(event.target);
-        }}
-        onTouchStart={(event) => { touchStartYRef.current = event.touches.length === 1 ? event.touches[0]?.clientY ?? null : null; }}
-        onTouchMove={(event) => {
-          if (event.touches.length !== 1) { touchStartYRef.current = null; return; }
-          const currentY = event.touches[0]?.clientY;
-          if (!event.defaultPrevented && currentY !== undefined && touchStartYRef.current !== null &&
-            currentY > touchStartYRef.current + 4) pauseForHistoryNavigation(event.target);
-        }}
-        onTouchEnd={() => { touchStartYRef.current = null; }}
-        onTouchCancel={() => { touchStartYRef.current = null; }}
-        onPointerDown={(event) => {
-          if (event.button !== 0 || event.pointerType !== "mouse" || event.target !== event.currentTarget) return;
-          const container = event.currentTarget, bounds = container.getBoundingClientRect();
-          const gutter = Math.max(12, container.offsetWidth - container.clientWidth);
-          if (bounds.width > 0 && container.scrollHeight > container.clientHeight &&
-            event.clientX >= bounds.right - gutter && followRef.current) pauseFollowing();
-        }}
-      >
-        {timeline.length ? (
-          <div className="trace-list">
-            {timeline.map((entry) => (
-              entry.kind === "diagnostics" ? (
-                <TraceDisclosure projectId={project.id} events={entry.events} className="trace-diagnostics"
-                  label="运行诊断" icon={<Activity size={15} aria-hidden="true" />} key={entry.id}>
-                  {diagnostics => (
-                  <div className="trace-diagnostic-list" role="region" aria-label="运行诊断列表" tabIndex={0}>
-                    {diagnostics.map(event => (
-                      <EventCard event={event} projectCycle={project.cycle} key={event.seq} />
-                    ))}
-                  </div>
-                  )}
-                </TraceDisclosure>
-              ) :
-              entry.kind === "artifact-writes" ? (
-                <ArtifactWriteGroup events={entry.events} projectCycle={project.cycle} key={entry.id} />
-              ) : entry.kind === "activity" ? (
-                <AgentActivityCard
-                  entry={entry}
-                  projectId={project.id}
-                  projectCycle={project.cycle}
-                  key={entry.id}
-                />
-              ) : entry.kind === "execution" ? <AgentExecutionCard entry={entry} key={entry.id} /> : (
-                <EventCard
-                  event={entry.event}
-                  projectCycle={project.cycle}
-                  key={entry.id}
-                />
-              )
-            ))}
-            {connection === "live" && project.status === "running" && (
-              <div className="trace-waiting">
-                <span><i /><i /><i /></span>
-                等待智能体的下一条更新
-              </div>
-            )}
-          </div>
-        ) : (
-          <EmptyState
-            icon={<Activity size={27} />}
-            title={events.length ? "没有匹配的轨迹" : "等待第一条 Agent 轨迹"}
-            description={
-              events.length
-                ? "调整搜索词或 Agent 筛选条件。"
-                : "项目启动后，Idea Agent 的动作会实时出现在这里。"
-            }
-          />
-        )}
-      </div>
-    </div>
-  );
-});
 
 function ArtifactViewer({
   projectId,
@@ -3526,7 +2394,7 @@ export function FinalResultsView({
     };
   }, [projectId, selectedItem]);
 
-  const lastCompletedNode = project.git?.enabled && project.status === "completed"
+  const lastCompletedNode = usesCollaborationScheduler(project) && project.status === "completed"
     ? (project.nodeRuns ?? []).filter(node => node.status === "completed" && Number.isFinite(Date.parse(node.completedAt ?? "")))
       .sort((left, right) => Date.parse(right.completedAt!) - Date.parse(left.completedAt!))[0]
     : undefined;
@@ -4218,770 +3086,6 @@ function RuntimeIntegrityCard({ project }: { project: Project }) {
   );
 }
 
-function mergeProjectExplainerEvent(
-  current: ProjectExplainerEvent[],
-  incoming: ProjectExplainerEvent
-): ProjectExplainerEvent[] {
-  return mergeExplainerMessages(current, incoming);
-}
-
-export function ProjectExplainerPanel({ projectId, active = true, onClose }: { projectId: string; active?: boolean; onClose?: () => void }) {
-  const [events, setEvents] = useState<ProjectExplainerEvent[]>(() => restoreExplainerMessages(readCachedResource<ProjectExplainerEvent[]>(`project-explainer:${projectId}:events`) ?? []));
-  const [runtimeConfig, setRuntimeConfig] = useState<ProjectExplainerRuntimeConfig | undefined>(() => readCachedResource(`project-explainer:${projectId}:config`));
-  const [configDraft, setConfigDraft] = useState<ProjectExplainerConfigInput>();
-  const [runtimeCatalog, setRuntimeCatalog] = useState<Pick<Catalog, "gateways" | "harnesses" | "protocols" | "defaultHarnessId">>();
-  const [configLoading, setConfigLoading] = useState(true);
-  const [configSaving, setConfigSaving] = useState(false);
-  const [refreshingGatewayId, setRefreshingGatewayId] = useState("");
-  const [gatewayRefreshError, setGatewayRefreshError] = useState("");
-  const [configError, setConfigError] = useState("");
-  const [configNotice, setConfigNotice] = useState("");
-  const [configEditorOpen, setConfigEditorOpen] = useState(false);
-  const configOpenRef = useRef<HTMLButtonElement>(null);
-  const configCloseRef = useRef<HTMLButtonElement>(null);
-  const [question, setQuestion] = useState("");
-  const [historyLoading, setHistoryLoading] = useState(true);
-  const [streaming, setStreaming] = useState(false);
-  const [stopping, setStopping] = useState(false);
-  const [remoteActive, setRemoteActive] = useState(false);
-  const [resetting, setResetting] = useState(false);
-  const [resetNotice, setResetNotice] = useState("");
-  const [error, setError] = useState("");
-  const abortRef = useRef<AbortController>();
-  const stopRequestedRef = useRef(false);
-  const transcriptRef = useRef<HTMLDivElement>(null);
-  const historyRequestRef = useRef(0);
-  const gatewayRefreshRequestRef = useRef(0);
-  const currentProjectRef = useRef(projectId); currentProjectRef.current = projectId;
-
-  useEffect(() => {
-    if (active && configEditorOpen) configCloseRef.current?.focus();
-  }, [active, configEditorOpen]);
-
-  const loadRuntimeConfig = useCallback(async () => {
-    try {
-      const [config, catalog] = await Promise.all([
-        getProjectExplainerConfig(projectId),
-        getCatalog()
-      ]);
-      if (currentProjectRef.current !== projectId) return;
-      cacheResource(`project-explainer:${projectId}:config`, config);
-      setRuntimeConfig(config);
-      setConfigDraft({
-        harness: config.harness,
-        ...(config.gatewayId ? { gatewayId: config.gatewayId } : {}),
-        model: config.model,
-        reasoningEffort: config.reasoningEffort
-      });
-      setRuntimeCatalog({
-        gateways: catalog.gateways ?? [],
-        harnesses: catalog.harnesses ?? [],
-        protocols: catalog.protocols ?? [],
-        defaultHarnessId: catalog.defaultHarnessId
-      });
-      setConfigError("");
-    } catch (reason) {
-      setConfigError(reason instanceof Error ? reason.message : "Project Explainer 配置加载失败");
-    } finally {
-      setConfigLoading(false);
-    }
-  }, [projectId]);
-
-  const loadHistory = useCallback(async () => {
-    const requestId = ++historyRequestRef.current;
-    try {
-      const history = await getProjectExplainerHistory(projectId);
-      if (requestId !== historyRequestRef.current) return;
-      setEvents(current => cacheResource(`project-explainer:${projectId}:events`, reconcileExplainerHistory(current, history.events)));
-      setRemoteActive(history.active);
-      setError("");
-    } catch (reason) {
-      if (requestId !== historyRequestRef.current) return;
-      setError(reason instanceof Error ? reason.message : "解说历史加载失败");
-    } finally {
-      if (requestId === historyRequestRef.current) setHistoryLoading(false);
-    }
-  }, [projectId]);
-
-  useEffect(() => {
-    const cachedEvents = readCachedResource<ProjectExplainerEvent[]>(`project-explainer:${projectId}:events`);
-    setEvents(restoreExplainerMessages(cachedEvents ?? []));
-    setQuestion("");
-    setHistoryLoading(!cachedEvents);
-    setStopping(false);
-    setRemoteActive(false);
-    setResetting(false);
-    setResetNotice("");
-    setError("");
-    setRuntimeConfig(readCachedResource(`project-explainer:${projectId}:config`));
-    setConfigDraft(undefined);
-    setRuntimeCatalog(undefined);
-    setConfigLoading(true);
-    setConfigSaving(false);
-    gatewayRefreshRequestRef.current += 1;
-    setRefreshingGatewayId("");
-    setGatewayRefreshError("");
-    setConfigError("");
-    setConfigNotice("");
-    stopRequestedRef.current = false;
-    void loadHistory();
-    void loadRuntimeConfig();
-    return () => {
-      historyRequestRef.current += 1;
-      gatewayRefreshRequestRef.current += 1;
-      stopRequestedRef.current = true;
-      abortRef.current?.abort();
-    };
-  }, [loadHistory, loadRuntimeConfig]);
-
-  useEffect(() => {
-    if (!remoteActive || streaming) return;
-    let inFlight = false;
-    const refresh = () => {
-      if (inFlight || document.visibilityState === "hidden") return;
-      inFlight = true;
-      void loadHistory().finally(() => { inFlight = false; });
-    };
-    const timer = window.setInterval(refresh, 2_000);
-    document.addEventListener("visibilitychange", refresh);
-    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", refresh); };
-  }, [loadHistory, remoteActive, streaming]);
-
-  useEffect(() => {
-    const receive = (event: Event) => {
-      const detail = (event as CustomEvent).detail as { projectId?: string; source?: string; event?: ProjectExplainerEvent };
-      if (detail.source !== "floating" || detail.projectId !== projectId || !detail.event) return;
-      historyRequestRef.current += 1;
-      setHistoryLoading(false); setRemoteActive(!detail.event.data?.turnComplete);
-      setEvents(current => cacheResource(`project-explainer:${projectId}:events`, mergeProjectExplainerEvent(current, detail.event!), false));
-    };
-    const refresh = (event: Event) => {
-      const detail = (event as CustomEvent).detail as { projectId?: string; source?: string; active?: boolean };
-      if (detail.source === "panel" || detail.projectId !== projectId) return;
-      if (detail.active === true) { setRemoteActive(true); return; }
-      if (!streaming) { void loadHistory(); void loadRuntimeConfig(); }
-    };
-    window.addEventListener("openfars:explainer-event", receive); window.addEventListener("openfars:explainer-refresh", refresh);
-    return () => { window.removeEventListener("openfars:explainer-event", receive); window.removeEventListener("openfars:explainer-refresh", refresh); };
-  }, [projectId, loadHistory, loadRuntimeConfig, streaming]);
-
-  useEffect(() => {
-    const transcript = transcriptRef.current;
-    if (!active || !transcript) return;
-    transcript.scrollTop = transcript.scrollHeight;
-  }, [active, events]);
-
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const message = question.trim();
-    if (!message || streaming || abortRef.current || stopping || remoteActive || resetting || !runtimeConfig?.available) return;
-    const controller = new AbortController();
-    abortRef.current = controller;
-    const pending = pendingExplainerMessage(projectId, message, events);
-    setEvents(current => cacheResource(`project-explainer:${projectId}:events`,
-      [...current.filter(event => !(event.data?.clientPending === "unconfirmed" && event.text === message)), pending]));
-    stopRequestedRef.current = false;
-    setStreaming(true);
-    setError("");
-    setResetNotice("");
-    setQuestion("");
-    window.dispatchEvent(new CustomEvent("openfars:explainer-refresh", { detail: { projectId, active: true, source: "panel" } }));
-    try {
-      await streamProjectExplainerQuestion(
-        projectId,
-        message,
-        (incoming) => {
-          if (stopRequestedRef.current) return;
-          if (currentProjectRef.current !== projectId) return;
-          setEvents((current) => cacheResource(`project-explainer:${projectId}:events`, mergeProjectExplainerEvent(current, incoming), false));
-          const action = explainerActionFromEvent(incoming);
-          if (action) notifyExplainerAction(action);
-          window.dispatchEvent(new CustomEvent("openfars:explainer-event", { detail: { projectId, event: incoming, source: "panel" } }));
-        },
-        controller.signal
-      );
-    } catch (reason) {
-      if (!controller.signal.aborted) {
-        setError(reason instanceof Error ? reason.message : "项目解说失败");
-        setQuestion(current => current || message);
-        setEvents(current => current.map(event => event.id === pending.id ? { ...event, data: { ...event.data, clientPending: "unconfirmed" } } : event));
-      }
-    } finally {
-      if (currentProjectRef.current === projectId) setEvents(current => cacheResource(`project-explainer:${projectId}:events`, current.map(event =>
-        event.id === pending.id && event.data?.clientPending === "sending" ? { ...event, data: { ...event.data, clientPending: "unconfirmed" } } : event)));
-      if (abortRef.current === controller) abortRef.current = undefined;
-      setStreaming(false);
-      if (!stopRequestedRef.current) setStopping(false);
-      void loadHistory();
-      window.dispatchEvent(new CustomEvent("openfars:explainer-refresh", { detail: { projectId, active: false, source: "panel" } }));
-    }
-  };
-
-  const stopConversation = async () => {
-    if (!streaming || stopping || stopRequestedRef.current) return;
-    const controller = abortRef.current;
-    stopRequestedRef.current = true;
-    setStopping(true);
-    setError("");
-    try {
-      // The backend only resolves this request after the selected Harness process has exited.
-      await cancelProjectExplainer(projectId);
-      if (abortRef.current === controller) controller?.abort();
-    } catch (reason) {
-      // A failed request is not a confirmed cancellation, so continue rendering
-      // the still-active stream and allow the user to retry.
-      stopRequestedRef.current = false;
-      setError(
-        reason instanceof Error
-          ? `无法确认解说已停止：${reason.message}`
-          : "无法确认解说已停止"
-      );
-    } finally {
-      setStopping(false);
-    }
-  };
-
-  const resetConversation = async () => {
-    if (streaming || stopping || remoteActive || resetting) return;
-    historyRequestRef.current += 1;
-    setResetting(true);
-    setError("");
-    setResetNotice("");
-    try {
-      await resetProjectExplainer(projectId);
-      setEvents([]);
-      cacheResource(`project-explainer:${projectId}:events`, []);
-      setQuestion("");
-      setRemoteActive(false);
-      setHistoryLoading(false);
-      setResetNotice("已开始新的解说会话。");
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "解说上下文刷新失败");
-    } finally {
-      setResetting(false);
-    }
-  };
-
-  const selectRuntimeGateway = (gatewayId: string) => {
-    const requestId = ++gatewayRefreshRequestRef.current;
-    const gateway = runtimeCatalog?.gateways?.find((item) => item.id === gatewayId);
-    setGatewayRefreshError("");
-    setConfigError("");
-    setConfigNotice("");
-    setConfigDraft((current) => current ? {
-      ...current,
-      ...(gateway ? { gatewayId: gateway.id } : { gatewayId: undefined }),
-      model: gateway && gateway.models.includes(current.model) ? current.model : ""
-    } : current);
-
-    if (!gateway) {
-      setRefreshingGatewayId("");
-      return;
-    }
-
-    setRefreshingGatewayId(gateway.id);
-    void refreshGatewayModels(gateway.id)
-      .then((refreshed) => {
-        if (requestId !== gatewayRefreshRequestRef.current) return;
-        setRuntimeCatalog((current) => current ? {
-          ...current,
-          gateways: (current.gateways ?? []).map((item) =>
-            item.id === refreshed.id ? refreshed : item
-          )
-        } : current);
-        setConfigDraft((current) => current?.gatewayId === refreshed.id ? {
-          ...current,
-          model: refreshed.models.includes(current.model) ? current.model : ""
-        } : current);
-      })
-      .catch((reason) => {
-        if (requestId !== gatewayRefreshRequestRef.current) return;
-        setGatewayRefreshError(
-          reason instanceof Error
-            ? `model 列表刷新失败：${reason.message}`
-            : "model 列表刷新失败，请检查网关后重试"
-        );
-      })
-      .finally(() => {
-        if (requestId === gatewayRefreshRequestRef.current) setRefreshingGatewayId("");
-      });
-  };
-
-  const saveRuntimeConfig = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!configDraft || configSaving) return;
-    if (refreshingGatewayId) {
-      setConfigError("正在刷新所选网关的 model 列表，请稍候");
-      return;
-    }
-    if (gatewayRefreshError) {
-      setConfigError("所选网关的 model 列表刷新失败，请重新选择网关后再保存");
-      return;
-    }
-    const draftGateway = runtimeCatalog?.gateways?.find((gateway) => gateway.id === configDraft.gatewayId);
-    if (!draftGateway || !configDraft.model.trim() || !draftGateway.models.includes(configDraft.model)) {
-      setConfigError(!draftGateway
-        ? "请选择已保存网关"
-        : !configDraft.model.trim()
-          ? "切换网关后需要重新选择 model"
-          : "当前 model 不在所选网关的模型列表中，请重新选择");
-      return;
-    }
-    if (!selectedHarnessCompatible) {
-      setConfigError(
-        selectedHarness?.availabilityReason ??
-        "当前 Harness 不支持只读 Project Explainer。"
-      );
-      return;
-    }
-    setConfigSaving(true);
-    setConfigError("");
-    setConfigNotice("");
-    const update = async (confirmHarnessSwitch = false) =>
-      updateProjectExplainerConfig(projectId, {
-        ...configDraft,
-        ...(confirmHarnessSwitch ? { confirmHarnessSwitch: true } : {})
-      });
-    try {
-      let updated: ProjectExplainerRuntimeConfig;
-      try {
-        updated = await update(false);
-      } catch (reason) {
-        const record = reason as { status?: number; details?: unknown };
-        const details = record.details && typeof record.details === "object"
-          ? record.details as Record<string, unknown>
-          : {};
-        if (
-          record.status !== 409 ||
-          details.code !== "explainer_harness_switch_confirmation_required" ||
-          !window.confirm("当前回答会终止，已有历史将带入新会话。是否继续切换 harness？")
-        ) throw reason;
-        updated = await update(true);
-      }
-      setRuntimeConfig(updated);
-      setGatewayRefreshError("");
-      setConfigDraft({
-        harness: updated.harness,
-        ...(updated.gatewayId ? { gatewayId: updated.gatewayId } : {}),
-        model: updated.model,
-        reasoningEffort: updated.reasoningEffort
-      });
-      setConfigNotice(
-        updated.harness !== runtimeConfig?.harness
-          ? "已切换 harness 并重建底层会话，完整历史会带入下一次问答。"
-          : "Project Explainer 配置已保存，将用于下一次问答。"
-      );
-      void loadHistory();
-    } catch (reason) {
-      setConfigError(reason instanceof Error ? reason.message : "Project Explainer 配置保存失败");
-      if (runtimeConfig) {
-        setConfigDraft({
-          harness: runtimeConfig.harness,
-          ...(runtimeConfig.gatewayId ? { gatewayId: runtimeConfig.gatewayId } : {}),
-          model: runtimeConfig.model,
-          reasoningEffort: runtimeConfig.reasoningEffort
-        });
-      }
-    } finally {
-      setConfigSaving(false);
-    }
-  };
-
-  const selectedGateway: GatewayRecord | undefined = runtimeCatalog?.gateways?.find(
-    (gateway) => gateway.id === configDraft?.gatewayId
-  );
-  const catalogHarnesses = runtimeCatalog?.harnesses ?? [];
-  const explainerPurposeOptions = harnessOptionsForPurpose(
-    catalogHarnesses,
-    "explainer"
-  );
-  const compatibleExplainerHarnesses = explainerPurposeOptions.filter(
-    (item) => item.available
-  );
-  const selectedHarnessId = configDraft?.harness
-    ?? runtimeCatalog?.defaultHarnessId
-    ?? compatibleExplainerHarnesses.find((item) => item.default)?.id
-    ?? compatibleExplainerHarnesses[0]?.id
-    ?? "";
-  const harnessOptions = harnessOptionsForPurpose(
-    catalogHarnesses,
-    "explainer",
-    selectedHarnessId
-  );
-  const selectedHarness = harnessOptions.find((item) => item.id === selectedHarnessId);
-  const selectedHarnessCompatible = compatibleExplainerHarnesses.some(
-    (item) => item.id === selectedHarnessId && item.available
-  );
-  const modelTestOptions = selectedGateway
-    ? gatewayModelTestOptions(selectedGateway, selectedHarnessId, harnessOptions)
-    : [];
-  const failedModelOptions = modelTestOptions.filter((option) => option.test.status === "failed");
-  const activeHarnessLabel = harnessOptions.find((item) => item.id === runtimeConfig?.harness)?.label
-    ?? runtimeConfig?.harness
-    ?? "Project Explainer";
-  const routeNeeded = Boolean(
-    selectedHarness?.nativeProtocol && selectedGateway && selectedHarness.nativeProtocol !== selectedGateway.protocol
-  );
-  const modelSelectionError = selectedGateway && configDraft
-    ? !configDraft.model.trim()
-      ? "切换网关后需要重新选择 model"
-      : !selectedGateway.models.includes(configDraft.model)
-        ? "当前 model 不在所选网关的模型列表中，请重新选择"
-        : ""
-    : "";
-  const combinationTest = selectedGateway && selectedHarness && configDraft &&
-    configDraft.model.trim() && selectedGateway.models.includes(configDraft.model)
-    ? gatewayCombinationTestState(selectedGateway, selectedHarness.id, configDraft.model, harnessOptions)
-    : undefined;
-  const combinationTestWarning = combinationTest && combinationTest.status !== "passed"
-    ? combinationTest.status === "failed"
-      ? `当前 Harness / 网关 / model 组合验证失败${combinationTest.error ? `：${combinationTest.error}` : ""}；仍可使用，但运行可能失败。`
-      : "当前 Harness / 网关 / model 组合尚未验证；仍可使用，但运行可能失败。"
-    : "";
-  const configDirty = Boolean(runtimeConfig && configDraft && (
-    runtimeConfig.harness !== configDraft.harness ||
-    runtimeConfig.gatewayId !== configDraft.gatewayId ||
-    runtimeConfig.model !== configDraft.model ||
-    runtimeConfig.reasoningEffort !== configDraft.reasoningEffort
-  ));
-  const configStateLabel = configSaving
-    ? "保存中"
-    : configError
-      ? "保存失败"
-      : configDirty
-        ? "未保存修改"
-        : configNotice
-          ? "已保存"
-          : runtimeConfig?.available
-            ? runtimeConfig.validationWarning ? "未验证" : "可用"
-            : "待配置";
-
-  const handleQuestionKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    const synthetic = event as KeyboardEvent<HTMLTextAreaElement> & { isComposing?: boolean };
-    const native = event.nativeEvent as globalThis.KeyboardEvent & { which?: number };
-    if (
-      synthetic.isComposing ||
-      native.isComposing ||
-      native.keyCode === 229 ||
-      native.which === 229 ||
-      event.keyCode === 229 ||
-      event.which === 229
-    ) {
-      // Prevent the form's native Enter submit while an IME owns the key.
-      // Returning alone still lets jsdom/browsers perform implicit submit.
-      event.preventDefault();
-      return;
-    }
-    if (event.key !== "Enter" || event.shiftKey) return;
-    event.preventDefault();
-    event.currentTarget.form?.requestSubmit();
-  };
-
-  return (
-    <section className="project-explainer-panel project-interaction-surface" aria-label="项目解说 Agent">
-      <div className="project-explainer-heading">
-        <div>
-          <span className="project-explainer-icon"><Bot size={18} /></span>
-          <span>
-            <strong>项目解说</strong>
-            <small>只读问答</small>
-          </span>
-        </div>
-        <div className="project-explainer-heading-actions">
-          <button
-            type="button"
-            className="project-explainer-reset"
-            onClick={() => void resetConversation()}
-            disabled={streaming || stopping || remoteActive || resetting || historyLoading}
-            aria-label="新建解说会话"
-            title="清空当前解说上下文并开始新会话"
-          >
-            {resetting ? <RefreshCw className="spin" size={13} /> : <Plus size={13} />}
-            新建会话
-          </button>
-          {onClose && <button type="button" className="project-interaction-close" aria-label="关闭项目面板" title="关闭" onClick={onClose}><X size={17} /></button>}
-        </div>
-      </div>
-      <div className="project-explainer-config-summary" aria-label="Project Explainer 当前运行配置">
-        <div className="project-explainer-config-summary-copy">
-          <strong>{activeHarnessLabel} · {runtimeConfig?.model || configDraft?.model || "未选择模型"}</strong>
-          <small>
-            {selectedGateway?.name || "未选择全局网关"} · {selectedGateway ? protocolLabel(selectedGateway.protocol) : "等待路由"}
-            {routeNeeded && selectedHarness?.nativeProtocol && selectedGateway ? ` · ${protocolLabel(selectedHarness.nativeProtocol)} → ${protocolLabel(selectedGateway.protocol)}` : ""}
-          </small>
-        </div>
-        {runtimeConfig?.validationWarning ? (
-          <details className="project-explainer-validation">
-            <summary><AlertTriangle size={13} aria-hidden="true" />{configStateLabel}</summary>
-            <p>{runtimeConfig.validationWarning}</p>
-          </details>
-        ) : <span className={`project-explainer-config-state ${runtimeConfig?.available ? "available" : "pending"}`}>{configStateLabel}</span>}
-        <button
-          type="button"
-          className="project-explainer-config-open"
-          ref={configOpenRef}
-          onClick={() => setConfigEditorOpen(open => !open)}
-          aria-expanded={configEditorOpen}
-          aria-controls="project-explainer-runtime-config"
-        >
-          {configEditorOpen ? "收起配置" : "切换配置"}
-        </button>
-      </div>
-      <form
-        id="project-explainer-runtime-config"
-        className="project-explainer-runtime-config"
-        data-open={configEditorOpen ? "true" : "false"}
-        role="dialog"
-        onSubmit={saveRuntimeConfig}
-        aria-label="Project Explainer 运行配置"
-      >
-        <div className="project-explainer-runtime-heading">
-          <span>
-            <strong>只读运行配置</strong>
-          </span>
-          <span className="project-explainer-runtime-heading-actions">
-            <em className={runtimeConfig?.available ? "available" : "unavailable"}>
-              {configStateLabel}
-            </em>
-            <button
-              type="button"
-              className="project-explainer-config-close"
-              ref={configCloseRef}
-              onClick={() => { setConfigEditorOpen(false); configOpenRef.current?.focus(); }}
-              aria-label="关闭 Project Explainer 配置"
-            >
-              返回对话
-            </button>
-          </span>
-        </div>
-        {configLoading || !configDraft ? (
-          <div className="project-explainer-config-loading"><LoaderCircle className="spin" size={14} />正在加载配置…</div>
-        ) : (
-          <>
-            <div className="project-explainer-runtime-grid">
-              <label>
-                <span>Harness</span>
-                <select
-                  aria-label="Project Explainer Harness"
-                  value={configDraft.harness}
-                  onChange={(event) => setConfigDraft((current) => current ? {
-                    ...current,
-                    harness: event.target.value as AgentHarness
-                  } : current)}
-                >
-                  {harnessOptions.length ? harnessOptions.map((item) => (
-                    <option key={item.id} value={item.id} disabled={!item.available}>
-                      {item.label}{item.available ? "" : `（${item.availabilityReason ?? "不可用"}）`}
-                    </option>
-                  )) : <option value={configDraft.harness}>{configDraft.harness}</option>}
-                </select>
-              </label>
-              <label>
-                <span>全局网关</span>
-                <select
-                  aria-label="Project Explainer 全局网关"
-                  value={configDraft.gatewayId ?? ""}
-                  onChange={(event) => selectRuntimeGateway(event.target.value)}
-                >
-                  <option value="">请选择已保存网关</option>
-                  {(runtimeCatalog?.gateways ?? []).map((gateway) => {
-                    const state = gatewayHarnessTestState(gateway, selectedHarnessId, harnessOptions);
-                    return (
-                      <option key={gateway.id} value={gateway.id}>
-                        {gateway.name} · {state.status === "passed" ? "有已验证 model" : state.status === "failed" ? "连接验证失败" : "当前 Harness 未验证"}
-                      </option>
-                    );
-                  })}
-                </select>
-              </label>
-              <div className="project-explainer-derived-route" aria-live="polite"><span>网关协议与路由</span><strong>{selectedGateway ? protocolLabel(selectedGateway.protocol) : "选择网关后显示"}</strong><small>{routeNeeded && selectedHarness?.nativeProtocol && selectedGateway ? `自动路由：${protocolLabel(selectedHarness.nativeProtocol)} → ${protocolLabel(selectedGateway.protocol)}` : selectedGateway && selectedHarness?.nativeProtocol ? "直连" : selectedGateway ? "Harness 目录待确认" : "尚未推导"}</small>{combinationTestWarning && <small className="project-explainer-config-warning" role="status">{combinationTestWarning}</small>}</div>
-              <label>
-                <span>Model</span>
-                {selectedGateway ? (
-                  <select
-                    aria-label="Project Explainer Model"
-                    value={configDraft.model}
-                    disabled={Boolean(refreshingGatewayId)}
-                    onChange={(event) => setConfigDraft((current) => current ? {
-                      ...current,
-                      model: event.target.value
-                    } : current)}
-                    aria-invalid={Boolean(modelSelectionError)}
-                  >
-                    <option value="" disabled>请选择网关 model</option>
-                    {modelTestOptions.map(({ model, test }) => (
-                      <option key={model} value={model} title={test.error}>
-                        {model} · {test.status === "passed" ? "已验证" : test.status === "failed" ? "验证失败" : "未验证"}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    aria-label="Project Explainer Model"
-                    value={configDraft.model}
-                    disabled
-                    aria-invalid={Boolean(modelSelectionError)}
-                  />
-                )}
-                {refreshingGatewayId && (
-                  <small className="project-explainer-config-loading" role="status">
-                    <LoaderCircle className="spin" size={12} />正在刷新 model 列表…
-                  </small>
-                )}
-                {gatewayRefreshError && <small className="field-error" role="alert">{gatewayRefreshError}</small>}
-                {modelSelectionError && <small className="field-error" role="alert">{modelSelectionError}</small>}
-                {failedModelOptions.length > 0 && <small className="project-explainer-config-warning">以下 model 验证失败，仍可选择并使用：{failedModelOptions.map(({ model, test }) => `${model}${test.error ? `（${test.error}）` : ""}`).join("；")}</small>}
-              </label>
-            </div>
-            {routeNeeded && selectedHarness?.nativeProtocol && (
-              <span className="project-explainer-route-notice">
-                已根据所选 harness 和网关协议自动启用本地路由；可直接保存并尝试运行。
-              </span>
-            )}
-            {runtimeConfig?.validationError && !runtimeConfig.available && (
-              <span className="project-explainer-config-error" role="alert">{runtimeConfig.validationError}</span>
-            )}
-            {!compatibleExplainerHarnesses.length && (
-              <span className="project-explainer-config-error" role="alert">
-                当前服务端没有注册可用的只读 Project Explainer Harness。
-              </span>
-            )}
-            {compatibleExplainerHarnesses.length > 0 && !selectedHarnessCompatible && (
-              <span className="project-explainer-config-error" role="alert">
-                {selectedHarness?.availabilityReason ?? "当前 Harness 不支持只读 Project Explainer。"}
-              </span>
-            )}
-            <div className="project-explainer-runtime-actions">
-              <small>运行期间可修改；URL 与 API key 只在全局网关库维护。</small>
-              <Button type="submit" variant="secondary" loading={configSaving} disabled={configSaving || Boolean(refreshingGatewayId) || Boolean(gatewayRefreshError) || !selectedGateway || !selectedHarnessCompatible || Boolean(modelSelectionError)}>
-                保存问答配置
-              </Button>
-            </div>
-          </>
-        )}
-        {configError && <span className="project-explainer-config-error" role="alert">{configError}</span>}
-        {configNotice && <span className="project-explainer-config-notice" role="status"><CheckCircle2 size={13} />{configNotice}</span>}
-      </form>
-      <div
-        className="project-explainer-transcript"
-        ref={transcriptRef}
-        hidden={configEditorOpen}
-        aria-live="polite"
-        aria-label="项目解说对话"
-      >
-        {historyLoading && !events.length ? (
-          <div className="project-explainer-empty">
-            <LoaderCircle className="spin" size={20} />
-            正在读取解说会话…
-          </div>
-        ) : events.length ? (
-          events.filter(isExplainerConversationMessage).map((entry) => {
-            const action = explainerActionFromEvent(entry);
-            if (action) return <ExplainerActionCard key={entry.id} action={action} />;
-            if (entry.kind === "user") {
-              return (
-                <div className="project-explainer-message user project-interaction-user-message" key={entry.id}>
-                  <small>你</small>
-                  <p>{entry.text}</p>
-                  {!!entry.data?.clientPending && <small>{entry.data.clientPending === "sending" ? "发送中…" : "发送未确认，请检查后重试"}</small>}
-                </div>
-              );
-            }
-            if (entry.kind === "assistant") {
-              return (
-                <div className="project-explainer-message assistant" key={entry.id}>
-                  <small><Bot size={14} aria-hidden="true" /> 项目解说</small>
-                  <div className="markdown-body">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm, remarkMath]}
-                      rehypePlugins={[rehypeSanitize, rehypeKatex]}
-                    >
-                      {normalizeMarkdownMath(entry.text || (streaming ? "…" : ""))}
-                    </ReactMarkdown>
-                  </div>
-                </div>
-              );
-            }
-            if (["reasoning", "tool", "tool_output"].includes(entry.kind)) {
-              const sameCall = (event: ProjectExplainerEvent) => event.turnId === entry.turnId && event.itemId === entry.itemId;
-              if (entry.kind === "tool_output" && events.some(event => event.kind === "tool" && sameCall(event))) return null;
-              return <ProjectExplainerTrace key={`${entry.turnId}:${entry.kind}:${entry.itemId ?? entry.id}`} event={entry}
-                output={events.filter(event => event.kind === "tool_output" && sameCall(event)).at(-1)}
-                active={(streaming || remoteActive) && entry.turnId === events.at(-1)?.turnId} />;
-            }
-            return (
-              <div
-                className={`project-explainer-status ${entry.kind}`}
-                key={entry.id}
-                role={entry.kind === "error" ? "alert" : undefined}
-              >
-                {entry.kind === "error" ? <AlertTriangle size={13} /> : <Activity size={12} />}
-                {entry.text}
-              </div>
-            );
-          })
-        ) : (
-          <div className="project-explainer-empty">
-            <Bot size={24} />
-            <strong>可直接询问项目现状、实验、论文或评审依据</strong>
-          </div>
-        )}
-        <ProjectExplainerReplyStatus events={events} active={streaming || remoteActive} />
-      </div>
-      <form className="project-interaction-form project-explainer-input" onSubmit={submit} hidden={configEditorOpen}>
-        <ProjectInteractionComposer
-          textarea={{
-            value: question,
-            onChange: (event) => {
-              setQuestion(event.target.value);
-              if (error) setError("");
-              if (resetNotice) setResetNotice("");
-            },
-            onKeyDown: handleQuestionKeyDown,
-            rows: 2,
-            maxLength: 50_000,
-            disabled: streaming || stopping || remoteActive || resetting || !runtimeConfig?.available,
-            placeholder: remoteActive
-              ? "另一个页面中的解说正在回答…"
-              : runtimeConfig && !runtimeConfig.available
-                ? "请先保存可用的解说配置"
-                : "询问进度、实验结果或论文依据…",
-            "aria-label": "向项目解说 Agent 提问"
-          }}
-          action={streaming || stopping ? (
-            <Button
-              type="button"
-              variant="secondary"
-              icon={<CircleStop size={15} />}
-              loading={stopping}
-              onClick={() => void stopConversation()}
-              disabled={stopping}
-            >
-              {stopping ? "停止中" : "停止"}
-            </Button>
-          ) : (
-            <Button
-              type="submit"
-              variant="primary"
-              icon={<Send size={15} />}
-              disabled={!question.trim() || stopping || remoteActive || resetting || !runtimeConfig?.available}
-            >
-              询问解说
-            </Button>
-          )}
-        />
-        {error && <span className="project-explainer-error" role="alert">{error}</span>}
-        {resetNotice && (
-          <span className="project-explainer-reset-notice" role="status">
-            <CheckCircle2 size={13} />
-            {resetNotice}
-          </span>
-        )}
-      </form>
-    </section>
-  );
-}
-
 export function WorkspacePage({
   projectId,
   onBack
@@ -4990,7 +3094,7 @@ export function WorkspacePage({
   onBack: () => void;
 }) {
   const [sourceProject, setProject] = useState<Project | undefined>(() => readCachedResource<Project>(`project:${projectId}`));
-  const project = useMemo(() => sourceProject ? withProjectAuthorizationWaiting(sourceProject) : undefined, [sourceProject]);
+  const card = useMemo(() => readCachedProjectList()?.projects.find(row => row.id === projectId), [projectId]);
   const [projectLoading, setProjectLoading] = useState(() => !readCachedResource(`project:${projectId}`));
   const [projectError, setProjectError] = useState("");
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
@@ -5040,7 +3144,7 @@ export function WorkspacePage({
   const [projectUserInputLoading, setProjectUserInputLoading] = useState(false);
   const [projectUserInputError, setProjectUserInputError] = useState("");
   const [projectUserInputNotice, setProjectUserInputNotice] = useState("");
-  const [projectUserInputMode, setProjectUserInputMode] = useState<"wait" | "interrupt">("wait");
+  const [chosenInputMode, chooseInputMode] = useState<"chat" | "wait" | "interrupt">();
   const projectUserInputRequestId = useRef<string>();
   const [modelOptions, setModelOptions] = useState<string[]>(DEFAULT_MODELS);
   const [workflowHarnessCatalog, setWorkflowHarnessCatalog] = useState<HarnessCatalogEntry[]>([]);
@@ -5071,6 +3175,12 @@ export function WorkspacePage({
   const queueLoadInFlightRef = useRef(false);
   const eventStream = useProjectEvents(projectId);
   const { events, connection } = eventStream;
+  const liveRuntime = eventStream.live.projectId === projectId ? eventStream.live.runtime : undefined;
+  const detailBehindCard = sourceProject?.id === projectId && mergeProjectSnapshot(card, sourceProject) !== sourceProject;
+  const project = useMemo(() => {
+    if (sourceProject?.id !== projectId || detailBehindCard) return undefined;
+    return withProjectAuthorizationWaiting(liveRuntime ? applyLiveRuntimeSnapshot(sourceProject, liveRuntime) : sourceProject);
+  }, [detailBehindCard, projectId, sourceProject, liveRuntime]);
   const timelineEvents = eventStream.timelineEvents ?? events;
   const livePerformance = eventStream.live.projectId === projectId ? eventStream.live.performance : undefined;
   const performanceEvents = useMemo(() => eventStream.live.projectId === projectId ? timelineEvents : [],
@@ -5096,14 +3206,8 @@ export function WorkspacePage({
   );
 
   useEffect(() => {
-    const runtime = eventStream.live.runtime;
-    if (!runtime) return;
-    setProject((current) => {
-      if (!current || current.id !== projectId ||
-        (current.runtime?.stateRevision ?? -1) > runtime.stateRevision) return current;
-      return applyLiveRuntimeSnapshot(current, runtime);
-    });
-  }, [eventStream.live.runtime, projectId]);
+    if (sourceProject?.id === projectId) cacheProjectDetail(sourceProject);
+  }, [sourceProject, projectId]);
 
   const fetchProjectSnapshot = useCallback(async () => {
     const request = ++projectRequestRef.current;
@@ -5126,13 +3230,35 @@ export function WorkspacePage({
     }
     return projectRefreshRef.current.scheduler;
   }, [projectId, fetchProjectSnapshot]);
+  const projectUserInputMode = chosenInputMode ?? (project?.status === "running" && !project.archivedAt ? "chat" : "wait");
+  const selectInputMode = (mode: typeof projectUserInputMode) => {
+    chooseInputMode(mode);
+    projectUserInputRequestId.current = undefined;
+    setProjectUserInputNotice("");
+    setProjectUserInputError("");
+  };
   const loadProject = useCallback(() => getProjectRefresh().refresh(), [getProjectRefresh]);
   const scheduleProjectRefresh = useCallback(() => getProjectRefresh().schedule(), [getProjectRefresh]);
 
   useEffect(() => {
-    if (!eventStream.live.runtime) return;
-    scheduleProjectRefresh();
-  }, [eventStream.live.runtime?.stateRevision, scheduleProjectRefresh]);
+    if (liveRuntime || detailBehindCard) scheduleProjectRefresh();
+  }, [liveRuntime?.stateRevision, detailBehindCard, scheduleProjectRefresh]);
+
+  const awaitingMainReply = project?.mainConversation?.some(item => item.status === "queued" || item.status === "processing");
+  useEffect(() => {
+    if (!awaitingMainReply) return;
+    const refresh = () => { if (document.visibilityState === "visible") scheduleProjectRefresh(); };
+    const timer = window.setInterval(refresh, 2000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", refresh); };
+  }, [awaitingMainReply, scheduleProjectRefresh]);
+  useEffect(() => {
+    chooseInputMode(undefined);
+    projectUserInputRequestId.current = undefined;
+    setProjectUserInput("");
+    setProjectUserInputNotice("");
+    setProjectUserInputError("");
+  }, [projectId]);
 
   const fetchArtifactSummary = useCallback(async () => {
     const requestId = ++artifactSummaryRequestRef.current;
@@ -5481,7 +3607,7 @@ export function WorkspacePage({
     setProjectUserInputLoading(true);
     setProjectUserInputError("");
     setProjectUserInputNotice("");
-    const restartsCompletedProject = project?.status === "completed";
+    const restartsCompletedProject = projectUserInputMode !== "chat" && project?.status === "completed";
     const interruptingRunningAgent =
       projectUserInputMode === "interrupt" && project?.status === "running" && Boolean(project.currentAgent);
     const requestId = projectUserInputRequestId.current ?? (
@@ -5497,11 +3623,12 @@ export function WorkspacePage({
             mode: projectUserInputMode,
             requestId
           });
-      setProject(updated);
+      setProject(current => mergeProjectSnapshot(current, updated));
       setProjectUserInput("");
+      chooseInputMode(undefined);
       projectUserInputRequestId.current = undefined;
       setProjectUserInputNotice(
-        restartsCompletedProject
+        projectUserInputMode === "chat" ? "消息已保存，可在对话记录中查看 Main 的接收状态和答复。" : restartsCompletedProject
           ? "需求已提交给 main，科研流程已重新启动；历史结果仍可查看。"
           : interruptingRunningAgent
             ? "需求已持久化，正在中断当前 Agent 并保存断点；完成后由 Main 接管。"
@@ -5599,13 +3726,16 @@ export function WorkspacePage({
     setGroupEditorOpen(true);
   };
 
-  if (projectLoading && !project) {
-    return (
-      <div className="workspace-loading">
-        <Brand compact />
-        <PageLoader label="正在进入科研工作台…" />
-      </div>
-    );
+  const traceProject = project ?? card;
+  const traceView = traceProject && eventStream.live.projectId === projectId ? (
+    <TraceView key={projectId} events={events} liveStreams={eventStream.live.streams} liveEvents={eventStream.live.events}
+      project={traceProject} connection={connection} totalEventCount={totalEventCount}
+      hasOlder={eventStream.hasOlder ?? false} historyLoading={eventStream.historyLoading ?? false}
+      historyError={eventStream.historyError ?? ""} onLoadOlder={eventStream.loadOlder} />
+  ) : null;
+
+  if (!project && (projectLoading || (card && !projectError))) {
+    return <WorkspacePreview project={card} onBack={onBack}>{traceView}</WorkspacePreview>;
   }
   if (!project) {
     return (
@@ -5821,7 +3951,9 @@ export function WorkspacePage({
             </div>
             <div className="project-request-body">
                 {canAddProjectUserInput && <p className="project-request-context">
-                  {projectUserInputMode === "interrupt"
+                  {projectUserInputMode === "chat"
+                    ? "消息发送给 Main，当前 Agent 继续工作。"
+                    : projectUserInputMode === "interrupt"
                     ? "保存当前断点与部分输出后，由 Main 接管。"
                     : project.status === "completed"
                     ? "输入会保留在当前项目并由 main 重新启动科研流程。历史结果仍可查看，main 会根据新的需求重新安排工作。"
@@ -5839,20 +3971,34 @@ export function WorkspacePage({
                     </ul>
                   </details>
                 )}
+          {Boolean(project.mainConversation?.length) && (
+            <section aria-label="与 Main 的对话记录">
+              <ul>{project.mainConversation!.map(item => <li key={item.id}>
+                <p><strong>你</strong>　{item.message}</p>
+                <small>{item.status === "replied" ? "Main 已回复" : item.status === "unknown" ? "处理结果未确认"
+                  : item.status === "failed" ? "处理失败" : item.receivedAt ? "Main 已收到" : "已保存，等待 Main 接收"}
+                  {item.status === "unknown" || item.status === "failed" ? item.receivedAt ? " · Main 已收到" : " · 接收未确认" : ""}
+                </small>
+                {item.reply && <p><strong>Main</strong>　{item.reply}</p>}
+                {item.error && <p>{item.error}</p>}
+              </li>)}</ul>
+            </section>
+          )}
                 {canAddProjectUserInput ? (
                   <form className="project-interaction-form" onSubmit={submitProjectUserInput}>
                     <ProjectInteractionComposer
                       textarea={{
-                        "aria-label": "补充要求、调整方向或添加约束",
+                        "aria-label": projectUserInputMode === "chat" ? "发给 Main 的消息" : "补充要求、调整方向或添加约束",
                         value: projectUserInput,
                         onChange: (event) => {
+                          if (event.target.value) chooseInputMode(projectUserInputMode);
                           setProjectUserInput(event.target.value);
                           if (projectUserInputError) setProjectUserInputError("");
                           if (projectUserInputNotice) setProjectUserInputNotice("");
                         },
                         rows: 3,
                         maxLength: 100_000,
-                        placeholder: "例如：新增一个消融实验，并优先比较不同训练数据规模下的表现。"
+                        placeholder: projectUserInputMode === "chat" ? "例如：当前实验做到哪一步了？" : "例如：新增一个消融实验，并优先比较不同训练数据规模下的表现。"
                       }}
                       options={
                         <fieldset
@@ -5860,13 +4006,20 @@ export function WorkspacePage({
                           aria-label="主动需求处理模式"
                           disabled={projectUserInputLoading || project.status === "interrupting"}
                         >
+                          {(project.status === "running" && !project.archivedAt || projectUserInputMode === "chat") && (
+                            <label>
+                              <input type="radio" name="project-user-input-mode" value="chat" checked={projectUserInputMode === "chat"}
+                                disabled={project.status !== "running" || Boolean(project.archivedAt)} onChange={() => selectInputMode("chat")} />
+                              <span>与 Main 对话</span>
+                            </label>
+                          )}
                           <label>
                             <input
                               type="radio"
                               name="project-user-input-mode"
                               value="wait"
                               checked={projectUserInputMode === "wait"}
-                              onChange={() => setProjectUserInputMode("wait")}
+                              onChange={() => selectInputMode("wait")}
                             />
                             <span>等待当前 Agent 完成</span>
                           </label>
@@ -5876,7 +4029,7 @@ export function WorkspacePage({
                               name="project-user-input-mode"
                               value="interrupt"
                               checked={projectUserInputMode === "interrupt"}
-                              onChange={() => setProjectUserInputMode("interrupt")}
+                              onChange={() => selectInputMode("interrupt")}
                               disabled={!(project.status === "running" && Boolean(project.currentAgent))}
                             />
                             <span>立即中断当前 Agent</span>
@@ -5888,9 +4041,10 @@ export function WorkspacePage({
                         variant="primary"
                         icon={<Send size={16} />}
                         loading={projectUserInputLoading}
-                        disabled={!projectUserInput.trim() || projectUserInputLoading}
+                        disabled={!projectUserInput.trim() || projectUserInputLoading ||
+                          projectUserInputMode === "chat" && (project.status !== "running" || Boolean(project.archivedAt))}
                       >
-                        提交给 main
+                        {projectUserInputMode === "chat" ? "发送给 Main" : "提交给 main"}
                       </Button>}
                     />
                     {projectUserInputError && (
@@ -5915,6 +4069,10 @@ export function WorkspacePage({
             <ProjectExplainerPanel projectId={projectId} active={interaction === "explainer"} onClose={closeInteraction} />
           </div>}
         </aside>
+
+      {Boolean(project.mainAssistance?.length) && <MainAssistancePanel records={project.mainAssistance!} />}
+      {project.searchTree && <SearchTreePanel projectId={project.id} />}
+      {Boolean(project.orchestration.gates?.length) && <WorkflowGateRuns runs={project.workflowGates ?? []} />}
 
       {project.status === "interrupted" && !project.interruptionSnapshot && (
         <section className="checkpoint-recovery-banner" aria-label="项目断点恢复">
@@ -6161,20 +4319,7 @@ export function WorkspacePage({
               </button>
             </div>
           </div>
-          {tab === "trace" ? (
-            <TraceView
-              events={events}
-              liveStreams={eventStream.live.streams}
-              liveEvents={eventStream.live.events}
-              project={project}
-              connection={connection}
-              totalEventCount={totalEventCount}
-              hasOlder={eventStream.hasOlder ?? false}
-              historyLoading={eventStream.historyLoading ?? false}
-              historyError={eventStream.historyError ?? ""}
-              onLoadOlder={eventStream.loadOlder ?? (async () => undefined)}
-            />
-          ) : tab === "artifacts" ? (
+          {tab === "trace" ? traceView : tab === "artifacts" ? (
             <ArtifactsView
               projectId={projectId}
               summary={artifactSummary}
@@ -6253,7 +4398,7 @@ export function WorkspacePage({
           onConfirm={() => void doAction("cancel")}
         />
       )}
-      {modelEditorOpen && project.status === "draft" && !project.configurationLocked && (
+      {modelEditorOpen && (
         <AgentModelEditor
           project={project}
           harnesses={workflowHarnessCatalog}
@@ -6276,7 +4421,7 @@ export function WorkspacePage({
       {workflowAdjustmentOpen && <WorkflowAdjustmentEditor key={project.id} project={project} eventRevision={workflowAdjustmentEventRevision} gateways={recommendationGateways}
         harnesses={workflowHarnessCatalog} skills={skillOptions} mcpDirectory={mcpDirectory} onAddSkill={addSkillCandidate}
         onWorkflowApplied={scheduleProjectRefresh} onClose={() => setWorkflowAdjustmentOpen(false)} />}
-      {groupEditorOpen && project.git?.enabled && (
+      {groupEditorOpen && usesCollaborationScheduler(project) && (
         <CollaborationGroupEditor
           project={project}
           saving={groupUpdateLoading}

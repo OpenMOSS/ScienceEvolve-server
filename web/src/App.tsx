@@ -10,6 +10,8 @@ import {
 } from "react";
 import { ChevronDown, Database, Menu, Network, Plus, Save, X } from "lucide-react";
 import { Brand, Button, ErrorPanel, PageLoader } from "./components/Common";
+import { readCachedProjectList } from "./project-list-cache";
+import { WorkspacePreview } from "./components/WorkspacePreview";
 import { ProjectListPage } from "./pages/ProjectListPage";
 import { ProjectExplainerAssistantProvider } from "./components/ProjectExplainerAssistant";
 
@@ -307,7 +309,10 @@ function AppContent() {
     <div className="app-shell">
       {route.name !== "workspace" && <GlobalHeader route={route} />}
 
-      <Suspense fallback={<PageLoader label="正在准备科研界面…" />}>
+      <Suspense fallback={route.name === "workspace" ? (
+        <WorkspacePreview project={readCachedProjectList()?.projects.find(row => row.id === route.projectId)}
+          onBack={() => navigate("/projects")} />
+      ) : <PageLoader label="正在准备科研界面…" />}>
         {(route.name === "projects" || route.name === "saved-tasks" || preserveProjectsForGitHub) && (
           <div hidden={preserveProjectsForGitHub}>
           <ProjectListPage

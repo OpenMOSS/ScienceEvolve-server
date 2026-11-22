@@ -53,6 +53,7 @@ import {
   getCatalog,
   getGitHubAccounts,
   getProjects,
+  getProjectSummary,
   getProjectFolders,
   createProjectFolder,
   renameProjectFolder,
@@ -101,7 +102,6 @@ import {
   catalogDefaultHarnessId,
   cloneAgentOrchestration,
   cloneAgentsConfig,
-  orchestrationWithoutGit,
   createBlankWorkflow,
   DEFAULT_AGENTS,
   formatTokenCount,
@@ -676,7 +676,7 @@ function ProjectCard({
             </div>
           </div>
         )}
-        {!project.archivedAt && project.status === "paused" && !project.git?.enabled && (
+        {!project.archivedAt && project.status === "paused" && !canArchiveProject(project) && (
           <small className="project-archive-hint">当前为暂停状态；如需归档，请先停止项目并等待停止完成。</small>
         )}
         {!project.archivedAt && ["cancelling", "stopping"].includes(project.status) && (
@@ -1200,7 +1200,8 @@ export function ProjectListPage({
   const [cachedProjectList] = useState(readCachedProjectList);
   const [projects, setProjects] = useState<Project[]>(cachedProjectList?.projects ?? []);
   const [cachedOverview] = useState(readCachedProjectOverview);
-  const [hasProjectSnapshot, setHasProjectSnapshot] = useState(Boolean(cachedProjectList));
+  const [countedProjects, setCountedProjects] = useState(cachedProjectList?.partial ? undefined : cachedProjectList?.projects);
+  const hasProjectSnapshot = countedProjects !== undefined;
   const [loading, setLoading] = useState(!cachedProjectList);
   const [error, setError] = useState("");
   const [refreshWarning, setRefreshWarning] = useState("");
@@ -1294,14 +1295,15 @@ export function ProjectListPage({
   const [savedTasks, setSavedTasks] = useState<SavedResearchTask[]>(cachedSavedTasks ?? []);
   const [savedTasksLoading, setSavedTasksLoading] = useState(!cachedSavedTasks);
   const [savedTasksWarning, setSavedTasksWarning] = useState("");
-  const loadInFlight = useRef(false);
+  const listController = useRef<AbortController>();
+  const pendingCards = useRef(new Set<string>());
   const pendingProjectRefresh = useRef(false);
   const queueLoadInFlight = useRef(false);
   const projectRequestRef = useRef(0);
   const folderRequestRef = useRef(0);
   const folderLoadInFlight = useRef(false);
   const folderMutationPending = useRef(false);
-  const hasProjectSnapshotRef = useRef(Boolean(cachedProjectList));
+  const hasProjectSnapshotRef = useRef(hasProjectSnapshot);
   const projectsRef = useRef(projects);
   const pageActiveRef = useRef(true);
   const lastTokenRefreshAt = useRef(cachedProjectList?.tokenRefreshedAt ?? 0);
@@ -1333,12 +1335,14 @@ export function ProjectListPage({
     });
   }, [gateways, savedTasks]);
 
-  const publishListSnapshot = useCallback((next: Project[]) => {
+  const publishListSnapshot = useCallback((next: Project[], complete = true) => {
+    next = cacheProjectList(next, lastTokenRefreshAt.current, complete);
     projectsRef.current = next;
-    hasProjectSnapshotRef.current = true;
-    cacheProjectList(next, lastTokenRefreshAt.current);
+    if (complete) {
+      hasProjectSnapshotRef.current = true;
+      setCountedProjects(next);
+    }
     setProjects(next);
-    setHasProjectSnapshot(true);
     setLoading(false);
     setError("");
   }, []);
@@ -1361,37 +1365,41 @@ export function ProjectListPage({
     }
     // Cached cards stay visible during refresh. Project and queue requests
     // have separate locks so a slow queue cannot hold up the list or its polls.
-    if (!loadInFlight.current) {
+    if (!listController.current) {
       const request = ++projectRequestRef.current;
-      loadInFlight.current = true;
-      if (initial && !hasProjectSnapshotRef.current) setLoading(true);
+      const controller = new AbortController();
+      listController.current = controller;
+      if (initial && !hasProjectSnapshotRef.current && !projectsRef.current.length) setLoading(true);
       setRefreshing(true);
-      requests.push(
-        getProjects(true).then((incoming) => {
-          if (!pageActiveRef.current || request !== projectRequestRef.current) return;
-          const updateTokenSnapshot = initial || refreshTokens;
-          const current = projectsRef.current;
-          const usageByProject = new Map(
-            current.map((project) => [project.id, project.tokenUsage])
-          );
-          const next = updateTokenSnapshot || current.length === 0
-            ? incoming
-            : incoming.map((project) => ({
-                ...project,
-                tokenUsage: usageByProject.get(project.id) ?? project.tokenUsage
-              }));
-          if (updateTokenSnapshot) lastTokenRefreshAt.current = Date.now();
-          publishListSnapshot(next);
+      const updateTokens = initial || refreshTokens;
+      const applyRows = (incoming: Project[], complete: boolean) => {
+        if (controller.signal.aborted || !pageActiveRef.current || request !== projectRequestRef.current) return;
+        const current = new Map(projectsRef.current.map(project => [project.id, project]));
+        const rows = incoming.map(project => {
+          const usage = current.get(project.id)?.tokenUsage;
+          return updateTokens || !usage ? project : { ...project, tokenUsage: usage };
+        });
+        if (complete) {
+          if (updateTokens) lastTokenRefreshAt.current = Date.now();
+          publishListSnapshot(rows);
           setRefreshWarning("");
-        }).catch((reason: unknown) => {
+        } else {
+          for (const row of rows) current.set(row.id, row);
+          publishListSnapshot([...current.values()], false);
+        }
+      };
+      requests.push(
+        getProjects(true, { signal: controller.signal, onProjects: rows => applyRows(rows, false) })
+        .then(incoming => applyRows(incoming, true)).catch((reason: unknown) => {
           if (!pageActiveRef.current || request !== projectRequestRef.current) return;
           const message = reason instanceof Error ? reason.message : "无法连接项目服务";
-          if (hasProjectSnapshotRef.current) setRefreshWarning(message);
+          if (hasProjectSnapshotRef.current || projectsRef.current.length) setRefreshWarning(message);
           else setError(message);
           setLoading(false);
         }).finally(() => {
           if (request !== projectRequestRef.current) return;
-          loadInFlight.current = false;
+          controller.abort();
+          listController.current = undefined;
           if (pageActiveRef.current) setRefreshing(queueLoadInFlight.current);
           if (pageActiveRef.current && pendingProjectRefresh.current) {
             pendingProjectRefresh.current = false;
@@ -1401,6 +1409,21 @@ export function ProjectListPage({
       );
     } else {
       pendingProjectRefresh.current = true;
+      const request = projectRequestRef.current;
+      const { signal } = listController.current;
+      // An outstanding list read may be waiting on another project's writer.
+      for (const row of projectsRef.current) {
+        if (row.archivedAt || pendingCards.current.has(row.id) ||
+          !["queued", "running", "retrying", "pausing", "interrupting", "cancelling"].includes(row.status)) continue;
+        pendingCards.current.add(row.id);
+        requests.push(getProjectSummary(row.id, signal).then(snapshot => {
+          if (!signal.aborted && pageActiveRef.current && projectRequestRef.current === request)
+            publishListSnapshot(projectsRef.current.map(current => current.id === row.id ? snapshot : current), false);
+        }).catch((reason: unknown) => {
+          if (!signal.aborted && pageActiveRef.current && projectRequestRef.current === request)
+            setRefreshWarning(reason instanceof Error ? reason.message : "项目卡片刷新失败");
+        }).finally(() => { pendingCards.current.delete(row.id); }));
+      }
     }
     if (!queueLoadInFlight.current) {
       queueLoadInFlight.current = true;
@@ -1416,7 +1439,7 @@ export function ProjectListPage({
           setQueueError(reason instanceof Error ? reason.message : "队列快照加载失败");
         }).finally(() => {
           queueLoadInFlight.current = false;
-          if (pageActiveRef.current) setRefreshing(loadInFlight.current);
+          if (pageActiveRef.current) setRefreshing(Boolean(listController.current));
         })
       );
     }
@@ -1428,11 +1451,12 @@ export function ProjectListPage({
     // A GET started before a confirmed mutation must never restore deleted
     // cards or overwrite the cache with the previous archive/status snapshot.
     ++projectRequestRef.current;
-    loadInFlight.current = false;
+    listController.current?.abort();
+    listController.current = undefined;
     pendingProjectRefresh.current = false;
     if (update) {
       const next = update(projectsRef.current);
-      publishListSnapshot(next);
+      publishListSnapshot(next, hasProjectSnapshotRef.current && !readCachedProjectList()?.partial);
     }
     setRefreshing(queueLoadInFlight.current);
   }, [publishListSnapshot]);
@@ -1455,6 +1479,9 @@ export function ProjectListPage({
     window.addEventListener("openfars:projects-started", refresh);
     return () => {
       pageActiveRef.current = false;
+      ++projectRequestRef.current;
+      listController.current?.abort();
+      listController.current = undefined;
       pendingProjectRefresh.current = false;
       window.clearInterval(statusTimer);
       window.clearInterval(tokenTimer);
@@ -1610,8 +1637,7 @@ export function ProjectListPage({
   const defaultRoleTemplates =
     configPresets.find((preset) => preset.id === "default")?.agents ??
     DEFAULT_AGENTS;
-  const quickOrchestrationError = agentOrchestrationError(quickOrchestration, quickGitEnabled);
-  const quickGitRequiredByCollaborations = (quickOrchestration.collaborations?.length ?? 0) > 0;
+  const quickOrchestrationError = agentOrchestrationError(quickOrchestration);
   const quickGithubAccountReady = !quickGitEnabled || githubAccounts.some(
     (account) => account.id === quickGithubAccountId && account.status === "ready"
   );
@@ -1642,7 +1668,7 @@ export function ProjectListPage({
   const savedTaskStartNotices = (task: SavedResearchTask): string[] =>
     [...new Set([
       runtimeCatalogNotice,
-      agentOrchestrationError(task.orchestration, task.git?.enabled === true),
+      agentOrchestrationError(task.orchestration),
       task.git?.enabled && githubAccountsLoading ? "GitHub 账号目录仍在加载。" : "",
       task.git?.enabled && !githubAccountsLoading && !githubAccounts.some(
         (account) => account.id === task.git?.accountId && account.status === "ready"
@@ -1692,11 +1718,6 @@ export function ProjectListPage({
   };
 
   const setQuickGitMode = (enabled: boolean) => {
-    if (!enabled && quickGitRequiredByCollaborations) return;
-    if (!enabled) {
-      try { setQuickOrchestration(orchestrationWithoutGit(quickOrchestration)); }
-      catch (error) { setQuickError(error instanceof Error ? error.message : "当前 Workflow 无法关闭 Git 机制"); return; }
-    }
     setQuickGitEnabled(enabled);
     setQuickError("");
     if (!enabled) return;
@@ -2143,17 +2164,19 @@ export function ProjectListPage({
 
   const currentProjects = projects.filter((project) => !project.archivedAt);
   const overview = useMemo(() => {
-    if (!hasProjectSnapshot) return cachedOverview;
-    const current = projects.filter((project) => !project.archivedAt);
+    if (!countedProjects) return cachedOverview;
+    const current = countedProjects.filter((project) => !project.archivedAt);
     const statusCounts = current.reduce<Record<ProjectStatusCategory, number>>((counts, project) => {
       counts[classifyProjectStatus(project.status)] += 1;
       return counts;
     }, { active: 0, attention: 0, stopping: 0, terminal: 0 });
-    return { total: current.length, archived: projects.length - current.length, statusCounts,
+    return { total: current.length, archived: countedProjects.length - current.length, statusCounts,
       totalCycles: current.reduce((sum, project) => sum + project.cycle, 0) };
-  }, [cachedOverview, hasProjectSnapshot, projects]);
+  }, [cachedOverview, countedProjects]);
   const archivedCount = overview?.archived ?? 0;
   const statusCounts = overview?.statusCounts;
+  const waitingForMatches = !hasProjectSnapshot && !visibleProjects.length;
+  const listError = error || (waitingForMatches ? refreshWarning : "");
 
   useEffect(() => {
     if (hasProjectSnapshot && overview) cacheProjectOverview(overview);
@@ -2388,8 +2411,8 @@ export function ProjectListPage({
               </button>
             </div>
             <label className={`quick-git-opt-in ${quickGitEnabled ? "is-enabled" : ""}`}>
-              <span><strong>启用 Git 机制</strong><small>{quickGitEnabled && quickGitRequiredByCollaborations ? "当前 Workflow 包含协作组，请先移除所有协作组再关闭 Git 机制。" : "使用 Git 管理代码与研究产物，支持独立 Agent 和协作组执行。"}</small></span>
-              <input type="checkbox" role="switch" aria-label="快速发起启用 Git 机制" checked={quickGitEnabled} disabled={quickGitEnabled && quickGitRequiredByCollaborations} title={quickGitEnabled && quickGitRequiredByCollaborations ? "请先移除所有协作组再关闭 Git 机制" : undefined} onChange={(event) => setQuickGitMode(event.target.checked)} />
+              <span><strong>启用 Git 机制</strong><small>使用 Git 管理代码与研究产物。</small></span>
+              <input type="checkbox" role="switch" aria-label="快速发起启用 Git 机制" checked={quickGitEnabled} onChange={(event) => setQuickGitMode(event.target.checked)} />
               <b>{quickGitEnabled ? "已开启" : "未开启"}</b>
             </label>
             {quickGitEnabled && <GitHubAccountSelector accounts={githubAccounts} selectedAccountId={quickGithubAccountId} loading={githubAccountsLoading} onChange={(accountId) => { setQuickGithubAccountId(accountId); setQuickError(""); }} />}
@@ -2729,7 +2752,7 @@ export function ProjectListPage({
           </label>
         </div>
 
-        {refreshWarning && (
+        {refreshWarning && !listError && (
           <div className="projects-refresh-warning">
             <RefreshCw size={14} />
             自动刷新失败：{refreshWarning}
@@ -2754,11 +2777,11 @@ export function ProjectListPage({
             </ul>
           </div>
         )}
-        {loading ? (
+        {loading || (waitingForMatches && !listError) ? (
           <PageLoader label="正在整理科研项目…" />
-        ) : error ? (
+        ) : listError ? (
           <ErrorPanel
-            message={error}
+            message={listError}
             action={
               <Button variant="secondary" onClick={() => void load(true)}>
                 重新加载

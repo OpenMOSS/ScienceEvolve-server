@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, getRecommendationExplainerConfig, getAgentToolRecommendationCatalog, recommendAgentTools, getWorkflowAdjustmentPage, getWorkflowAdjustmentDetail, submitWorkflowAdjustment, withdrawWorkflowAdjustment, projectAction } from "../api";
+import { ApiError, getRecommendationExplainerConfig, getAgentToolRecommendationCatalog, recommendAgentTools, getWorkflowAdjustmentPage, getWorkflowAdjustmentDetail, submitWorkflowAdjustment, withdrawWorkflowAdjustment, projectAction, searchTreeRequest } from "../api";
 import { workflowAdjustmentPageFixture } from "../test/workflow-adjustment-history";
 import { DEFAULT_AGENT_ORCHESTRATION } from "../lib";
 import { runtimeProjectFixture } from "../test/runtime-project";
@@ -12,7 +12,7 @@ import { WorkflowAdjustmentEditor } from "./WorkflowAdjustmentEditor";
 import { normalizeCanvasLayout } from "./workflow-canvas/core/canvas-layout";
 
 vi.mock("../api", async original => ({ ...await original<typeof import("../api")>(), getWorkflowAdjustmentPage: vi.fn(), getWorkflowAdjustmentDetail: vi.fn(), submitWorkflowAdjustment: vi.fn(),
-  withdrawWorkflowAdjustment: vi.fn(), getRecommendationExplainerConfig: vi.fn(), getAgentToolRecommendationCatalog: vi.fn(), recommendAgentTools: vi.fn(), projectAction: vi.fn() }));
+  withdrawWorkflowAdjustment: vi.fn(), getRecommendationExplainerConfig: vi.fn(), getAgentToolRecommendationCatalog: vi.fn(), recommendAgentTools: vi.fn(), projectAction: vi.fn(), searchTreeRequest: vi.fn() }));
 const harnesses = ["codex", "fixture-anthropic"].map(id => ({ id, label: id, adapterVersion: "1", available: true, purposes: ["workflow"], nativeProtocol: "responses",
   capabilities: { durableSession: true, officialEvents: true, toolEvents: true, usageEvents: true, readOnlyExplainer: true, webSearch: true, skills: true, mcp: true } } as HarnessCatalogEntry));
 function setup(complex = false, gitEnabled = true) {
@@ -34,7 +34,10 @@ function setup(complex = false, gitEnabled = true) {
       accepted.currentVersion = context.current.version; accepted.history[0].appliedVersion = context.current.version; }
     context.records.push(accepted); return { record: accepted, revision: 99, replay: false };
   };
-  vi.mocked(getWorkflowAdjustmentPage).mockImplementation(async (_projectId, input) => structuredClone(workflowAdjustmentPageFixture(context, input)));
+  vi.mocked(getWorkflowAdjustmentPage).mockImplementation(async (_projectId, input) => {
+    await Promise.resolve();
+    return structuredClone(workflowAdjustmentPageFixture(context, input));
+  });
   vi.mocked(getWorkflowAdjustmentDetail).mockImplementation(async (_projectId, id, expectedVersion) => {
     const page = workflowAdjustmentPageFixture(context);
     if (expectedVersion && expectedVersion !== page.journalVersion) throw new ApiError("读取期间已有更新", 409);
@@ -77,6 +80,28 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("runtime workflow adjustment window using the existing complete canvas", () => {
+  it("opens the project's live search tree without replacing or submitting the Workflow draft", async () => {
+    const f = setup(); await ready();
+    expect(screen.getByRole("button", { name: "查看项目搜索树" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "查看项目搜索树" })).toHaveTextContent("搜索树 · 未启用");
+    enter("保留我正在编辑的 Workflow 指令"); fireEvent.blur(instructions());
+    const original = loadWorkflowAdjustmentDraft(localStorage, f.project.id);
+    f.project.searchTree = { root: { name: "Initial" }, directions: [] };
+    f.view.rerender(<WorkflowAdjustmentEditor {...f.props} />);
+    vi.mocked(searchTreeRequest).mockResolvedValue({ revision: "a".repeat(40), root: { id: "root", kind: "root", name: "Initial", inputs: [] },
+      nodes: [{ id: "live-direction", kind: "direction", name: "Persisted direction", parentId: "root" }] });
+    await userEvent.click(screen.getByRole("button", { name: "查看项目搜索树" }));
+    expect(await screen.findByRole("button", { name: "方向：Persisted direction" })).toBeInTheDocument();
+    expect(searchTreeRequest).toHaveBeenCalledWith(f.project.id, { operation: "overview" });
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "项目搜索树" }), { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "项目搜索树" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "查看与调整当前 Workflow" })).toBeInTheDocument();
+    expect(instructions()).toHaveValue("保留我正在编辑的 Workflow 指令");
+    expect(loadWorkflowAdjustmentDraft(localStorage, f.project.id)).toEqual(original);
+    expect(submitWorkflowAdjustment).not.toHaveBeenCalled();
+    expect(f.close).not.toHaveBeenCalled();
+  });
+
   it("opens and focuses Workflow settings from the modification records tab", async () => {
     setup();
     await ready();
@@ -430,6 +455,7 @@ describe("runtime workflow adjustment window using the existing complete canvas"
 
   it("lets the user restore the exact original Harness when a Session binds after local drafting", async () => {
     const f = setup(); await ready(); enter("保留其余编辑"); fireEvent.blur(instructions());
+    await userEvent.click(screen.getByRole("button", { name: "运行" }));
     fireEvent.change(screen.getByRole("combobox", { name: "main Harness" }), { target: { value: "fixture-anthropic" } });
     f.context.constraints = { agentHarnesses: { main: { harnessId: "codex", reason: "已有原生会话，保留原 Harness" } } };
     await recordsTab(); await userEvent.click(screen.getByRole("button", { name: "刷新记录" }));

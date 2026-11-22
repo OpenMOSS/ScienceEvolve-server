@@ -216,6 +216,8 @@ export function useProjectEvents(
   const [timelineHistoryLoading, setTimelineHistoryLoading] = useState(false);
   const [timelineHistoryError, setTimelineHistoryError] = useState("");
   const timelineCursor = useRef<number>();
+  const historyRequest = useRef<symbol>();
+  const timelineRequest = useRef<symbol>();
   const [live, setLive] = useState<ProjectLiveSnapshot>({
     projectId: projectId ?? "",
     streams: [],
@@ -228,6 +230,8 @@ export function useProjectEvents(
 
   useEffect(() => {
     activeProjectId.current = projectId;
+    timelineRequest.current = undefined;
+    historyRequest.current = undefined;
     if (!projectId || !enabled) {
       setConnection("offline");
       return;
@@ -413,6 +417,8 @@ export function useProjectEvents(
 
     return () => {
       disposed = true;
+      historyRequest.current = undefined;
+      timelineRequest.current = undefined;
       source?.close();
       if (flushTimer) clearTimeout(flushTimer);
       if (retryTimer.current) clearTimeout(retryTimer.current);
@@ -426,16 +432,18 @@ export function useProjectEvents(
       !requestedProjectId ||
       !enabled ||
       !hasOlder ||
-      historyLoading ||
+      historyLoading || historyRequest.current ||
       before === undefined
     ) {
       return;
     }
+    const request = Symbol();
+    historyRequest.current = request;
     setHistoryLoading(true);
     setHistoryError("");
     try {
       const page = await getProjectEventHistory(requestedProjectId, before, TRACE_HISTORY_PAGE_LIMIT, "messages", true, filters);
-      if (activeProjectId.current !== requestedProjectId) return;
+      if (historyRequest.current !== request || activeProjectId.current !== requestedProjectId) return;
       const older = page.events.filter(event => event.seq < before);
       if (older.length) {
         setEvents(current => mergeEvents(current, older));
@@ -444,12 +452,13 @@ export function useProjectEvents(
       setHasOlder(page.hasMore && older.length > 0);
       return older.length;
     } catch (reason) {
-      if (activeProjectId.current !== requestedProjectId) return;
+      if (historyRequest.current !== request || activeProjectId.current !== requestedProjectId) return;
       setHistoryError(
         reason instanceof Error ? reason.message : "更早轨迹加载失败"
       );
     } finally {
-      if (activeProjectId.current === requestedProjectId) {
+      if (historyRequest.current === request) {
+        historyRequest.current = undefined;
         setHistoryLoading(false);
       }
     }
@@ -457,19 +466,24 @@ export function useProjectEvents(
 
   const loadOlderTimeline = useCallback(async () => {
     const requestedProjectId = projectId, before = timelineCursor.current;
-    if (!requestedProjectId || !enabled || !timelineHasOlder || timelineHistoryLoading || before === undefined) return;
+    if (!requestedProjectId || !enabled || !timelineHasOlder || timelineHistoryLoading || timelineRequest.current || before === undefined) return;
+    const request = Symbol();
+    timelineRequest.current = request;
     setTimelineHistoryLoading(true);
     setTimelineHistoryError("");
     try {
       const page = await getProjectEventHistory(requestedProjectId, before, HISTORY_PAGE_LIMIT, "timeline");
-      if (activeProjectId.current !== requestedProjectId) return;
+      if (timelineRequest.current !== request || activeProjectId.current !== requestedProjectId) return;
       setTimelineEvents(current => collapseBusinessAssignments(mergeEvents(current, page.events)));
       timelineCursor.current = page.events[0]?.seq ?? before;
       setTimelineHasOlder(page.hasMore);
     } catch (reason) {
-      if (activeProjectId.current === requestedProjectId) setTimelineHistoryError(reason instanceof Error ? reason.message : "更早调用加载失败");
+      if (timelineRequest.current === request) setTimelineHistoryError(reason instanceof Error ? reason.message : "更早调用加载失败");
     } finally {
-      if (activeProjectId.current === requestedProjectId) setTimelineHistoryLoading(false);
+      if (timelineRequest.current === request) {
+        timelineRequest.current = undefined;
+        setTimelineHistoryLoading(false);
+      }
     }
   }, [enabled, projectId, timelineHasOlder, timelineHistoryLoading]);
 

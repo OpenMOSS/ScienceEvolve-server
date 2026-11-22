@@ -20,11 +20,15 @@ export function PerformanceMetrics({
   performance,
   averageFallback,
   latestToken,
+  hideInactiveSpeed = false,
+  showApproximation = true,
   compact = false
 }: {
   performance?: InvocationPerformance;
   averageFallback?: InvocationPerformance | PerformanceAggregate;
   latestToken?: InvocationPerformance;
+  hideInactiveSpeed?: boolean;
+  showApproximation?: boolean;
   compact?: boolean;
 }) {
   const average = averageFallback?.averageTokensPerSecond ?? performance?.averageTokensPerSecond;
@@ -35,20 +39,21 @@ export function PerformanceMetrics({
     ? averageFallback.firstTokenLatencyMs
     : undefined;
   const latency = latestToken?.firstTokenLatencyMs ?? performance?.firstTokenLatencyMs ?? fallbackLatency;
+  const active = performance?.status === "active" && performance.requestActive !== false;
   return (
     <div className={`performance-metrics ${compact ? "compact" : ""}`}>
       <span title="最近一次实际测得的首 Token 延迟"><small>首 Token 延迟</small><strong>{formatLatency(latency)}</strong></span>
-      <span>
+      {(active || !hideInactiveSpeed) && <span>
         <small>当前速度</small>
         <strong>
-          {performance?.status === "active" && performance.requestActive !== false && performance.streaming
-            ? formatTokenSpeed(performance.currentTokensPerSecond, performance.tokenSource, true)
-            : performance?.status === "active" && performance.requestActive !== false
+          {active && performance.streaming
+            ? formatTokenSpeed(performance.currentTokensPerSecond, "official", showApproximation)
+            : active
               ? "非流式"
               : "—"}
         </strong>
-      </span>
-      <span><small>平均速度</small><strong>{formatTokenSpeed(average, averageSource)}</strong></span>
+      </span>}
+      <span><small>平均速度</small><strong>{formatTokenSpeed(average, showApproximation ? averageSource : "official")}</strong></span>
     </div>
   );
 }

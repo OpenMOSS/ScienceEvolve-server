@@ -106,6 +106,30 @@ describe("useProjectEvents bounded event stream", () => {
     expect(MockEventSource.instances[0].url).toBe("stream:prj_call_pages:after:100");
   });
 
+  it("retries the same history cursor, merges concurrent live events and ignores a previous project's page", async () => {
+    const { result, rerender } = renderHook(({ id }) => useProjectEvents(id), { initialProps: { id: "first" } });
+    await waitFor(() => expect(result.current.events).toHaveLength(2));
+    apiMocks.getProjectEventHistory.mockRejectedValueOnce(new Error("read interrupted"));
+    await act(async () => result.current.loadOlder());
+    expect(result.current.historyError).toBe("read interrupted");
+    let finish!: (value: unknown) => void;
+    apiMocks.getProjectEventHistory.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    let loading!: ReturnType<ReturnType<typeof useProjectEvents>["loadOlder"]>;
+    act(() => { loading = result.current.loadOlder(); void result.current.loadOlder(); });
+    act(() => MockEventSource.instances[0].emit("trace", event(101, "agent.trace")));
+    await waitFor(() => expect(result.current.events.at(-1)?.seq).toBe(101));
+    await act(async () => { finish({ events: [event(98, "agent.trace"), event(99, "agent.trace")], hasMore: true }); await loading; });
+    expect(result.current.events.map(row => row.seq)).toEqual([98, 99, 100, 101]);
+    expect(apiMocks.getProjectEventHistory.mock.calls).toEqual([["first", 99, 20, "messages", true, undefined], ["first", 99, 20, "messages", true, undefined]]);
+    apiMocks.getProjectEventHistory.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    act(() => { loading = result.current.loadOlder(); });
+    rerender({ id: "next" });
+    await waitFor(() => expect(MockEventSource.instances).toHaveLength(2));
+    await act(async () => { finish({ events: [event(97, "agent.trace")], hasMore: false }); await loading; });
+    expect(result.current.events.map(row => row.seq)).toEqual([99, 100]);
+    expect(result.current.hasOlder).toBe(true);
+  });
+
   it("reads one bounded history page per click and reuses the updated cursor", async () => {
     apiMocks.getProjectEventHistory
       .mockResolvedValueOnce({ events: [event(98, "agent.trace")], hasMore: true })

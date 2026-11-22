@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChevronDown, Eye, FilePlus2, History, Send, Settings2, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, Eye, FilePlus2, GitBranch, History, Send, Settings2, X } from "lucide-react";
 import { Button } from "./Common";
 import { ApiError, getWorkflowAdjustmentDetail, submitWorkflowAdjustment, withdrawWorkflowAdjustment } from "../api";
 import type { FixedMcpDefinition, GatewayRecord, HarnessCatalogEntry, Project, SkillDefinition } from "../types";
@@ -10,6 +10,7 @@ import { canvasDraftValue, clearWorkflowAdjustmentOperation, loadWorkflowAdjustm
   workflowDraftRecommendationSnapshot, type WorkflowAdjustmentDraft, type WorkflowAdjustmentPendingOperation } from "../workflowAdjustmentDraft";
 import { ExplainerRecommendationSettings, RecommendationProvider } from "./RecommendationContext";
 import { WorkflowCanvasEditor } from "./WorkflowCanvasEditor";
+import { SearchTreeDialog } from "./SearchTreeDialog";
 import { CanvasTextDraftContext } from "./workflow-canvas/CanvasTextDraftContext";
 import { normalizeCanvasLayout } from "./workflow-canvas/core/canvas-layout";
 import { defaultScopedCanvas } from "./workflow-canvas/core/scoped-workflow";
@@ -127,6 +128,7 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [panel, setPanel] = useState<"config" | "records">("config");
+  const [searchTreeOpen, setSearchTreeOpen] = useState(false);
   const [recordFilters, setRecordFilters] = useState<AdjustmentRecordFilters>({ query: "", source: "all", status: "all" });
   const [preview, setPreview] = useState<Preview>();
   const recommendationDetails = useRef<HTMLDetailsElement>(null);
@@ -188,7 +190,8 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
       const local = draftRef.current;
       if (!local && !invalidDraft.current) {
         persist(newWorkflowAdjustmentDraft(project.id, next.current));
-      } else if (local && !sameWorkflowVersion(local.base, next.current.version)) {
+      } else if (local && !pendingRef.current && !sameWorkflowVersion(local.base, next.current.version) &&
+        differences(local.baseSnapshot, next.current.snapshot).length) {
         const updated = mergeLatest(local, next.current);
         if (updated) persist(updated);
       }
@@ -404,6 +407,8 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
         </div>
         <div className="adjustment-header-controls">
           <div className="adjustment-header-actions">
+            <button type="button" aria-label="查看项目搜索树" disabled={!project.searchTree}
+              title={project.searchTree ? "查看项目当前搜索树与探索记录" : "本项目创建时未启用搜索树，无法查看或在创建后补开"} onClick={() => setSearchTreeOpen(true)}><GitBranch size={14} />{project.searchTree ? "搜索树" : "搜索树 · 未启用"}</button>
             <button type="button" aria-label="版本历史" title="版本历史" aria-pressed={panel === "records"} onClick={() => setPanel(panel === "records" ? "config" : "records")}><History size={15} aria-hidden="true" />历史</button>
             <details className="adjustment-version-menu" ref={versionMenu} onKeyDown={event => {
               if (event.key !== "Escape") return;
@@ -485,6 +490,7 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
         </div>
       </RecommendationProvider> : <p className="adjustment-empty">{loading ? "正在读取当前正式配置…" : "草稿尚未建立。请核对上方说明，使用当前正式配置新建草稿。"}</p>}
     </div>
+    {searchTreeOpen && project.searchTree && <SearchTreeDialog key={project.id} projectId={project.id} onClose={() => setSearchTreeOpen(false)} />}
     {formalPreview && <div className="modal-backdrop adjustment-submit-backdrop">
       <section className="adjustment-formal-dialog" role="dialog" aria-modal="true" aria-label="查看正式版本"
         onKeyDown={event => {

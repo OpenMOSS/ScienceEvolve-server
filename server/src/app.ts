@@ -15,7 +15,6 @@ import { readFile } from "node:fs/promises";
 import type { AppConfig } from "./config.js";
 import type { EventHub } from "./event-hub.js";
 import type { Orchestrator } from "./orchestrator.js";
-import { projectListSummary } from "./project-list-summary.js";
 import { CollaborationStateError } from "./collaboration-state/errors.js";
 import { workflowAdjustmentSubmissionBodySchema, workflowAdjustmentWithdrawalBodySchema } from "./workflow-adjustments.js";
 import type { ProjectStorage } from "./storage.js";
@@ -98,8 +97,7 @@ const recommendationProjectQuerySchema = z.object({
   projectId: z.string().regex(/^prj_[a-f0-9]{32}$/).optional()
 }).strict();
 
-function responseAbortSignal(response: Response): AbortSignal {
-  const controller = new AbortController();
+function responseAbortSignal(response: Response, controller = new AbortController()): AbortSignal {
   response.on("close", () => {
     if (!response.writableEnded) controller.abort();
   });
@@ -984,10 +982,35 @@ export function createApp(dependencies: AppDependencies) {
   app.get("/api/projects", async (request, response, next) => {
     try {
       const includeArchived = request.query.includeArchived === "true";
-      const projects = await orchestrator.listProjects(includeArchived);
-      response.json({
-        projects: request.query.view === "summary" ? projects.map(projectListSummary) : projects
-      });
+      if (request.query.view !== "summary") {
+        response.json({ projects: await orchestrator.listProjects(includeArchived) });
+        return;
+      }
+      response.vary("Accept");
+      if (request.accepts(["application/json", "application/x-ndjson"]) !== "application/x-ndjson") {
+        response.json({ projects: await orchestrator.listProjectSummaries(includeArchived) });
+        return;
+      }
+      const controller = new AbortController();
+      const signal = responseAbortSignal(response, controller);
+      response.set({ "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store, no-transform",
+        "X-Accel-Buffering": "no" });
+      response.flushHeaders();
+      let writes = Promise.resolve();
+      try {
+        await orchestrator.listProjectSummaries(includeArchived, project => {
+          writes = writes.then(async () => {
+            signal.throwIfAborted();
+            if (!response.write(JSON.stringify({ type: "project", project }) + "\n")) await waitForResponseDrain(response, signal);
+          });
+          return writes;
+        }, signal);
+        if (!signal.aborted) response.end(JSON.stringify({ type: "complete" }) + "\n");
+      } catch (error) {
+        controller.abort();
+        if (!response.destroyed && !response.writableEnded) response.end(JSON.stringify({ type: "error",
+          message: redactTrace(error instanceof Error ? error.message : "项目列表读取失败").slice(0, 500) }) + "\n");
+      }
     } catch (error) {
       next(error);
     }
@@ -1143,15 +1166,18 @@ export function createApp(dependencies: AppDependencies) {
   app.get("/api/projects/:projectId", async (request, response, next) => {
     try {
       const projectId = request.params.projectId;
+      const summarySignal = request.query.view === "summary" ? responseAbortSignal(response) : undefined;
+      const read = () => summarySignal ? orchestrator.getProjectSummary(projectId, summarySignal) : orchestrator.getProject(projectId);
       const getProjectAllowingRecovery = async () => {
         try {
-          return await orchestrator.getProject(projectId);
+          return await read();
         } catch (error) {
+          if (summarySignal?.aborted) throw error;
           // A restore failure can resolve its storage barrier one microtask
           // before the orchestrator publishes storage-recovery-required.
           await new Promise<void>((resolve) => setImmediate(resolve));
           try {
-            const recovery = await orchestrator.getProject(projectId);
+            const recovery = await read();
             if (recovery?.phase === "storage-recovery-required") {
               return recovery;
             }
@@ -1166,7 +1192,7 @@ export function createApp(dependencies: AppDependencies) {
         response.status(404).json({ error: "Project not found" });
         return;
       }
-      if (request.query.view === "state") {
+      if (request.query.view === "summary" || request.query.view === "state") {
         response.json({ project: preliminary });
         return;
       }
@@ -1208,7 +1234,7 @@ export function createApp(dependencies: AppDependencies) {
         });
       }
     } catch (error) {
-      next(error);
+      if (!response.destroyed) next(error);
     }
   });
 
@@ -1243,14 +1269,14 @@ export function createApp(dependencies: AppDependencies) {
     "/api/projects/:projectId/events/bootstrap",
     async (request, response, next) => {
       try {
-        const project = await orchestrator.getProject(request.params.projectId);
-        if (!project) {
+        const { projectId } = request.params;
+        if (!await orchestrator.hasProject(projectId)) {
           response.status(404).json({ error: "Project not found" });
           return;
         }
         response.json(
           await storage.readEventBootstrap(
-            project.id,
+            projectId,
             eventPageLimit(request.query.limit),
             request.query.detail === "deferred"
           )
@@ -1265,8 +1291,8 @@ export function createApp(dependencies: AppDependencies) {
     "/api/projects/:projectId/events/history",
     async (request, response, next) => {
       try {
-        const project = await orchestrator.getProject(request.params.projectId);
-        if (!project) {
+        const { projectId } = request.params;
+        if (!await orchestrator.hasProject(projectId)) {
           response.status(404).json({ error: "Project not found" });
           return;
         }
@@ -1282,7 +1308,7 @@ export function createApp(dependencies: AppDependencies) {
             response.status(400).json({ error: "Invalid message history filters" });
             return;
           }
-          response.json(await storage.readMessageHistory(project.id, beforeSeq, {
+          response.json(await storage.readMessageHistory(projectId, beforeSeq, {
             limit: Math.min(50, eventPageLimit(request.query.limit)),
             agent: filters.data.agent,
             keyword: filters.data.keyword?.trim().toLowerCase()
@@ -1297,7 +1323,7 @@ export function createApp(dependencies: AppDependencies) {
           ? storage.readTimelineHistory.bind(storage) : storage.readEventHistory.bind(storage);
         response.json(
           await readHistory(
-            project.id,
+            projectId,
             beforeSeq,
             eventPageLimit(request.query.limit),
             request.query.detail === "deferred"
@@ -1331,8 +1357,8 @@ export function createApp(dependencies: AppDependencies) {
     "/api/projects/:projectId/events",
     async (request, response, next) => {
       try {
-        const project = await orchestrator.getProject(request.params.projectId);
-        if (!project) {
+        const { projectId } = request.params;
+        if (!await orchestrator.hasProject(projectId)) {
           response.status(404).json({ error: "Project not found" });
           return;
         }
@@ -1411,7 +1437,7 @@ export function createApp(dependencies: AppDependencies) {
               queuedLiveEvents -= 1;
             });
         };
-        const unsubscribe = eventHub.subscribe(project.id, (event) => {
+        const unsubscribe = eventHub.subscribe(projectId, (event) => {
           if (replaying) {
             if (pending.length >= MAX_PENDING_SSE_EVENTS) {
               closed = true;
@@ -1461,10 +1487,10 @@ export function createApp(dependencies: AppDependencies) {
           });
         };
         const unsubscribeLive = eventHub.subscribeLive(
-          project.id,
+          projectId,
           sendLiveSnapshot
         );
-        sendLiveSnapshot(eventHub.liveSnapshot(project.id));
+        sendLiveSnapshot(eventHub.liveSnapshot(projectId));
 
         const heartbeat = setInterval(() => {
           if (
@@ -1486,7 +1512,7 @@ export function createApp(dependencies: AppDependencies) {
         });
 
         await storage.replayEvents(
-          project.id,
+          projectId,
           lastSent,
           send,
           replayController.signal
@@ -2204,7 +2230,7 @@ export function createApp(dependencies: AppDependencies) {
       response.status(409).json({ error: redactTrace(error.message), code: error.code });
       return;
     }
-    if (error instanceof CollaborationStateError && /^\/api\/projects\/[^/]+\/workflow\/adjustments(?:\/|$)/.test(_request.path)) {
+    if (error instanceof CollaborationStateError && (/^\/api\/projects\/[^/]+\/workflow\/adjustments(?:\/|$)/.test(_request.path) || _request.body?.mode === "chat" && /^\/api\/projects\/[^/]+\/user-inputs$/.test(_request.path))) {
       const status = ["PROJECT_NOT_FOUND", "RECORD_NOT_FOUND"].includes(error.code) ? 404
         : ["UNSAFE_CONFIGURATION", "CREDENTIAL_DATA_REJECTED"].includes(error.code) ? 400
         : ["WRITER_LEASE_HELD", "WRITER_LEASE_STALE", "WRITER_UPGRADE_REQUIRED", "WRITER_COMMIT_UNCONFIRMED"].includes(error.code) ? 503

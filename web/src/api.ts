@@ -986,6 +986,10 @@ export async function getProjectEventHistory(
   };
 }
 
+export async function searchTreeRequest(projectId: string, input: Record<string, unknown>): Promise<unknown> {
+  return request(`/api/projects/${encodeURIComponent(projectId)}/search-tree`, { method: "POST", body: JSON.stringify(input) });
+}
+
 export async function getProjectEventDetails(projectId: string, sequences: number[], signal: AbortSignal): Promise<AgentEvent[]> {
   const events: AgentEvent[] = [];
   for (let index = 0; index < sequences.length; index += 256) {

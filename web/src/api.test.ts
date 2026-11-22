@@ -53,6 +53,7 @@ import {
   refreshGatewayReasoning,
   getGitHubAccounts,
   getProject,
+  getProjectSummary,
   getExplainerConversationConfig,
   getProjectExplainerConfig,
   getProjectExplainerHistory,
@@ -1164,6 +1165,72 @@ describe("frontend API contract", () => {
         headers: expect.objectContaining({ Accept: "application/json" })
       })
     );
+  });
+
+  it("delivers complete project rows before the end of the stream across UTF-8 and line boundaries", async () => {
+    let connection!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({ start(controller) { connection = controller; } });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(body, { headers: { "Content-Type": "application/x-ndjson" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const onProjects = vi.fn(), { signal } = new AbortController();
+    const result = getProjects(true, { signal, onProjects });
+    const title = "课题进度", row = { id: "prj_fast", title, overallProgress: { percent: 50 } };
+    const encoder = new TextEncoder(), line = JSON.stringify({ type: "project", project: row }) + "\r\n";
+    const split = encoder.encode(line.slice(0, line.indexOf(title))).length + 1;
+    const bytes = encoder.encode(line);
+    connection.enqueue(bytes.slice(0, split));
+    connection.enqueue(bytes.slice(split));
+    await vi.waitFor(() => expect(onProjects).toHaveBeenCalledWith([expect.objectContaining({ title, overallProgress: expect.objectContaining({ percent: 50 }) })]));
+    connection.enqueue(encoder.encode('{"type":"complete"}'));
+    connection.close();
+    await expect(result).resolves.toEqual(onProjects.mock.calls[0][0]);
+    expect(fetchMock).toHaveBeenCalledWith("./api/projects?view=summary&includeArchived=true",
+      expect.objectContaining({ signal, headers: { Accept: "application/x-ndjson, application/json" } }));
+  });
+
+  it.each([
+    ["", "完成前中断"],
+    ['{"type":"error","message":"检查点不可读"}', "检查点不可读"],
+    ['{"type":"project","project":{"id":"fast","overallProgress":{"percent":3}}}', "重复"],
+    ['{"type":"project","project":{"id":"missing-progress"}}', "进度"],
+    ['{"type":"project","project":{"id":"bad-percent","overallProgress":{"percent":120}}}', "进度"],
+    ['{"type":"heartbeat"}', "未知事件"],
+    ['{"type":"complete"}\n{"type":"complete"}', "结束后"]
+  ])("keeps received project rows and rejects an incomplete or invalid stream (%s)", async (ending, message) => {
+    const row = { id: "fast", overallProgress: { percent: 3 } };
+    const onProjects = vi.fn(), text = JSON.stringify({ type: "project", project: row }) + "\n" + ending;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(text, { headers: { "Content-Type": "application/x-ndjson" } })));
+    await expect(getProjects(false, { signal: new AbortController().signal, onProjects })).rejects.toThrow(message);
+    expect(onProjects).toHaveBeenCalledWith([expect.objectContaining({ id: row.id })]);
+  });
+
+  it("cancels a pending project stream reader when the list closes", async () => {
+    const cancel = vi.fn(), body = new ReadableStream<Uint8Array>({ cancel });
+    const controller = new AbortController();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body, { headers: { "Content-Type": "application/x-ndjson" } })));
+    const list = getProjects(true, { signal: controller.signal, onProjects: vi.fn() });
+    await vi.waitFor(() => expect(body.locked).toBe(true));
+    controller.abort();
+    await expect(list).rejects.toMatchObject({ name: "AbortError" });
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(body.locked).toBe(false);
+  });
+
+  it("accepts the existing JSON project list in the same request when streaming is requested", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ projects: [{ id: "prj_old", overallProgress: { percent: 20 } }] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const onProjects = vi.fn();
+    await expect(getProjects(true, { signal: new AbortController().signal, onProjects })).resolves.toMatchObject([{ id: "prj_old" }]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(onProjects).not.toHaveBeenCalled();
+  });
+
+  it("rejects a single card without committed progress during a project list refresh", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ project: { id: "prj_known" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { signal } = new AbortController();
+    await expect(getProjectSummary("prj_known", signal)).rejects.toThrow("进度");
+    expect(fetchMock).toHaveBeenCalledWith("./api/projects/prj_known?view=summary", expect.objectContaining({ signal }));
   });
 
   it("uses an explicit shared-workspace artifact source path", async () => {

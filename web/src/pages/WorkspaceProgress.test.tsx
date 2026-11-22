@@ -1,6 +1,7 @@
 import { workflowAdjustmentPageFixture } from "../test/workflow-adjustment-history";
 import { githubAuthorizationProject } from "../test/github-authorization-project";
 import { runtimeProjectFixture } from "../test/runtime-project";
+import { cacheProjectList, clearProjectListMemoryCache, readCachedProjectList } from "../project-list-cache";
 import { cacheResource } from "../resource-cache";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -15,6 +16,7 @@ import {
   getArtifactSummary,
   getArtifacts,
   getCatalog,
+  getHarnessPrompt,
   getAgentToolRecommendationCatalog,
   getRecommendationExplainerConfig,
   recommendAgentTools,
@@ -179,6 +181,7 @@ const initialExplainerConfig: ProjectExplainerRuntimeConfig = {
 };
 
 const eventStreamMock = vi.hoisted(() => ({
+  projectId: undefined as string | undefined,
   events: [] as AgentEvent[],
   performance: undefined as InvocationPerformance | undefined,
   runtime: undefined as ProjectRuntimeProjection | undefined
@@ -191,6 +194,7 @@ vi.mock("../api", async original => ({
   getArtifactPage: vi.fn(),
   getArtifactSummary: vi.fn(),
   getCatalog: vi.fn(),
+  getHarnessPrompt: vi.fn(),
   getAgentToolRecommendationCatalog: vi.fn(),
   getRecommendationExplainerConfig: vi.fn(),
   recommendAgentTools: vi.fn(),
@@ -214,7 +218,7 @@ vi.mock("../api", async original => ({
 }));
 
 vi.mock("../useProjectEvents", () => ({
-  useProjectEvents: () => ({
+  useProjectEvents: (projectId: string) => ({
     events: eventStreamMock.events,
     timelineEvents: eventStreamMock.events,
     totalEvents: eventStreamMock.events.length,
@@ -222,7 +226,7 @@ vi.mock("../useProjectEvents", () => ({
     hasOlder: false,
     historyLoading: false,
     historyError: "",
-    live: { projectId: "prj_workspace", streams: [], events: [], performance: eventStreamMock.performance,
+    live: { projectId: eventStreamMock.projectId ?? projectId, streams: [], events: [], performance: eventStreamMock.performance,
       ...(eventStreamMock.runtime ? { runtime: eventStreamMock.runtime } : {}) },
     loadOlder: vi.fn(),
     reset: vi.fn()
@@ -534,6 +538,7 @@ describe("Workspace task progress", () => {
   beforeEach(() => {
     localStorage.clear();
     vi.mocked(getWorkflowAdjustmentPage).mockReset(); vi.mocked(getWorkflowAdjustmentDetail).mockReset(); vi.mocked(submitWorkflowAdjustment).mockReset(); vi.mocked(withdrawWorkflowAdjustment).mockReset();
+    eventStreamMock.projectId = undefined;
     eventStreamMock.events = [];
     eventStreamMock.performance = undefined;
     eventStreamMock.runtime = undefined;
@@ -559,6 +564,14 @@ describe("Workspace task progress", () => {
       offset: 0,
       limit: 100,
       hasMore: false
+    });
+    vi.mocked(getHarnessPrompt).mockReset().mockImplementation(async ({ harness, model }) => {
+      if (!harness) throw new Error("Missing Harness in prompt request");
+      return {
+        harness, model, status: "available", sourceType: "bundled-default", source: "test catalog",
+        scope: "base-default", collectedAt: "2026-09-12T00:00:00Z", configurationDigest: "fixture",
+        text: `Default prompt for ${harness}/${model}`
+      };
     });
     vi.mocked(getCatalog).mockReset().mockResolvedValue({
       skills: [],
@@ -641,7 +654,8 @@ describe("Workspace task progress", () => {
   });
 
   it("renders complete scoped group details from authoritative recursive execution facts", () => {
-    const scoped = structuredClone(project);
+    const scoped: Project = { ...structuredClone(project), status: "running", phase: "collaboration:running",
+      currentAgent: "idea", queuedAgent: undefined };
     const orchestration = structuredClone(DEFAULT_AGENT_ORCHESTRATION);
     upgradeLegacyGroups(orchestration);
     orchestration.agents.push({ name: "analysis", template: "execution" }, { name: "packaging", template: "writing" });
@@ -677,7 +691,7 @@ describe("Workspace task progress", () => {
       { id: "exec-inner", projectId: scoped.id, groupRunId: "inner-current", arrivalRequestId: "inner-execution", agentId: "execution", ownershipEpoch: 1, executionBranch: "executions/inner", worktreePath: "/tmp/execution-inner", status: "completed" },
       { id: "exec-audit-idea", projectId: scoped.id, groupRunId: "audit-current", arrivalRequestId: "audit-idea", agentId: "idea", ownershipEpoch: 1, executionBranch: "executions/audit-idea", worktreePath: "/tmp/audit-idea", status: "completed" }
     ];
-    render(<AgentRoster project={scoped} events={[]} onEditModels={vi.fn()} onEditGroups={vi.fn()} />);
+    const view = render(<AgentRoster project={scoped} events={[]} onEditModels={vi.fn()} onEditGroups={vi.fn()} />);
 
     const research = document.querySelector<HTMLElement>('[data-roster-group="research"]')!;
     expect(research).toHaveTextContent("7 个成员 · 共执行 3 次");
@@ -691,6 +705,9 @@ describe("Workspace task progress", () => {
     const audit = document.querySelector<HTMLElement>('[data-roster-group="audit"]')!;
     expect(audit.querySelector('[data-member-agent="idea"]')).toHaveTextContent("执行 1 次 · 已完成");
     expect(audit.querySelector('[data-member-agent="review"]')).toHaveTextContent("执行 0 次 · 等待执行");
+    view.rerender(<AgentRoster project={{ ...scoped, status: "retrying", phase: "execution:retrying" }}
+      events={[]} onEditModels={vi.fn()} onEditGroups={vi.fn()} />);
+    expect(research.querySelector('[data-member-agent="idea"]')).toHaveTextContent("执行 2 次 · 等待重试");
   });
 
   it("keeps average speed and the latest TTFT visible between requests and across Agent changes", async () => {
@@ -741,6 +758,7 @@ describe("Workspace task progress", () => {
     expect(value("当前速度")).toBeUndefined();
     const nextProject = { ...fixture, id: "prj_second", title: "新项目", performance: undefined };
     vi.mocked(getProject).mockResolvedValue(nextProject);
+    eventStreamMock.projectId = fixture.id;
     eventStreamMock.performance = { ...measured, status: "active", currentTokensPerSecond: 8 };
     view.rerender(<WorkspacePage projectId={nextProject.id} onBack={vi.fn()} />);
     await screen.findByRole("heading", { name: nextProject.title });
@@ -763,12 +781,27 @@ describe("Workspace task progress", () => {
     const groupState = () => canvas.querySelector('[data-node-id="research"] [data-runtime-state]');
     expect(groupState()).toHaveAttribute("data-runtime-state", "running");
 
-    eventStreamMock.runtime = { ...fixture.runtime!, stateRevision: 13, status: "paused", activities: [] };
-    view.rerender(<WorkspacePage projectId={fixture.id} onBack={vi.fn()} />);
-    await waitFor(() => expect(roster.querySelectorAll("[data-member-agent].member-paused")).toHaveLength(2));
-    expect(groupState()).toHaveAttribute("data-runtime-state", "paused");
-    expect(view.container.querySelector('[data-runtime-surface-mode="preview"] [data-runtime-state="paused"]')).not.toBeNull();
-    expect(roster.querySelectorAll("[data-member-agent].member-running")).toHaveLength(0);
+    const paused: Project = { ...fixture, status: "paused", phase: "paused", currentAgent: undefined,
+      overallProgress: { ...fixture.overallProgress, label: "已暂停" },
+      runtime: { ...fixture.runtime!, stateRevision: 13, status: "paused", phase: "paused", currentAgent: undefined, activities: [] } };
+    let confirmPause!: (snapshot: Project) => void;
+    vi.mocked(getProject).mockImplementation(() => new Promise(resolve => { confirmPause = resolve; }));
+    vi.useFakeTimers();
+    try {
+      eventStreamMock.runtime = paused.runtime;
+      view.rerender(<WorkspacePage projectId={fixture.id} onBack={vi.fn()} />);
+      await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+      expect(roster.querySelectorAll("[data-member-agent].member-running")).toHaveLength(2);
+      expect(groupState()).toHaveAttribute("data-runtime-state", "running");
+      await act(async () => confirmPause(paused));
+      expect(roster.querySelectorAll("[data-member-agent].member-paused")).toHaveLength(2);
+      expect(groupState()).toHaveAttribute("data-runtime-state", "paused");
+      expect(view.container.querySelector('[data-runtime-surface-mode="preview"] [data-runtime-state="paused"]')).not.toBeNull();
+      expect(roster.querySelectorAll("[data-member-agent].member-running")).toHaveLength(0);
+    } finally {
+      view.unmount();
+      vi.useRealTimers();
+    }
   });
 
   it("keeps the recovery status in the header and the reason by progress", async () => {
@@ -967,7 +1000,7 @@ describe("Workspace task progress", () => {
       expect(trace).not.toBeNull();
       expect(trace?.querySelectorAll(".agent-tool-item")).toHaveLength(1);
       expect(trace?.querySelector(".agent-tool-item strong")).toHaveTextContent("Read");
-      expect(trace?.querySelector(".agent-thought-panel")).toHaveTextContent("Agent 过程摘要");
+      expect(trace?.querySelector(".agent-thought-panel")).toHaveTextContent("Agent 过程文字");
       expect(trace?.querySelector(".agent-tool-disclosure")).not.toHaveAttribute("open");
       expect(trace?.querySelector(".agent-tool-disclosure")).toHaveTextContent("OPENFARS_SMOKE_SENTINEL");
       expect(trace?.querySelector(".agent-tool-disclosure")).toHaveTextContent("已截断至 40,000 字符");
@@ -1068,7 +1101,7 @@ describe("Workspace task progress", () => {
         onLoadOlder={async () => undefined}
       />
     );
-    expect(view.getByText("Agent 正在输出")).toBeVisible();
+    expect(view.getByText("Agent 过程文字")).toBeVisible();
     expect(view.container.querySelector(".trace-action-event")).toBe(card);
     expect(view.container.querySelectorAll(".agent-tool-item")).toHaveLength(1);
 
@@ -1131,6 +1164,7 @@ describe("Workspace task progress", () => {
     expect(view.queryByText("已过时的快照")).not.toBeInTheDocument();
     expect(view.container.querySelector(".trace-action-event")).toBe(card);
     expect(view.getAllByText("完整结果")).toHaveLength(1);
+    expect(view.container).not.toHaveTextContent("过期的增量");
     expect(view.container.querySelectorAll(".agent-thought-panel")).toHaveLength(1);
     expect(view.container.querySelector(".agent-message-markdown strong")).toHaveTextContent("完整结果");
   });
@@ -1301,7 +1335,7 @@ describe("Workspace task progress", () => {
 
     const panels = view.container.querySelectorAll(".agent-thought-panel");
     expect(panels).toHaveLength(2);
-    expect(panels[0]).toHaveTextContent("Agent 过程摘要");
+    expect(panels[0]).toHaveTextContent("Agent 过程文字");
     expect(panels[0]).toHaveTextContent("先读取数据。");
     expect(panels[1]).toHaveTextContent("Agent 最终结果");
     expect(panels[1]).toHaveTextContent("读取完成。");
@@ -1309,29 +1343,28 @@ describe("Workspace task progress", () => {
   });
 
   it("shows per-invocation token speed provenance without inventing a buffered current rate", () => {
-    const events: AgentEvent[] = [{
-      seq: 1,
-      type: "invocation.completed",
+    const performance = {
+      invocationId: "inv_perf",
       agent: "writing",
-      message: "writing invocation committed",
-      ts: "2026-09-19T00:00:03.000Z",
-      data: {
-        invocationId: "inv_perf",
-        performance: {
-          invocationId: "inv_perf",
-          agent: "writing",
-          attempt: 0,
-          status: "completed",
-          startedAt: "2026-09-19T00:00:01.000Z",
-          completedAt: "2026-09-19T00:00:03.000Z",
-          averageTokensPerSecond: 10,
-          outputDurationMs: 2_000,
-          outputTokens: 20,
-          tokenSource: "official",
-          streaming: false
-        }
-      }
-    }];
+      attempt: 1,
+      status: "completed",
+      startedAt: "2026-09-19T00:00:01.000Z",
+      completedAt: "2026-09-19T00:00:03.000Z",
+      averageTokensPerSecond: 10,
+      outputDurationMs: 2_000,
+      outputTokens: 20,
+      tokenSource: "official",
+      streaming: false
+    } as const;
+    const base = { agent: performance.agent, invocationId: performance.invocationId, ts: performance.completedAt };
+    const estimate = { ...performance, attempt: 0, status: "incomplete", outputTokens: 6,
+      averageTokensPerSecond: 3, tokenSource: "estimated", streaming: true } as const;
+    const events: AgentEvent[] = [
+      { ...base, seq: 1, type: "invocation.performance", message: "First attempt interrupted", data: { performance: estimate } },
+      { ...base, seq: 2, type: "invocation.performance", message: "Recorded", data: { performance: estimate } },
+      { ...base, seq: 3, type: "invocation.completed", message: "writing invocation committed", data: { performance } },
+      { ...base, seq: 4, type: "agent.completed", message: "Finished" }
+    ];
     render(
       <TraceView
         events={events}
@@ -1339,7 +1372,7 @@ describe("Workspace task progress", () => {
         liveEvents={[]}
         project={project}
         connection="offline"
-        totalEventCount={1}
+        totalEventCount={events.length}
         hasOlder={false}
         historyLoading={false}
         historyError=""
@@ -1347,11 +1380,19 @@ describe("Workspace task progress", () => {
       />
     );
 
-    const metrics = screen.getByLabelText("单次调用性能");
+    const reports = screen.getAllByLabelText("单次调用性能");
+    expect(reports).toHaveLength(2);
+    const [estimated, metrics] = reports;
+    expect(estimated).toHaveTextContent("Attempt 1");
+    expect(estimated).toHaveTextContent("≈3.0 tok/s");
+    expect(estimated).toHaveTextContent("本地估算 · 真实流式");
+    expect(metrics).toBeVisible();
+    expect(metrics).toHaveTextContent("Attempt 2 · 输出 20 tokens");
     expect(metrics).toHaveTextContent("10.0 tok/s");
     expect(metrics).toHaveTextContent("Provider usage");
     expect(metrics).toHaveTextContent("缓冲/非流式");
     expect(metrics).not.toHaveTextContent("当前 10.0 tok/s");
+    expect(within(metrics).getByText("当前速度").parentElement).toHaveTextContent("当前速度—");
   });
 
   it("renders an explicit empty result when a canonical tool completed with an empty preview", () => {
@@ -1573,6 +1614,47 @@ describe("Workspace task progress", () => {
     expect(within(panel).getByRole("status", { name: "Project Explainer 回复状态" }))
       .toHaveTextContent(active ? "正在生成回复…" : "回答完成");
     expect(JSON.stringify(events)).toBe(original);
+  });
+
+  it.each([true, false])("shows the card progress and first trace while the full detail is pending (complete list=%s)", async complete => {
+    const cached = { ...project, updatedAt: "2026-11-01T00:00:01Z",
+      overallProgress: { ...project.overallProgress, percent: 42, label: "第一版进度" } };
+    cacheProjectList([cached], Date.now(), complete);
+    let finish!: (project: Project) => void;
+    vi.mocked(getProject).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    vi.useFakeTimers();
+    const start = Date.now();
+    eventStreamMock.events = [];
+    const workspace = <WorkspacePage projectId={project.id} onBack={vi.fn()} />;
+    const view = render(workspace);
+    try {
+      expect(screen.getByText("第一版进度")).toBeVisible();
+      expect(Date.now() - start).toBe(0);
+      expect(screen.queryByText("工作记录 2801")).not.toBeInTheDocument();
+      await act(async () => { await vi.advanceTimersByTimeAsync(120); });
+      eventStreamMock.events = Array.from({ length: 200 }, (_, index) => ({
+        seq: 2801 + index, type: "agent.output", agent: "main", ts: "2026-11-01T00:00:01Z", message: "工作记录 " + (2801 + index)
+      }));
+      view.rerender(<WorkspacePage projectId={project.id} onBack={vi.fn()} />);
+      expect(screen.getByText("工作记录 2801")).toBeVisible();
+      expect(Date.now() - start).toBe(120);
+      expect(screen.queryByRole("button", { name: "暂停项目" })).not.toBeInTheDocument();
+      expect(getProject).toHaveBeenCalledWith(project.id);
+      await act(async () => finish({ ...cached, updatedAt: "2026-11-01T00:00:00Z",
+        overallProgress: { ...cached.overallProgress, percent: 20, label: "迟到的旧进度" } }));
+      expect(screen.getByText("第一版进度")).toBeVisible();
+      expect(screen.queryByText("迟到的旧进度")).not.toBeInTheDocument();
+      await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+      expect(getProject).toHaveBeenCalledTimes(2);
+      await act(async () => finish({ ...cached, updatedAt: "2026-11-01T00:00:02Z", status: "completed", phase: "accepted",
+        overallProgress: { ...cached.overallProgress, percent: 100, label: "已经交付" } }));
+      expect(readCachedProjectList()?.projects[0].overallProgress.percent).toBe(100);
+    } finally {
+      view.unmount();
+      clearProjectListMemoryCache();
+      localStorage.clear();
+      vi.useRealTimers();
+    }
   });
 
   it("renders a cached project while a slow background snapshot is still pending", () => {
@@ -2024,7 +2106,7 @@ describe("Workspace task progress", () => {
     expect(screen.getByRole("button", { name: "保存问答配置" })).toBeDisabled();
   });
 
-  it("confirms an active harness switch and keeps the visible product-session history", async () => {
+  it.each([false, true])("keeps the visible history when an active harness switch is confirmed or declined (confirmed=%s)", async confirmed => {
     const alternateExplainer: HarnessCatalogEntry = {
       ...explainerHarnesses.find((item) => item.id === "fixture-anthropic")!,
       id: "fixture-explainer",
@@ -2115,7 +2197,7 @@ describe("Workspace task progress", () => {
     vi.mocked(updateProjectExplainerConfig)
       .mockRejectedValueOnce(conflict)
       .mockResolvedValueOnce(switchedConfig);
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(confirmed);
     const user = userEvent.setup();
 
     render(<ProjectExplainerPanel projectId={project.id} />);
@@ -2125,6 +2207,17 @@ describe("Workspace task progress", () => {
     await user.selectOptions(screen.getByLabelText("Project Explainer Harness"), alternateExplainer.id);
     await user.click(screen.getByRole("button", { name: "保存问答配置" }));
 
+    if (!confirmed) {
+      expect(await screen.findByText(conflict.message)).toBeInTheDocument();
+      expect(screen.getByLabelText("Project Explainer Harness")).toHaveValue(initialExplainerConfig.harness);
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(updateProjectExplainerConfig).toHaveBeenCalledTimes(1);
+      expect(screen.getByText("此前结论是什么？")).toBeInTheDocument();
+      expect(screen.getByText("此前完整回答仍然保留。")).toBeInTheDocument();
+      expect(screen.queryByText("当前回答已中断。")).not.toBeInTheDocument();
+      confirm.mockRestore();
+      return;
+    }
     await waitFor(() => expect(updateProjectExplainerConfig).toHaveBeenCalledTimes(2));
     expect(confirm).toHaveBeenCalledWith("当前回答会终止，已有历史将带入新会话。是否继续切换 harness？");
     expect(vi.mocked(updateProjectExplainerConfig).mock.calls[0][1]).toEqual({
@@ -2598,9 +2691,7 @@ describe("Workspace task progress", () => {
     expect(graph.querySelectorAll(".agent-call-sequence-number")).toHaveLength(2);
     expect(graph.querySelectorAll(".agent-call-route")).toHaveLength(0);
     expect(graph.querySelector(".agent-call-event-row")?.textContent).toContain("已回复");
-    expect(graph).toHaveTextContent(
-      "用户介入与主动需求不占用 Agent 调用编号"
-    );
+
   });
 
   it("draws a proactive user requirement into the Main invocation that receives it", async () => {
@@ -2778,9 +2869,7 @@ describe("Workspace task progress", () => {
     expect(graph.querySelector('[title="inv_execution_original"]')).not.toBeNull();
     expect(graph.querySelector('[title="inv_execution_retry"]')).toBeNull();
     expect(graph.querySelector('[title="inv_execution_recovered"]')).toBeNull();
-    expect(graph).toHaveTextContent(
-      "失败重试和中断恢复合并为同一次调用"
-    );
+
   });
 
   it("paginates the full invocation history independently of the trace display limit and filter", async () => {
@@ -2926,7 +3015,7 @@ describe("Workspace task progress", () => {
 
     render(<WorkspacePage projectId={running.id} onBack={vi.fn()} />);
 
-    expect(await screen.findByText("Agent 过程摘要")).toBeInTheDocument();
+    expect(await screen.findByText("Agent 过程文字")).toBeInTheDocument();
     const actionRow = document.querySelector(".agent-action-row");
     expect(actionRow).not.toBeNull();
     expect(actionRow?.children[0]).toHaveTextContent("正在验证数据版本和下载路径");
@@ -2961,6 +3050,19 @@ describe("Workspace task progress", () => {
     const title = await screen.findByText("智能体输出");
     expect(title.closest(".trace-event")).toHaveClass("trace-neutral");
     expect(screen.queryByText("运行诊断")).not.toBeInTheDocument();
+  });
+
+  it("shows the first trace page and waits for the reader before requesting older events", async () => {
+    const onLoadOlder = vi.fn(async () => undefined);
+    const recent = [{ seq: 1205, type: "agent.output", agent: "main", message: "最近一页的工作记录",
+      ts: "2026-07-31T04:00:00.000Z" }];
+    render(<TraceView events={recent} liveStreams={[]} liveEvents={[]} project={project}
+      connection="offline" totalEventCount={1205} hasOlder={true} historyLoading={false}
+      historyError="" onLoadOlder={onLoadOlder} />);
+    expect(await screen.findByText("最近一页的工作记录")).toBeVisible();
+    expect(onLoadOlder).not.toHaveBeenCalled();
+    await userEvent.setup().click(screen.getByRole("button", { name: /查找更早正文/ }));
+    expect(onLoadOlder).toHaveBeenCalledTimes(1);
   });
 
   it("shows the latest 1000 trace events by default and lets users change the limit", async () => {
@@ -3141,6 +3243,47 @@ describe("Workspace task progress", () => {
     );
   });
 
+  it("defaults to Main chat during a running task and displays the reply separately from workflow input", async () => {
+    const user = userEvent.setup();
+    const running: Project = { ...project, status: "running", currentAgent: "worker" };
+    vi.mocked(getProject).mockResolvedValue(running);
+    const message = { id: "chat_1", message: "进展如何？", createdAt: "2026-11-20T00:00:00Z" };
+    vi.mocked(addProjectUserInput).mockResolvedValue({ ...running, mainConversation: [{ ...message, status: "queued" }] });
+    render(<WorkspacePage projectId={running.id} onBack={vi.fn()} />);
+    await user.click(await screen.findByRole("button", { name: /^补充科研需求/ }));
+    expect(await screen.findByRole("radio", { name: /与 Main 对话/ })).toBeChecked();
+    await user.type(screen.getByLabelText("发给 Main 的消息"), "进展如何？");
+    await user.click(screen.getByRole("button", { name: "发送给 Main" }));
+    await waitFor(() => expect(addProjectUserInput).toHaveBeenCalledWith(running.id, "进展如何？", {
+      mode: "chat", requestId: expect.stringMatching(/^ui-/) }));
+    const history = await screen.findByRole("region", { name: "与 Main 的对话记录" });
+    expect(history).toHaveTextContent("已保存，等待 Main 接收");
+    expect(history).not.toHaveTextContent("Main 已收到");
+    vi.mocked(getProject).mockResolvedValue({ ...running, mainConversation: [{ ...message, status: "replied",
+      receivedAt: "2026-11-20T00:00:01Z", reply: "Worker 正在收集数据。" }] });
+    await waitFor(() => expect(history).toHaveTextContent("Main 已回复"), { timeout: 3500 });
+    expect(history).toHaveTextContent("Worker 正在收集数据。");
+    expect(screen.queryByLabelText("待投递用户需求")).not.toBeInTheDocument();
+  });
+
+  it("keeps an unsent chat draft from reopening a project that completes", async () => {
+    const running: Project = { ...project, status: "running", currentAgent: "worker" };
+    vi.mocked(getProject).mockResolvedValue(running);
+    const user = userEvent.setup();
+    const view = render(<WorkspacePage projectId={running.id} onBack={vi.fn()} />);
+    await user.click(await screen.findByRole("button", { name: /^补充科研需求/ }));
+    await user.type(await screen.findByLabelText("发给 Main 的消息"), "现在的进展？");
+    vi.mocked(getProject).mockResolvedValue({ ...running, status: "completed", currentAgent: undefined });
+    eventStreamMock.events = [{ id: "done", seq: 25, type: "project.completed", ts: running.updatedAt,
+      agent: "main", message: "Completed", level: "info" } as AgentEvent];
+    view.rerender(<WorkspacePage projectId={running.id} onBack={vi.fn()} />);
+    const submit = screen.getByRole("button", { name: "发送给 Main" });
+    await waitFor(() => expect(submit).toBeDisabled(), { timeout: 3500 });
+    expect(screen.getByRole("radio", { name: /与 Main 对话/ })).toBeChecked();
+    await user.click(submit);
+    expect(addProjectUserInput).not.toHaveBeenCalled();
+  });
+
   it("queues proactive project requirements for the next Main invocation", async () => {
     const updated: Project = {
       ...project,
@@ -3163,6 +3306,7 @@ describe("Workspace task progress", () => {
     const panel = await screen.findByRole("region", {
       name: "项目主动需求输入"
     });
+    await user.click(screen.getByRole("radio", { name: /等待当前 Agent 完成/ }));
     expect(panel).toHaveTextContent("不中断正在工作的 Agent");
     await user.type(
       screen.getByLabelText("补充要求、调整方向或添加约束"),
@@ -3215,6 +3359,7 @@ describe("Workspace task progress", () => {
     const panel = await screen.findByRole("region", {
       name: "项目主动需求输入"
     });
+    await user.click(screen.getByRole("radio", { name: /等待当前 Agent 完成/ }));
     expect(panel).toHaveTextContent("直接进入新一轮工作上下文");
     await user.type(
       screen.getByLabelText("补充要求、调整方向或添加约束"),

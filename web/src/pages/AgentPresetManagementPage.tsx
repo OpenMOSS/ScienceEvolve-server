@@ -7,7 +7,7 @@ import { WorkflowCanvasEditor } from "../components/WorkflowCanvasEditor";
 import {
   applyCatalogDefaultGateway, applyCatalogDefaultGatewayToNewAgents, applyCatalogDefaultHarness,
   applyCatalogDefaultHarnessToNewAgents, catalogDefaultHarnessId, cloneAgentOrchestration, cloneAgentsConfig,
-  createBlankWorkflow, formatRelativeTime, orchestrationWithoutGit, projectResourcesPayload
+  createBlankWorkflow, formatRelativeTime, projectResourcesPayload
 } from "../lib";
 import type { AgentConfigPreset, AgentsConfig, Catalog, GatewayRecord, HarnessCatalogEntry } from "../types";
 
@@ -250,10 +250,7 @@ function PresetEditor({ source, catalog, onSaved, onClose }: {
             skills={catalog?.skills}
             mcpDirectory={catalog?.mcpDirectory}
             gitEnabled={gitEnabled}
-            onGitEnabledChange={enabled => {
-              setGitEnabled(enabled);
-              if (!enabled) setWorkflow(current => ({ ...current, orchestration: orchestrationWithoutGit(current.orchestration) }));
-            }}
+            onGitEnabledChange={setGitEnabled}
           />
         </div>
       </div>

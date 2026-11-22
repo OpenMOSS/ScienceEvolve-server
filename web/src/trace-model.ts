@@ -289,6 +289,11 @@ export function mergeCanonicalToolEvents(previous: AgentEvent, next: AgentEvent)
   const previousCanonical = canonicalTraceEvent(previous);
   const nextCanonical = canonicalTraceEvent(next);
   if (!previousCanonical?.tool || !nextCanonical?.tool) return next;
+  const previousTool = previousCanonical.tool;
+  const nextTool = nextCanonical.tool;
+  const priorPreview = previousTool.outputPreview === "" && previousTool.status !== "completed"
+    ? undefined
+    : previousTool.outputPreview;
   return {
     ...next,
     message: next.message || previous.message,
@@ -303,20 +308,18 @@ export function mergeCanonicalToolEvents(previous: AgentEvent, next: AgentEvent)
         ...previousCanonical,
         ...nextCanonical,
         tool: {
-          ...previousCanonical.tool,
-          ...nextCanonical.tool,
+          ...previousTool,
+          ...nextTool,
           // Some official result envelopes only carry the call ID. Their
           // mappers therefore use the canonical placeholder; never let that
           // erase the real name learned from the matching start event.
           name:
-            nextCanonical.tool.name === "tool" && previousCanonical.tool.name !== "tool"
-              ? previousCanonical.tool.name
-              : nextCanonical.tool.name,
-          input: nextCanonical.tool.input ?? previousCanonical.tool.input,
-          outputPreview:
-            nextCanonical.tool.outputPreview ?? previousCanonical.tool.outputPreview,
-          truncated:
-            nextCanonical.tool.truncated ?? previousCanonical.tool.truncated
+            nextTool.name === "tool" && previousTool.name !== "tool"
+              ? previousTool.name
+              : nextTool.name,
+          input: nextTool.input ?? previousTool.input,
+          outputPreview: nextTool.outputPreview ?? priorPreview,
+          truncated: nextTool.truncated ?? (nextTool.outputPreview === undefined ? previousTool.truncated : undefined)
         }
       }
     }
@@ -465,9 +468,10 @@ export function buildTraceEntries(events: AgentEvent[]): TraceEntry[] {
       if (!event.message.trim() && !(isAssistantDeltaEvent(event) && activeGroups.has(streamKey) && event.message.length)) continue;
       updateExecution(event, "processing", false);
       const group = activeGroups.get(streamKey) ?? createActivity(event);
-      if (event.data?.liveEphemeral === true && group.thought &&
-        group.thought.data?.liveEphemeral !== true &&
-        canonicalTraceEvent(group.thought)?.kind === "assistant.message") continue;
+      const previous = group.thought;
+      if ((event.data?.liveEphemeral === true || (event.data?.livePhase === "streaming" && canonical?.itemId)) &&
+        previous && previous.data?.liveEphemeral !== true && previous.data?.livePhase === undefined &&
+        canonicalTraceEvent(previous)?.kind === "assistant.message") continue;
       group.thought = isAssistantDeltaEvent(event) && event.data?.livePhase === undefined
         ? appendAssistantDelta(group.thought, event) : event;
       continue;
@@ -502,7 +506,7 @@ export function buildTraceEntries(events: AgentEvent[]): TraceEntry[] {
         group.displayState = "incomplete";
       } else if (data.liveRole === "final") {
         group.displayState = "final";
-      } else if (data.livePhase === "streaming" || canonical?.kind === "assistant.delta") {
+      } else if (data.liveRole !== "process" && (data.livePhase === "streaming" || canonical?.kind === "assistant.delta")) {
         group.displayState = "streaming";
       } else {
         group.displayState = "process";

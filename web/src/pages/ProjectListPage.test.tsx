@@ -19,6 +19,7 @@ import {
   getCatalog,
   getGitHubAccounts,
   getProjects,
+  getProjectSummary,
   getProjectFolders,
   createProjectFolder,
   renameProjectFolder,
@@ -75,6 +76,7 @@ vi.mock("../api", () => ({
   getHarnessPrompt: vi.fn(async () => ({ status: "source-unavailable", reason: "Native source is unavailable in this UI fixture" })),
   getGitHubAccounts: vi.fn(),
   getProjects: vi.fn(),
+  getProjectSummary: vi.fn(),
   getProjectFolders: vi.fn(),
   createProjectFolder: vi.fn(),
   renameProjectFolder: vi.fn(),
@@ -307,6 +309,7 @@ describe("ProjectListPage task overview", () => {
     localStorage.clear();
     clearProjectListMemoryCache();
     vi.mocked(getProjects).mockReset().mockResolvedValue([project]);
+    vi.mocked(getProjectSummary).mockReset().mockResolvedValue(project);
     vi.mocked(getQueue).mockReset().mockResolvedValue(queue);
     vi.mocked(getAgentConfigPresets)
       .mockReset()
@@ -507,6 +510,68 @@ describe("ProjectListPage task overview", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "新建文件夹" })).toBeEnabled());
   });
 
+  it("opens the first streamed card before the list finishes and only publishes totals on completion", async () => {
+    let finish!: (rows: Project[]) => void;
+    vi.mocked(getProjects).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const onOpen = vi.fn();
+    render(<ProjectListPage onCreate={vi.fn()} onOpen={onOpen} />);
+    const stream = vi.mocked(getProjects).mock.calls[0][1]!;
+    const second = { ...project, id: "prj_slow", title: "等候写入的项目" };
+    act(() => stream.onProjects([project]));
+    const heading = screen.getByRole("heading", { name: project.title });
+    expect(heading).toBeVisible();
+    fireEvent.click(heading.closest("button")!);
+    expect(onOpen).toHaveBeenCalledWith(project.id);
+    expect(readCachedProjectList()).toMatchObject({ partial: true, projects: [{ id: project.id, overallProgress: project.overallProgress }] });
+    expect(screen.getByLabelText("项目统计").querySelector("strong")).toHaveTextContent("—");
+    await act(async () => finish([project, second]));
+    expect(screen.getByRole("heading", { name: second.title })).toBeVisible();
+    expect(screen.getByLabelText("项目统计").querySelector("strong")).toHaveTextContent("2");
+    expect(readCachedProjectList()).not.toHaveProperty("partial");
+  });
+
+  it("keeps cached and newly received cards when a project stream breaks and ignores late rows after navigation", async () => {
+    cacheProjectList([project], Date.now());
+    let fail!: (reason: Error) => void;
+    vi.mocked(getProjects).mockImplementationOnce(() => new Promise((_resolve, reject) => { fail = reject; }));
+    const view = render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    const stream = vi.mocked(getProjects).mock.calls[0][1]!;
+    const second = { ...project, id: "prj_other", title: "新收到的项目" };
+    act(() => stream.onProjects([second]));
+    await act(async () => fail(new Error("列表连接中断")));
+    expect(screen.getByText(/列表连接中断/)).toBeVisible();
+    for (const row of [project, second]) expect(screen.getByRole("heading", { name: row.title })).toBeVisible();
+    expect(screen.getByLabelText("项目统计").querySelector("strong")).toHaveTextContent("1");
+
+    vi.mocked(getProjects).mockImplementationOnce(() => new Promise(() => {}));
+    fireEvent(window, new Event("focus"));
+    const refreshing = vi.mocked(getProjects).mock.lastCall![1]!;
+    view.unmount();
+    expect(refreshing.signal.aborted).toBe(true);
+    act(() => refreshing.onProjects([{ ...second, title: "过时的刷新" }]));
+    expect(readCachedProjectList()?.projects.map(row => row.title)).toEqual([project.title, second.title]);
+    clearProjectListMemoryCache();
+    expect(readCachedProjectList()?.projects.map(row => row.title)).toEqual([project.title]);
+  });
+
+  it("keeps newer card progress during a stale stream and removes absent cached projects only on completion", async () => {
+    const newer = { ...project, collaboration: { stateRevision: 8 }, updatedAt: "2026-11-01T12:00:00Z",
+      overallProgress: { ...project.overallProgress, percent: 70, label: "详情已确认的进度" } };
+    const old = { ...newer, collaboration: { stateRevision: 7 }, updatedAt: "2026-11-01T12:00:01Z",
+      overallProgress: { ...newer.overallProgress, percent: 10, label: "旧进度" } };
+    const removed = { ...project, id: "prj_removed", title: "已从服务端移除" };
+    cacheProjectList([newer, removed], Date.now());
+    let finish!: (rows: Project[]) => void;
+    vi.mocked(getProjects).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    act(() => vi.mocked(getProjects).mock.calls[0][1]!.onProjects([old]));
+    expect(screen.getByText(newer.overallProgress.label)).toBeVisible();
+    expect(screen.getByRole("heading", { name: removed.title })).toBeVisible();
+    await act(async () => finish([old]));
+    expect(screen.queryByRole("heading", { name: removed.title })).not.toBeInTheDocument();
+    expect(readCachedProjectList()?.projects).toMatchObject([{ collaboration: { stateRevision: 8 }, overallProgress: { percent: 70 } }]);
+  });
+
   it("shows cached project cards immediately on re-entry while refreshing in the background", async () => {
     const first = render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
     await screen.findByRole("heading", { name: project.title });
@@ -623,6 +688,7 @@ describe("ProjectListPage task overview", () => {
       results: [{ projectId: archived.id, ok: true }] });
     const user = userEvent.setup();
     render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+    const previous = vi.mocked(getProjects).mock.calls[0][1]!;
 
     await user.click(screen.getByRole("button", { name: "已归档（1）" }));
     await user.click(screen.getByRole("button", { name: "批量管理" }));
@@ -631,6 +697,8 @@ describe("ProjectListPage task overview", () => {
     await user.type(screen.getByRole("textbox", { name: "批量删除确认词" }), "永久删除");
     await user.click(screen.getByRole("button", { name: "永久删除" }));
     await screen.findByText("永久删除完成：成功 1 个，失败 0 个。");
+    expect(previous.signal.aborted).toBe(true);
+    act(() => previous.onProjects([archived]));
     await act(async () => resolveProjects([archived]));
 
     expect(screen.queryByRole("heading", { name: archived.title })).not.toBeInTheDocument();
@@ -649,6 +717,26 @@ describe("ProjectListPage task overview", () => {
     expect(await screen.findByRole("heading", { name: updated.title })).toBeVisible();
     expect(getQueue).toHaveBeenCalledTimes(1);
     await act(async () => resolveQueue(queue));
+  });
+
+  it("shows a committed card while another row holds up the list, and retains it after the stale list arrives", async () => {
+    vi.useFakeTimers();
+    try {
+      const previous = { ...project, updatedAt: "2026-11-01T00:00:00Z" };
+      const completed = { ...previous, status: "completed" as const, phase: "accepted", updatedAt: "2026-11-01T00:00:01Z",
+        overallProgress: { ...previous.overallProgress, percent: 100, label: "项目已完成" } };
+      cacheProjectList([previous], Date.now());
+      let finish!: (rows: Project[]) => void;
+      vi.mocked(getProjects).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })).mockResolvedValue([previous]);
+      vi.mocked(getProjectSummary).mockResolvedValue(completed);
+      await act(async () => { render(<ProjectListPage onCreate={vi.fn()} onOpen={vi.fn()} />); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+      expect(getProjectSummary).toHaveBeenCalledWith(project.id, vi.mocked(getProjects).mock.calls[0][1]!.signal);
+      expect(screen.getByText("项目已完成")).toBeVisible();
+      await act(async () => finish([previous]));
+      expect(screen.getByText("项目已完成")).toBeVisible();
+      expect(readCachedProjectList()?.projects[0].overallProgress.percent).toBe(100);
+    } finally { vi.useRealTimers(); }
   });
 
   it("updates project cards every two seconds without a page reload", async () => {
@@ -1242,7 +1330,7 @@ describe("ProjectListPage task overview", () => {
     });
   });
 
-  it("quick-starts with a saved project Agent configuration preset", async () => {
+  it.each([true, false])("quick-starts with a saved project Agent configuration preset (exact reasoning match: %s)", async exactMatch => {
     const savedPreset: AgentConfigPreset = {
       ...defaultPreset,
       id: "cfg_00000000000000000000000000000001",
@@ -1269,6 +1357,18 @@ describe("ProjectListPage task overview", () => {
       defaultPreset,
       savedPreset
     ]);
+    const model = savedPreset.agents.execution.model;
+    if (exactMatch) {
+      const catalog = await getCatalog();
+      const tests = runtimeGateway.tests!.filter(test => test.model === model);
+      vi.mocked(getCatalog).mockResolvedValue({ ...catalog, gateways: [{
+        ...runtimeGateway,
+        modelReasoning: { [model]: { parameter: "reasoning_effort", options: [
+          { id: "provider-xhigh", label: "最高", value: "xhigh" }
+        ] } },
+        tests: [...runtimeGateway.tests!, ...tests.map(test => ({ ...test, reasoningOptionId: "provider-xhigh" }))]
+      }] });
+    }
     vi.mocked(createProject).mockResolvedValue({
       ...project,
       id: "prj_quick_preset"
@@ -1290,13 +1390,20 @@ describe("ProjectListPage task overview", () => {
     );
     await user.click(screen.getByRole("button", { name: "提交并继续" }));
 
-    expect(createProject).not.toHaveBeenCalled();
-    await user.click(await screen.findByRole("button", { name: "强制启动" }));
-    await waitFor(() => expect(createProject).toHaveBeenCalledTimes(1));
     const expectedExecution = structuredClone(savedPreset.agents.execution);
     delete expectedExecution.reasoningEffort;
-    expectedExecution.reasoningMigrationWarning =
-      "旧 Harness 思考深度“xhigh”无法精确匹配当前 Gateway/model 选项，已改用 Provider 默认值";
+    if (exactMatch) {
+      expectedExecution.gatewayReasoningOption = "provider-xhigh";
+      expect(screen.queryByRole("button", { name: "强制启动" })).not.toBeInTheDocument();
+    } else {
+      expectedExecution.reasoningMigrationWarning =
+        "旧 Harness 思考深度“xhigh”无法精确匹配当前 Gateway/model 选项，已改用 Provider 默认值";
+      const warning = await screen.findByText(`execution：${expectedExecution.reasoningMigrationWarning}`);
+      expect(warning).toBeVisible();
+      expect(createProject).not.toHaveBeenCalled();
+      await user.click(within(warning.closest('[role="status"]')!).getByRole("button", { name: "强制启动" }));
+    }
+    await waitFor(() => expect(createProject).toHaveBeenCalledTimes(1));
     expect(vi.mocked(createProject).mock.calls[0][0].agents.execution).toEqual(
       expectedExecution
     );
@@ -1321,6 +1428,7 @@ describe("ProjectListPage task overview", () => {
   it.each([2, 3] as const)("starts a quick Git task from v%s without requiring or adding collaboration groups", async schemaVersion => {
     const preset = structuredClone(defaultPreset);
     if (schemaVersion === 3) upgradeLegacyGroups(preset.orchestration);
+    const expectedGraph = structuredClone(preset.orchestration.scopedWorkflow);
     vi.mocked(getAgentConfigPresets).mockResolvedValue([preset]);
     vi.mocked(createProject).mockResolvedValue({ ...project, id: "prj_quick_git_without_group" });
     const user = userEvent.setup();
@@ -1342,8 +1450,8 @@ describe("ProjectListPage task overview", () => {
     const input = vi.mocked(createProject).mock.calls[0]![0];
     expect(input.git).toEqual({ enabled: true, provider: "github", accountId: GITHUB_ACCOUNT_ID });
     expect(input.orchestration?.collaborations).toEqual([]);
-    expect(input.orchestration?.schemaVersion).toBe(2);
-    expect(input.orchestration?.scopedWorkflow).toBeUndefined();
+    expect(input.orchestration?.schemaVersion).toBe(schemaVersion);
+    expect(input.orchestration?.scopedWorkflow).toEqual(expectedGraph);
     expect(input.orchestration?.agents).toEqual(DEFAULT_AGENT_ORCHESTRATION.agents);
     expect(input.orchestration?.routes).toEqual(DEFAULT_AGENT_ORCHESTRATION.routes);
   });
@@ -1394,14 +1502,16 @@ describe("ProjectListPage task overview", () => {
     const gitSwitch = screen.getByRole("switch", { name: "快速发起启用 Git 机制" });
     await user.click(gitSwitch);
     expect(gitSwitch).toBeChecked();
-    expect(gitSwitch).toBeDisabled();
+    expect(gitSwitch).toBeEnabled();
+    await user.click(gitSwitch);
+    expect(gitSwitch).not.toBeChecked();
     await user.type(screen.getByRole("textbox", { name: "研究任务需求" }), savedTask.requirement);
     const quickStart = screen.getByRole("button", { name: "提交并继续" });
     expect(quickStart).toBeEnabled();
     await user.click(quickStart);
     await waitFor(() => expect(createProject).toHaveBeenCalledTimes(2));
     expect(vi.mocked(createProject).mock.calls[1]![0]).toMatchObject({
-      orchestration, git: savedTask.git
+      orchestration, git: { enabled: false }
     });
   });
 
@@ -2087,7 +2197,7 @@ describe("ProjectListPage task overview", () => {
     expect(
       await screen.findByText(/已归档，轨迹与产物均已保留/)
     ).toBeInTheDocument();
-    expect(getProjects).toHaveBeenCalledWith(true);
+    expect(getProjects).toHaveBeenCalledWith(true, expect.objectContaining({ onProjects: expect.any(Function) }));
 
     await user.click(screen.getByRole("button", { name: "已归档（1）" }));
     expect(await screen.findByText("项目已归档")).toBeInTheDocument();
@@ -2101,10 +2211,12 @@ describe("ProjectListPage task overview", () => {
     expect(await screen.findByText(/已取消归档/)).toBeInTheDocument();
   });
 
-  it("shows archive and restore for paused Git projects and hides archived resume controls", async () => {
+  it.each([true, false])("shows archive and restore for a paused scoped project with Git enabled %s", async enabled => {
     const paused: Project = { ...project, status: "paused", phase: "collaboration:user-cancelled",
       currentAgent: undefined, queuedAgent: undefined,
-      git: { enabled: true, status: "ready" } };
+      orchestration: { ...project.orchestration, schemaVersion: 3,
+        scopedWorkflow: { schemaVersion: 1, rootAgentIds: project.orchestration.agents.map(agent => agent.name), groups: [] } },
+      git: enabled ? { enabled: true, status: "ready" } : { enabled: false, status: "disabled" } };
     const archived: Project = { ...paused, archivedAt: "2026-10-04T12:00:00.000Z" };
     vi.mocked(getProjects).mockResolvedValueOnce([paused]).mockResolvedValue([archived]);
     const user = userEvent.setup();

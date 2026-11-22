@@ -193,7 +193,7 @@ describe("trace follow navigation", () => {
     const onLoadOlder = vi.fn(async () => undefined);
     const props = { ...trace.props, hasOlder: true, onLoadOlder };
     trace.rerender(<TraceView {...props} />);
-    fireEvent.click(screen.getByRole("button", { name: "加载更早轨迹" }));
+    fireEvent.click(screen.getByRole("button", { name: "查找更早正文" }));
     expect(onLoadOlder).toHaveBeenCalledOnce();
     trace.rerender(<TraceView {...props} historyLoading />);
     trace.position(720);

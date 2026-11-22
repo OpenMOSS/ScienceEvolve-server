@@ -170,7 +170,6 @@ export function CanvasInspector({
       onOrchestrationChange?.(draft);
     };
     const resultFormat = orchestration.resultFormat ?? { presets: [], custom: "" };
-    const gitLocked = gitEnabled && (orchestration.collaborations?.length ?? 0) > 0;
     const selectedGitHubAccount = githubAccounts.find((account) => account.id === githubAccountId);
     return <aside className="inspector workflow-settings-inspector" aria-label="Workflow 全局摘要">
       <header className="inspector-header"><div className="inspector-title"><h2 tabIndex={-1}>流程设置</h2></div></header>
@@ -237,8 +236,8 @@ export function CanvasInspector({
           <section className="canvas-settings-section" aria-labelledby="canvas-git-title">
           <h3 id="canvas-git-title">版本管理</h3>
           <ScionSwitch title="启用 Git 机制" label="画布启用 Git 机制" checked={gitEnabled}
-            description={gitLocked ? "当前 Workflow 包含协作组，请先移除所有协作组再关闭 Git 机制。" : "使用 Git 管理代码与研究产物，支持独立 Agent 和协作组执行。"}
-            disabled={readOnly || !onGitEnabledChange || gitLocked} onChange={checked => onGitEnabledChange?.(checked)} />
+            description="使用 Git 管理代码与研究产物。"
+            disabled={readOnly || !onGitEnabledChange} onChange={checked => onGitEnabledChange?.(checked)} />
           {gitEnabled && (
             <div className="canvas-git-repository-summary">
               <div className="canvas-git-repository-summary-head">
@@ -609,7 +608,7 @@ function ConnectionInspector({ edge, orchestration, scopeKind, readOnly, onKindC
       <section className="form-section"><h3 className="section-title">连接点</h3><div className="form-grid"><label><span>起点连接点</span><ScionSelect value={edge.sourcePort} disabled={readOnly || edge.fixed} onChange={(event) => onLayoutChange?.(edge.id, { sourcePort: event.target.value as CanvasEdge["sourcePort"], sourcePortPinned: true })}>{ports.map((port) => <option value={port} key={port}>{port}</option>)}</ScionSelect></label><label><span>终点连接点</span><ScionSelect value={edge.targetPort} disabled={readOnly || edge.fixed} onChange={(event) => onLayoutChange?.(edge.id, { targetPort: event.target.value as CanvasEdge["targetPort"], targetPortPinned: true })}>{ports.map((port) => <option value={port} key={port}>{port}</option>)}</ScionSelect></label></div><p className="edge-type-help">可分别调整连线两端使用的连接点。</p></section>
       {!edge.fixed && !termination && !input && !loop && <section className="form-section"><h3 className="section-title">连接类型</h3><div className="edge-type-toggle inspector-edge-type"><button type="button" className={`edge-type-button ${edge.kind === "strong" ? "active" : ""}`} onClick={() => onKindChange?.(edge.id, "strong")} disabled={readOnly}>强边</button><button type="button" className={`edge-type-button ${edge.kind === "weak" ? "active" : ""}`} onClick={() => onKindChange?.(edge.id, "weak")} disabled={readOnly}>弱边</button></div><p className="edge-type-help">强边一定执行；弱边由源 Agent 根据弱边选择 Prompt 决定下一步。</p></section>}
       {loop && <section className="form-section loop-config-section"><h3 className="section-title">循环批次</h3><p className="edge-type-help">成员路径：{[...workflowLoopMembers(orchestration, loop), loop.to].join(" → ")}</p><div className="form-grid"><label><span>Loop ID</span><DraftInput value={loop.id} onCommit={(id) => onLoopChange?.(loop.id, { id: id.trim() })} ariaLabel="Loop ID" disabled={readOnly} /></label><label><span>每批迭代数</span><input type="number" min={1} max={1_000_000} step={1} value={loop.maxIterations} aria-label="Loop 每批迭代数" disabled={readOnly} onChange={(event) => onLoopChange?.(loop.id, { maxIterations: Number(event.target.value) })} /></label><label><span>批次退出目标</span><ScionSelect value={loop.exitTo} aria-label="Loop 批次退出目标" disabled={readOnly} onChange={(event) => onLoopChange?.(loop.id, { exitTo: event.target.value })}>{exitOptions.map((agent) => <option value={agent.name} key={agent.name}>{edgeTitle(agent.name, scopeKind)}</option>)}</ScionSelect></label></div><p className="edge-type-help">返回边：{loop.from} → {loop.to}。本批达到上限时沿只读虚线前往 {loop.exitTo}。虚线不会写入普通 routes。</p></section>}
-      <section className="form-section"><h3 className="section-title">连接语义</h3><div className={`fixed-note ${termination || edge.kind === "weak" || loop ? "selector-note" : ""}`}>{loop ? "循环返回边：运行时按批次计数；达到上限后只沿虚拟退出边离开循环组。" : edge.fixed ? "该固定边由系统管理。" : termination ? scopeKind === "collaboration" ? "连接到结束协作组；需要等待所有必要路径和 Git 集成。" : "终止候选边：结果先进入终止闸门，由终止验收条件判断是否结束。" : input ? scopeKind === "collaboration" ? "组入口的所有并行边一起激活各自目标。" : "用户研究需求从该连接进入 Workflow。" : edge.kind === "strong" ? "强边为必经执行路径。" : "弱边是由决策者选择的候选路径。"}</div></section>
+      <section className="form-section"><h3 className="section-title">连接语义</h3><div className={`fixed-note ${termination || edge.kind === "weak" || loop ? "selector-note" : ""}`}>{loop ? "循环返回边：运行时按批次计数；达到上限后只沿虚拟退出边离开循环组。" : edge.fixed ? "该固定边由系统管理。" : termination ? scopeKind === "collaboration" ? "连接到结束协作组；需要等待所有必要路径完成交付。" : "终止候选边：结果先进入终止闸门，由终止验收条件判断是否结束。" : input ? scopeKind === "collaboration" ? "组入口的所有并行边一起激活各自目标。" : "用户研究需求从该连接进入 Workflow。" : edge.kind === "strong" ? "强边为必经执行路径。" : "弱边是由决策者选择的候选路径。"}</div></section>
       {edge.fixed ? <div className="fixed-note main-selector-note">该边不能删除、移动、改目标或改为强边。</div> : <button type="button" className="edge-remove-button" onClick={() => onRemove?.(edge.id)} disabled={readOnly}>{loop ? "删除所选强边并拆开 Loop" : "删除连接"}</button>}
     </div>
   </aside>;
