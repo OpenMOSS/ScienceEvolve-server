@@ -360,6 +360,47 @@ describe("public Main orchestration state machine", () => {
     }
   });
 
+  it.each([false, true])("starts independent listing projections while another project awaits I/O (failure=%s)", async failFirst => {
+    const { orchestrator } = await harness(async request => mainResult(request, decision("finish", "Task complete.")));
+    const first = await orchestrator.createProject({ ...projectInput(mainOnlyOrchestration()), title: "Slow projection" });
+    const second = await orchestrator.createProject({ ...projectInput(mainOnlyOrchestration()), title: "Independent projection" });
+    await Promise.all([orchestrator.waitForIdle(first.id), orchestrator.waitForIdle(second.id)]);
+    const views = orchestrator as unknown as { projectView(state: ProjectState): Promise<ProjectView> };
+    const projectView = views.projectView.bind(orchestrator);
+    let release!: () => void, firstStarted = false, secondStarted = false;
+    const pendingRead = new Promise<void>(resolve => { release = resolve; });
+    const failure = new Error("Original project read failed");
+    const projection = vi.spyOn(views, "projectView").mockImplementation(async state => {
+      if (state.id === first.id) {
+        firstStarted = true;
+        await pendingRead;
+        if (failFirst) throw failure;
+      } else if (state.id === second.id) secondStarted = true;
+      return projectView(state);
+    });
+    let settled = false;
+    const listing = orchestrator.listProjects().then(
+      projects => { settled = true; return { projects }; },
+      error => { settled = true; return { error }; }
+    );
+    try {
+      await vi.waitFor(() => expect(firstStarted).toBe(true), { timeout: 500 });
+      await vi.waitFor(() => expect(secondStarted).toBe(true), { timeout: 500 });
+      expect(settled).toBe(false);
+      release();
+      const result = await listing;
+      if (failFirst) expect(result).toEqual({ error: failure });
+      else expect(result).toEqual({ projects: expect.arrayContaining([
+        expect.objectContaining({ id: first.id, status: "completed" }),
+        expect.objectContaining({ id: second.id, status: "completed" })
+      ]) });
+      projection.mockRestore();
+      expect(await orchestrator.listProjects()).toHaveLength(2);
+    } finally {
+      release(); await listing; projection.mockRestore(); await orchestrator.shutdown();
+    }
+  });
+
   it.each(["failure reporting", "stop settlement"] as const)(
     "owns a detached loop rejection during %s and stops retrying without claiming durable success", async mode => {
       const { orchestrator } = await harness(async request => mainResult(request, decision("finish", "Complete")));

@@ -1722,9 +1722,9 @@ export class Orchestrator {
   }
 
   private async listingProjectView(runtime: RuntimeProject): Promise<ProjectView> {
-    // Wait for each project's own writer independently. Queue the expensive
-    // projection after that barrier: several barriers can clear together,
-    // and must not release a burst of synchronous reads into one microtask turn.
+    // Each project keeps its own publication barrier. Projection starts yield
+    // between projects, but one project's asynchronous I/O must not hold the
+    // launch queue or extend other projects' stable-read windows.
     if (runtime.state.phase === "storage-recovery-required") return this.captureListingProjectView(runtime);
     if ((await this.collaborationRuntime?.committedProjectState?.(runtime.state))) return this.captureListingProjectView(runtime);
     return this.storage.withStableProjectSnapshot(runtime.state.id, () => this.captureListingProjectView(runtime));
@@ -1733,11 +1733,12 @@ export class Orchestrator {
   private captureListingProjectView(runtime: RuntimeProject): Promise<ProjectView> {
     return new Promise<ProjectView>((resolve, reject) => {
       const start = this.listingViewTail.then(() => new Promise<void>(release => {
-        setImmediate(async () => {
-          try {
-            resolve((await this.projectView((await this.collaborationRuntime?.committedProjectState?.(runtime.state)) ?? runtime.state)));
-          } catch (error) { reject(error); }
-          finally { release(); }
+        setImmediate(() => {
+          const capture = async () => this.projectView(
+            (await this.collaborationRuntime?.committedProjectState?.(runtime.state)) ?? runtime.state
+          );
+          void capture().then(resolve, reject);
+          release();
         });
       }));
       this.listingViewTail = start.catch(error => { reject(error); });
