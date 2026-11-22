@@ -113,7 +113,11 @@ the model as explicitly labelled, untrusted diagnostic text. Their recorded
 output and call ID remain available; no provider call or item reference is
 invented, and the native Session is not rewritten. A missing result identity
 fails before the provider request. Paired calls and results remain native tool
-history.
+history. A retained private Gateway snapshot is reusable only when it matches
+the selected Gateway and includes the selected model. If a runtime route update
+leaves an older snapshot, publication uses the existing resource validator to
+resolve the selected route before launching; it retains the original task and
+Session and does not relax the Gateway identity check.
 
 Gateway reasoning is a Gateway/model contract rather than a Harness guess. A
 Gateway stores one supported parameter path and bounded option list per model;

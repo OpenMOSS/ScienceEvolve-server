@@ -99,6 +99,36 @@ it("restores a serial checkpoint through the real database worker and reopens wi
   expect(await database.eventsAfter(f.state.id, 0, 1000)).toEqual(events);
 });
 
+it("revalidates a runtime route whose public selection changed but private Gateway snapshot is stale", async () => {
+  const f = await fixture();
+  const oldGateway = "gwy_" + "1".repeat(32), newGateway = "gwy_" + "2".repeat(32);
+  f.state.agents.idea.gatewayId = newGateway;
+  f.state.agents.idea.model = "model-new";
+  f.state.agents.idea.gatewaySnapshot = { id: oldGateway, name: "Old route", url: "https://old.invalid/v1",
+    apiKey: "old-private-key", models: ["model-old"], defaultModel: "model-old", protocol: "responses" };
+  const current = (await f.resource.database.serialWorkflowAdjustmentCurrent(f.state.id))!;
+  const next = structuredClone(current.snapshot);
+  next.agents.idea.gatewayId = newGateway; next.agents.idea.model = "model-new";
+  await f.resource.database.updateScopedRuntimeConfiguration(f.state.id, current.snapshot, next);
+  const original = business(f.state);
+  const validate = vi.fn(async (_state, proposal) => {
+    expect(proposal.agents.idea.gatewayId).toBe(newGateway);
+    expect(proposal.agents.idea.gatewaySnapshot).toBeUndefined();
+    proposal.agents.idea.gatewaySnapshot = { id: newGateway, name: "New route", url: "https://new.invalid/v1",
+      apiKey: "new-private-key", models: ["model-new"], defaultModel: "model-new", protocol: "responses" };
+  });
+  await expect(restoreSerialWorkflowConfiguration(f.resource.database, f.storage, f.state, validate)).resolves.toEqual({ changed: true });
+  expect(validate).toHaveBeenCalledTimes(1);
+  expect(f.state.agents.idea.gatewaySnapshot?.id).toBe(newGateway);
+  expect(f.state.agents.idea.gatewaySnapshot?.apiKey).toBe("new-private-key");
+  expect(business(f.state)).toEqual(original);
+  await expect(restoreSerialWorkflowConfiguration(f.resource.database, f.storage, f.state, validate)).resolves.toEqual({ changed: false });
+  expect(validate).toHaveBeenCalledTimes(1);
+  const loaded = await f.storage.loadState(f.state.id);
+  expect(loaded.agents.idea.gatewaySnapshot?.id).toBe(newGateway);
+  expect(business(loaded)).toEqual(original);
+});
+
 it.each([false, true])("rejects a workflow change queued after preflight, including A-to-B-to-A (cycle=%s)", async cycle => {
   const f = await fixture(), original = business(f.state), accepted = await f.apply("Configuration A");
   const prior = await f.resource.database.projectStateDocument(f.state.id, "project.checkpoint"), bytes = await fs.readFile(f.file);
