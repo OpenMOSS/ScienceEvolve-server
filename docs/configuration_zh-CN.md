@@ -481,3 +481,5 @@ git diff --check
 可选项目探索记录：[搜索树配置与接口](search-tree.md)。
 
 Workflow 检查节点：[Gate 配置与执行](workflow-gate.md)。
+
+原任务求助、答复与收件记录：[异步 Main 求助](main-assistance.md)。

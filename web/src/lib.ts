@@ -3027,6 +3027,7 @@ export function normalizeProject(value: unknown): Project {
     activeNodeRunId: optionalString(data.activeNodeRunId),
     ...normalizeScopedRuntime(data),
     scopedPullRequests: normalizePullRequests(data.scopedPullRequests),
+    ...(Array.isArray(data.mainAssistance) ? { mainAssistance: structuredClone(data.mainAssistance) as NonNullable<Project["mainAssistance"]> } : {}),
     ...(Array.isArray(data.workflowGates) ? { workflowGates: structuredClone(data.workflowGates) as NonNullable<Project["workflowGates"]> } : {}),
     nodeRuns: normalizeNodeRuns(data.nodeRuns),
     groupRuns: normalizeGroupRuns(data.groupRuns),

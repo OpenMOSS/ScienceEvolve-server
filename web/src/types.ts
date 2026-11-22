@@ -1293,6 +1293,15 @@ export interface ProjectFolder {
   projectIds: string[];
 }
 
+export interface MainAssistanceRecord {
+  id: string; question: string; status: "queued" | "processing" | "replied" | "failed" | "unknown";
+  origin: { projectId: string; agentId: string; taskId: string; invocationId: string };
+  main?: { invocationId: string; receivedAt?: string; eventId?: string; stoppedAt?: string };
+  reply?: { text: string; savedAt: string; invocationId: string; callId: string };
+  delivery?: { status: "queued" | "offered" | "received" | "late" | "unknown"; receivedAt?: string; eventId?: string; reason?: string };
+  error?: string; createdAt: string; updatedAt: string;
+}
+
 export interface SearchTreeConfig {
   root: { name: string; description?: string; inputFiles?: string[] };
   directions: { id: string; kind: "direction"; name: string; description?: string; parentId: string }[];
@@ -1363,6 +1372,7 @@ export interface Project {
   git?: ProjectGitState;
   workflowRevision?: number;
   activeNodeRunId?: NodeRunId;
+  mainAssistance?: MainAssistanceRecord[];
   workflowGates?: import("../../server/src/internal/shared/workflow-gate.js").GateRun[];
   nodeRuns?: NodeRun[];
   groupRuns?: GroupRun[];

@@ -479,3 +479,5 @@ See [architecture](architecture.md) for state machines, persistence, and recover
 Optional project exploration records: [Search tree configuration and API](search-tree.md).
 
 Workflow checks: [Gate configuration and execution](workflow-gate.md).
+
+See [asynchronous Main assistance](main-assistance.md) for original-task delivery and receipt semantics.
