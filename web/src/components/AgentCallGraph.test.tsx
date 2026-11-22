@@ -16,8 +16,9 @@ describe("Agent call list", () => {
   it("offers older business history without presenting the loaded window as the total", () => {
     const load = vi.fn().mockResolvedValue(undefined);
     const project = normalizeProject({ id: "prj_history", status: "paused" });
-    const { rerender } = render(<AgentCallGraph project={project} events={[]} hasOlder onLoadOlder={load} />);
-    expect(screen.getByText("已加载调用")).toBeInTheDocument();
+    const events = [member(2, "execution", "a", "execution-a")];
+    const { rerender } = render(<AgentCallGraph project={project} events={events} hasOlder onLoadOlder={load} />);
+    expect(screen.getByText("1–1 / 1（已加载）")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "加载更早调用" }));
     expect(load).toHaveBeenCalledOnce();
     rerender(<AgentCallGraph project={project} events={[]} hasOlder historyLoading onLoadOlder={load} historyError="读取失败" />);

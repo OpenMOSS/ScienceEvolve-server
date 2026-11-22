@@ -142,7 +142,7 @@ export function ExplainerRecommendationSettings() {
   const harnessLabel = harnesses.find(item => item.id === configuration?.config.harness)?.label
     ?? configuration?.config.harness;
   const gatewayLabel = gateways.find(item => item.id === configuration?.config.gatewayId)?.name;
-  const effortLabels = { low: "低", medium: "中", high: "高", xhigh: "最高" };
+  const effortLabels = { low: "低", medium: "中", high: "高", xhigh: "最高", max: "max" };
   return <section className="recommendation-explainer-settings" aria-label="推荐模型设置">
     <div className="recommendation-model-header">
       <span className="recommendation-model-icon" aria-hidden="true"><Sparkles size={17} /></span>

@@ -1,12 +1,52 @@
-/* The persistent launcher stays below blocking dialogs and their actions. */
-.explainer-floating-launcher { position: fixed; z-index: 90; right: 22px; bottom: 22px; display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 10px 16px; border: 1px solid #326047; border-radius: 24px; background: #326047; color: #fff; box-shadow: 0 5px 24px #203d342b; cursor: pointer; font: inherit; font-size: 12px; }
-.explainer-floating-launcher.is-active { box-shadow: 0 0 0 4px #ddece1, 0 5px 24px #203d342b; }
-.explainer-floating-panel { position: fixed; z-index: 1600; right: 22px; bottom: 22px; display: flex; flex-direction: column; width: 420px; height: min(76dvh, 720px); min-width: 320px; min-height: 360px; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow: hidden; resize: both; border: 1px solid #c9d8ce; border-radius: 14px; background: #fff; color: #24362b; box-shadow: 0 14px 56px #1e3a2f2b; font-size: 12px; }
+:root {
+  --workflow-assistant-tab-height: 40px;
+  --workflow-assistant-bottom: calc(var(--workflow-assistant-tab-height) + env(safe-area-inset-bottom, 0px));
+}
+
+.workflow-assistant-trigger {
+  position: fixed;
+  z-index: 1600;
+  right: env(safe-area-inset-right, 0px);
+  bottom: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: var(--workflow-assistant-bottom);
+  padding: 0 12px env(safe-area-inset-bottom, 0px);
+  border: 1px solid #28665e;
+  border-radius: 8px 0 0 0;
+  background: #28665e;
+  color: #fff;
+  font: 600 13px var(--font-family-sans);
+  cursor: pointer;
+  box-shadow: 0 -2px 12px rgb(27 69 62 / 14%);
+}
+.workflow-assistant-trigger:hover,
+.workflow-assistant-trigger[aria-expanded="true"] { background: #20564f; }
+.workflow-assistant-trigger:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
+.workflow-assistant-trigger[aria-expanded="false"] > svg:last-child { transform: rotate(180deg); }
+.explainer-floating-panel {
+  position: fixed;
+  z-index: 1600;
+  right: env(safe-area-inset-right, 0px);
+  bottom: var(--workflow-assistant-bottom);
+  display: flex;
+  flex-direction: column;
+  width: min(420px, calc(100vw - 12px - env(safe-area-inset-right, 0px)));
+  height: min(720px, calc(100dvh - var(--workflow-assistant-bottom) - 12px));
+  overflow: hidden;
+  border: 1px solid #c9d8ce;
+  border-radius: 12px 0 0 12px;
+  background: #fff;
+  color: #24362b;
+  box-shadow: 0 14px 56px #1e3a2f2b;
+  font-size: 12px;
+}
 .explainer-floating-panel :is(button, input, textarea, select) { font: inherit; }
 .explainer-floating-panel button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 9px; border: 1px solid #dce4dd; border-radius: 6px; background: #fff; color: #365641; cursor: pointer; }
 .explainer-floating-panel button:disabled { cursor: not-allowed; opacity: .5; }
-.explainer-floating-panel :is(button, a, textarea, select):focus-visible, .explainer-floating-launcher:focus-visible { outline: 2px solid #4a8261; outline-offset: 2px; }
-.explainer-floating-head { display: flex; flex: 0 0 auto; align-items: center; gap: 9px; min-height: 60px; padding: 10px 13px; background: #f2f7f3; border-bottom: 1px solid #e1e9e2; cursor: move; touch-action: none; }
+.explainer-floating-panel :is(button, a, textarea, select):focus-visible { outline: 2px solid #4a8261; outline-offset: 2px; }
+.explainer-floating-head { display: flex; flex: 0 0 auto; align-items: center; gap: 9px; min-height: 60px; padding: 10px 13px; background: #f2f7f3; border-bottom: 1px solid #e1e9e2; }
 .explainer-floating-head > svg { flex-shrink: 0; color: #38704c; }
 .explainer-floating-head > div { flex: 1; min-width: 0; }
 .explainer-floating-head strong { display: block; font-size: 13px; }
@@ -46,9 +86,3 @@
 .explainer-floating-compose > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .explainer-floating-compose .explainer-undo { padding-left: 0; border: 0; color: #7c8980; font-size: 10px; }
 .explainer-floating-compose .explainer-send { border-color: #3c7351; background: #3c7351; color: #fff; }
-@media(max-width:620px) {
-  .explainer-floating-launcher { right: 12px; bottom: 12px; padding: 10px 13px; }
-  .explainer-floating-launcher span { font-size: 11px; }
-  .explainer-floating-panel { left: 8px; right: 8px; bottom: 8px; top: auto; width: auto; height: min(78dvh, 720px); min-width: 0; min-height: 300px; resize: none; }
-  .explainer-floating-head { cursor: default; }
-}

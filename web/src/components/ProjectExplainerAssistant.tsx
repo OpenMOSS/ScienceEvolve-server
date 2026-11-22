@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
-import { Bot, ChevronDown, LoaderCircle, MessageSquare, Minus, Plus, Send, Settings2, Square, Undo2 } from "lucide-react";
+import { ChevronDown, GitBranch, LoaderCircle, MessageSquare, Plus, Send, Settings2, Square, Undo2, X } from "lucide-react";
 import { ApiError, cancelExplainerConversation, createExplainerConversation, explainerAssistantDraftPayload, getCatalog, getExplainerConversation,
   getExplainerConversationConfig, getExplainerConversationHistory, streamExplainerConversation, syncExplainerConversation,
   undoExplainerDraft, updateExplainerConversationConfig, type ExplainerAssistantAction, type ExplainerAssistantContext } from "../api";
@@ -84,13 +84,19 @@ export function ProjectExplainerAssistantProvider({ children, target }: { childr
   const epoch = useRef(0);
   const loadedKey = useRef<string>();
   const transcript = useRef<HTMLDivElement>(null);
+  const launcher = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLElement>(null);
-  const [position, setPosition] = useState<{ left: number; top: number }>();
-  const [mobile, setMobile] = useState(() => window.innerWidth <= 620);
   const key = target.projectId ? `project:${target.projectId}` : target.taskId ? `task:${target.taskId}` : target.newProject ? "new" : "home";
   const currentKey = useRef(key); currentKey.current = key;
   const registerEditor = useCallback((value: EditorBridge) => { editor.current = value; return () => { if (editor.current === value) editor.current = undefined; }; }, []);
   const show = useCallback((text?: string) => { if (text) setQuestion(text); setOpen(true); }, []);
+  const close = () => {
+    setOpen(false);
+    launcher.current?.focus();
+  };
+  useEffect(() => {
+    if (open) panel.current?.focus();
+  }, [open]);
   const load = useCallback(async (forceNew = false) => {
     const generation = ++epoch.current; setLoading(true); setError("");
     const cached = !forceNew ? readCachedResource<AssistantSnapshot>(`assistant:${key}`) : undefined;
@@ -142,15 +148,6 @@ export function ProjectExplainerAssistantProvider({ children, target }: { childr
   useEffect(() => {
     if (context && config && loadedKey.current === key) cacheResource(`assistant:${key}`, { context, config, events }, !runningId && !remoteActive);
   }, [context, config, events, key, runningId, remoteActive]);
-  useEffect(() => {
-    const resize = () => {
-      setMobile(window.innerWidth <= 620);
-      const box = panel.current?.getBoundingClientRect();
-      if (box) setPosition(current => current ? { left: Math.max(0, Math.min(current.left, window.innerWidth - box.width)),
-        top: Math.max(0, Math.min(current.top, window.innerHeight - box.height)) } : current);
-    };
-    window.addEventListener("resize", resize); return () => window.removeEventListener("resize", resize);
-  }, []);
   useEffect(() => { const node = transcript.current; if (node) node.scrollTop = node.scrollHeight; }, [events, open]);
   useEffect(() => {
     if (!open || !context || !remoteActive || runningId === context.id) return;
@@ -271,15 +268,6 @@ export function ProjectExplainerAssistantProvider({ children, target }: { childr
       const result = await undoExplainerDraft(prior.id, prior.revision); notifyExplainerAction(result.action); applyAction(result.action, explainerDraftFingerprint(prior.draft)); setNotice(result.action.summary);
     } catch (error) { setError(message(error)); }
   };
-  const drag = (event: React.PointerEvent) => {
-    if (window.innerWidth <= 620 || (event.target as HTMLElement).closest("button")) return;
-    const node = panel.current; if (!node) return;
-    event.preventDefault(); const box = node.getBoundingClientRect(), x = event.clientX, y = event.clientY;
-    const move = (next: PointerEvent) => setPosition({ left: Math.max(0, Math.min(window.innerWidth - box.width, box.left + next.clientX - x)),
-      top: Math.max(0, Math.min(window.innerHeight - box.height, box.top + next.clientY - y)) });
-    const end = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", end); };
-    window.addEventListener("pointermove", move); window.addEventListener("pointerup", end, { once: true });
-  };
   const gateway = catalog?.gateways?.find(item => item.id === configDraft?.gatewayId);
   const traceKey = (event: ProjectExplainerEvent) => `${event.turnId}:${event.itemId}`;
   const tools = new Set(events.filter(event => event.kind === "tool").map(traceKey));
@@ -311,14 +299,20 @@ export function ProjectExplainerAssistantProvider({ children, target }: { childr
   return <AssistantContext.Provider value={{ show, registerEditor, bindDraft, conversationId: loadedKey.current === key ? context?.id : undefined }}>
     {children}
     {createPortal(<>
-      {!open && <button type="button" className={`explainer-floating-launcher${active ? " is-active" : ""}`} aria-label="打开 Project Explainer 助手" onClick={() => show()}><Bot size={20} /><span>Project Explainer</span>{active && <LoaderCircle size={14} className="spin" />}</button>}
-      {open && <section ref={panel} className="explainer-floating-panel" role="dialog" aria-modal="false" aria-label="Project Explainer 助手"
-        style={position && !mobile ? { ...position, right: "auto", bottom: "auto" } : undefined}
-        onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); setOpen(false); } }}>
-        <header className="explainer-floating-head" onPointerDown={drag}><Bot size={20} /><div><strong>Project Explainer</strong><small>{target.projectId ? "当前项目" : context?.draft.title || "一起设计项目与 Workflow"}</small></div>
+      <button ref={launcher} type="button" className="workflow-assistant-trigger"
+        aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? "workflow-assistant-panel" : undefined}
+        aria-busy={active} onClick={() => open ? close() : show()}>
+        {active ? <LoaderCircle className="spin" size={16} aria-hidden="true" /> : <GitBranch size={16} aria-hidden="true" />}
+        工作流助手
+        <ChevronDown size={14} aria-hidden="true" />
+      </button>
+      {open && <section ref={panel} id="workflow-assistant-panel" className="explainer-floating-panel"
+        role="dialog" aria-modal="false" aria-label="工作流助手" tabIndex={-1}
+        onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); close(); } }}>
+        <header className="explainer-floating-head"><GitBranch size={19} /><div><strong>工作流助手</strong><small>{target.projectId ? "当前项目" : context?.draft.title || "项目草稿与工作流"}</small></div>
           {key === "home" && <button type="button" aria-label="开始新的助手会话" title="开始新的项目草稿对话" disabled={active || loading} onClick={() => void load(true)}><Plus size={17} /></button>}
           <button type="button" aria-label="助手 Harness 与模型设置" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(value => !value)}><Settings2 size={17} /></button>
-          <button type="button" aria-label="最小化助手" onClick={() => setOpen(false)}><Minus size={18} /></button></header>
+          <button type="button" aria-label="关闭助手" title="关闭助手" onClick={close}><X size={18} /></button></header>
         <div className="explainer-floating-route"><span>{config ? `${config.harness} · ${config.model}` : "正在读取 Agent 配置…"}</span><button type="button" aria-label="展开助手配置" onClick={() => setSettingsOpen(value => !value)}><ChevronDown size={13} /></button></div>
         {settingsOpen && <div className="explainer-floating-settings" role="group" aria-label="悬浮助手配置">
           <label>Harness<select aria-label="助手 Harness" value={configDraft?.harness ?? ""} disabled={loading || savingConfig} onChange={event => configDraft && setConfigDraft({ ...configDraft, harness: event.target.value })}>
@@ -329,7 +323,7 @@ export function ProjectExplainerAssistantProvider({ children, target }: { childr
           <label>模型<select aria-label="助手模型" value={configDraft?.model ?? ""} disabled={loading || savingConfig || !gateway} onChange={event => configDraft && setConfigDraft({ ...configDraft, model: event.target.value })}>
             {!gateway?.models.includes(configDraft?.model ?? "") && <option value={configDraft?.model ?? ""}>{configDraft?.model || "请选择模型"}</option>}{gateway?.models.map(model => <option key={model} value={model}>{model}</option>)}</select></label>
           <label>思考强度<select aria-label="助手思考强度" value={configDraft?.reasoningEffort ?? "high"} disabled={loading || savingConfig} onChange={event => configDraft && setConfigDraft({ ...configDraft, reasoningEffort: event.target.value as ProjectExplainerConfigInput["reasoningEffort"] })}>
-            {["low", "medium", "high", "xhigh"].map(item => <option key={item} value={item}>{item}</option>)}</select></label>
+            {["low", "medium", "high", "xhigh", "max"].map(item => <option key={item} value={item}>{item}</option>)}</select></label>
           <button type="button" disabled={loading || savingConfig || !configDraft} onClick={() => void saveConfig()}>{savingConfig ? "正在保存…" : "保存助手配置"}</button>
         </div>}
         <div className="explainer-floating-transcript" ref={transcript} role="log" aria-label="助手对话记录" aria-live="polite">
@@ -341,7 +335,7 @@ export function ProjectExplainerAssistantProvider({ children, target }: { childr
             if (action) return <ExplainerActionCard key={event.id} action={action} />;
             if (["reasoning", "tool", "tool_output"].includes(event.kind)) return <ProjectExplainerTrace key={`${event.turnId}:${event.kind}:${event.itemId ?? event.id}`}
               event={event} output={outputs.get(traceKey(event))} active={active && event.turnId === activeTurnId} />;
-            return <article key={`${event.turnId}:${event.itemId ?? event.id}`} className={`explainer-chat-message ${event.kind}`} role={event.kind === "error" ? "alert" : undefined}><small>{event.kind === "user" ? "你" : "Project Explainer"}</small><ReactMarkdown>{event.text}</ReactMarkdown>
+            return <article key={`${event.turnId}:${event.itemId ?? event.id}`} className={`explainer-chat-message ${event.kind}`} role={event.kind === "error" ? "alert" : undefined}><small>{event.kind === "user" ? "你" : "工作流助手"}</small><ReactMarkdown>{event.text}</ReactMarkdown>
                 {!!event.data?.clientPending && <small>{event.data.clientPending === "sending" ? "发送中…" : "发送未确认，请检查后重试"}</small>}</article>;
           })}
           <ProjectExplainerReplyStatus events={events} active={active} />
@@ -352,7 +346,7 @@ export function ProjectExplainerAssistantProvider({ children, target }: { childr
         {notice && <p className="explainer-floating-notice" role="status">{notice}</p>}
         {pendingAction && <button type="button" className="explainer-pending-apply" onClick={() => applyAction(pendingAction, undefined, true)}>应用助手修改</button>}
         <form className="explainer-floating-compose" onSubmit={event => { event.preventDefault(); void send(); }}>
-          <textarea aria-label="给 Project Explainer 的消息" aria-describedby="explainer-compose-hint" placeholder="例如：保留现有 Agent，增加一个三人并行协作组…" rows={3} maxLength={50_000} value={question} onChange={event => setQuestion(event.target.value)} autoFocus
+          <textarea aria-label="给工作流助手的消息" aria-describedby="explainer-compose-hint" placeholder="例如：保留现有 Agent，增加一个三人并行协作组…" rows={3} maxLength={50_000} value={question} onChange={event => setQuestion(event.target.value)} autoFocus
             onKeyDown={event => {
               if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
               event.preventDefault();

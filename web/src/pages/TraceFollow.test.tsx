@@ -1,9 +1,9 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runtimeProjectFixture } from "../test/runtime-project";
 import { TraceView } from "./WorkspacePage";
 
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 function traceFixture() {
   let frameId = 0;
@@ -45,6 +45,136 @@ function traceFixture() {
 }
 
 describe("trace follow navigation", () => {
+  it("loads deferred diagnostics on expansion and reuses their bodies on reopen", async () => {
+    const trace = traceFixture();
+    const event = { ...trace.props.events[0], seq: 2, type: "agent.trace", message: "",
+      data: { diagnostic: true, traceDetailDeferred: true } };
+    const api = vi.fn(async () => new Response(JSON.stringify({
+      events: [{ ...event, message: "历史诊断内容", data: { diagnostic: true } }]
+    }), { headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", api);
+    trace.rerender(<TraceView {...trace.props} events={[event]} />);
+    const disclosure = trace.scroll.querySelector<HTMLDetailsElement>(".trace-diagnostics")!;
+    expect(disclosure.querySelector("summary")).toHaveTextContent("运行诊断1");
+    expect(api).not.toHaveBeenCalled();
+    expect(screen.queryByText("历史诊断内容")).not.toBeInTheDocument();
+    disclosure.open = true;
+    fireEvent(disclosure, new Event("toggle"));
+    expect(await screen.findByText("历史诊断内容")).toBeVisible();
+    disclosure.open = false;
+    fireEvent(disclosure, new Event("toggle"));
+    disclosure.open = true;
+    fireEvent(disclosure, new Event("toggle"));
+    expect(api).toHaveBeenCalledTimes(1);
+  });
+  it("folds consecutive artifact writes without crossing a trace or invocation boundary", () => {
+    const trace = traceFixture();
+    const write = (seq: number, path: string, invocationId = "inv_one") => ({
+      ...trace.props.events[0], seq, type: "artifact.published", message: `Artifact published: ${path}`,
+      data: { invocationId, artifact: { path } }
+    });
+    const first = write(2, "reports/one.md");
+    const second = write(3, "reports/two.md");
+    const standalone = write(5, "reports/other-invocation.md", "inv_two");
+    const boundary = { ...trace.props.events[0], seq: 6, type: "user.input.queued" };
+    const last = write(7, "reports/after-boundary.md", "inv_two");
+    const events = [first, second, standalone, boundary, last];
+    trace.rerender(<TraceView {...trace.props} events={events} />);
+
+    const disclosure = trace.scroll.querySelector(".trace-artifact-group summary")!;
+    expect(disclosure).toHaveTextContent("研究产物已写入");
+    expect(disclosure).toHaveTextContent("2");
+    expect(screen.getByText("reports/one.md")).not.toBeVisible();
+    expect(screen.getByText(standalone.message)).toBeVisible();
+    expect(screen.getByText(last.message)).toBeVisible();
+    fireEvent.click(disclosure);
+    const list = screen.getByRole("region", { name: "研究产物写入列表" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+    expect(within(list).getByText("reports/one.md")).toBeVisible();
+    expect(within(list).getByText("reports/two.md")).toBeVisible();
+
+    trace.rerender(<TraceView {...trace.props} events={[first, second, write(4, "reports/new.md"), standalone, boundary, last]} />);
+    expect(within(list).getAllByRole("listitem")).toHaveLength(3);
+    expect(within(list).getByText("reports/new.md")).toBeVisible();
+  });
+
+  it("reports a history batch without matching messages and preserves the reader's position", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const trace = traceFixture();
+    const onLoadOlder = vi.fn(async () => {
+      trace.resize(1_440, 400);
+      return 24;
+    });
+    trace.rerender(<TraceView {...trace.props} hasOlder onLoadOlder={onLoadOlder} />);
+    expect(onLoadOlder).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /加载更早.*条轨迹/ })).not.toBeInTheDocument();
+    const search = screen.getByRole("button", { name: "查找更早正文" });
+    await act(async () => fireEvent.click(search));
+    expect(onLoadOlder).toHaveBeenCalledTimes(1);
+    expect(onLoadOlder).toHaveBeenLastCalledWith({ agent: undefined, keyword: undefined });
+    const feedback = screen.getByText("这批记录中没有匹配的正文");
+    expect(search.closest(".trace-history-loader")?.nextElementSibling).toBe(feedback);
+    expect(trace.follow).toHaveAttribute("aria-pressed", "false");
+    expect(trace.top).toBe(1_040);
+    act(() => { vi.advanceTimersByTime(5_999); });
+    expect(feedback).toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(feedback).not.toBeInTheDocument();
+  });
+
+  it("starts loaded history at the first message and keeps later diagnostics", async () => {
+    const trace = traceFixture();
+    const event = (seq: number, message: string) => ({
+      ...trace.props.events[0], seq, message, type: "agent.trace",
+      ts: new Date(Date.UTC(2026, 9, 14, 0, 0, seq)).toISOString()
+    });
+    const olderMessage = { ...event(2, "更早的正文"), data: { canonicalEvent: {
+      schemaVersion: 1, eventId: "older", invocationId: "inv_older", harnessId: "fixture",
+      kind: "assistant.message", itemId: "item"
+    } } };
+    const diagnostic = (seq: number, message: string) => ({
+      ...event(seq, message), data: { traceKind: "status" }
+    });
+    const newest = { ...trace.props.events[0], seq: 4, ts: event(4, "").ts };
+    const onLoadOlder = vi.fn(async () => {
+      trace.rerender(<TraceView {...trace.props} events={[
+        diagnostic(1, "正文前的诊断"), olderMessage, diagnostic(3, "正文后的诊断"), newest
+      ]} />);
+      return 3;
+    });
+    trace.rerender(<TraceView {...trace.props} events={[newest]} hasOlder onLoadOlder={onLoadOlder} />);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "查找更早正文" })));
+    expect(trace.scroll.querySelector(".trace-list")?.firstElementChild).toHaveTextContent("更早的正文");
+    expect(screen.queryByText("正文前的诊断")).not.toBeInTheDocument();
+    expect(screen.getByText("正文后的诊断")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "查看上一条正文" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "查找更早正文" })).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("找到 1 条更早的 Agent 消息");
+  });
+
+  it("searches message cards by their body and retains attached tool calls", () => {
+    const trace = traceFixture();
+    const data = { schemaVersion: 1, invocationId: "inv_search", harnessId: "fixture" };
+    const events = [
+      { ...trace.props.events[0], type: "agent.trace", message: "匹配的正文", data: {
+        canonicalEvent: { ...data, eventId: "message", kind: "assistant.message", itemId: "item" }
+      } },
+      { ...trace.props.events[0], seq: 2, type: "agent.trace", message: "唯一工具关键词", data: {
+        canonicalEvent: { ...data, eventId: "tool", kind: "tool.completed", parentItemId: "item",
+          tool: { callId: "call", name: "read", status: "completed", input: "唯一工具关键词" } }
+      } }
+    ];
+    trace.rerender(<TraceView {...trace.props} events={events} />);
+    const search = screen.getByPlaceholderText("搜索 Agent 消息");
+    fireEvent.change(search, { target: { value: "唯一工具关键词" } });
+    expect(screen.queryByText("匹配的正文")).not.toBeInTheDocument();
+    expect(screen.getByText("0 条 Agent 消息")).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: "匹配的正文" } });
+    expect(screen.getByText("匹配的正文")).toBeVisible();
+    expect(screen.getByText("1 条 Agent 消息")).toBeInTheDocument();
+    expect(screen.getByText("工具调用")).toBeVisible();
+  });
+
   it("keeps follow enabled and restores the bottom after a layout or focus scroll", () => {
     const trace = traceFixture();
     expect(trace.top).toBe(800);
@@ -115,10 +245,13 @@ describe("trace follow navigation", () => {
   it("does not pause when an inner scroll area or editable field consumes navigation", () => {
     const trace = traceFixture();
     const inner = document.createElement("div"); inner.style.overflowY = "auto";
-    Object.defineProperties(inner, { scrollTop: { value: 100 }, scrollHeight: { value: 600 }, clientHeight: { value: 100 } });
+    Object.defineProperties(inner, { scrollTop: { value: 100, writable: true }, scrollHeight: { value: 600 }, clientHeight: { value: 100 } });
     const input = document.createElement("textarea"); inner.append(input); trace.scroll.append(inner);
     fireEvent.wheel(inner, { deltaY: -120 });
     fireEvent.keyDown(input, { key: "Home" });
+    inner.style.overscrollBehaviorY = "contain";
+    inner.scrollTop = 0;
+    fireEvent.wheel(inner, { deltaY: -120 });
     expect(trace.follow).toHaveAttribute("aria-pressed", "true");
   });
 

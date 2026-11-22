@@ -3,6 +3,7 @@ import { getArtifactHtmlPreviewUrl } from "../api";
 import {
   canonicalTraceEvent,
   isDiagnosticTraceEvent,
+  isGatewayUsageTraceEvent,
   traceDataString,
   traceDataStrings,
   isThoughtEvent,
@@ -13,9 +14,12 @@ import {
   toolLabel,
   toolStatus,
   toolOutput,
+  traceDetailParts,
+  mergeCanonicalToolEvents,
   buildTraceEntries,
   type AgentActivityEntry,
-  type AgentExecutionEntry
+  type AgentExecutionEntry,
+  type TraceEntry
 } from "../trace-model";
 export { buildTraceEntries } from "../trace-model";
 export type { TraceEntry } from "../trace-model";
@@ -31,6 +35,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState
@@ -45,6 +50,7 @@ import rehypeKatex from "rehype-katex";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import { normalizeMarkdownMath } from "../markdown-math";
 import {
   Activity,
   AlertTriangle,
@@ -103,6 +109,7 @@ import {
   getArtifactSummary,
   getCatalog,
   getProject,
+  getProjectEventDetails,
   getProjectExplainerConfig,
   getProjectExplainerHistory,
   getQueue,
@@ -127,7 +134,9 @@ import {
   PageLoader,
   StatusBadge
 } from "../components/Common";
+import { ProjectInteractionComposer } from "../components/ProjectInteractionComposer";
 import { AgentCallGraph } from "../components/AgentCallGraph";
+import { ScionTabs } from "../components/ScionTabs";
 import { ProjectStopDialog } from "../components/ProjectStopDialog";
 import { canStopProject } from "../project-status";
 import { WorkflowAdjustmentEditor } from "../components/WorkflowAdjustmentEditor";
@@ -221,10 +230,15 @@ const DEFAULT_TRACE_DISPLAY_LIMIT: TraceDisplayLimit = 1_000;
 const ARTIFACT_PAGE_SIZE = 100;
 const ARTIFACT_DIRECTORY_PAGE_SIZE = 50;
 
-export function isProjectSnapshotRefreshEvent(event: Pick<AgentEvent, "type">): boolean {
+export function isProjectSnapshotRefreshEvent(event: Pick<AgentEvent, "type" | "data">): boolean {
   const type = event.type.toLowerCase().replaceAll("_", ".");
+  if (type === "workflow.adjustment.transitioned" || event.data?.sourceType === "workflow.adjustment.transitioned") {
+    const transition = event.data?.transition;
+    return typeof transition === "object" && transition !== null && "status" in transition && transition.status === "applied";
+  }
   return (
     type.startsWith("workflow.node.") ||
+    type === "workflow.reconfigured" ||
     type.startsWith("collaboration.") ||
     type.startsWith("pull.request.") ||
     type.startsWith("git.initialization.") ||
@@ -405,25 +419,6 @@ function displayPhase(phase?: string): string {
   return "Main 处理中";
 }
 
-function displayProjectStatus(status: Project["status"], runtime?: Project["runtime"]): string {
-  const labels: Record<Project["status"], string> = {
-    queued: "排队中",
-    running: "运行中",
-    retrying: "重试中",
-    interrupting: "中断中",
-    interrupted: "等待恢复",
-    pausing: "暂停中",
-    paused: "已暂停",
-    cancelling: "取消中",
-    cancelled: "已取消",
-    completed: "已完成",
-    draft: "草稿",
-    stopping: "停止中",
-    stopped: "已停止",
-    failed: "失败"
-  };
-  return projectWaitingLabel(status, runtime) ?? labels[status] ?? status;
-}
 
 function displayAgentName(agent?: AgentName): string {
   return agent === SYSTEM_CONTROLLER_AGENT ? "main" : agent ?? "";
@@ -447,43 +442,6 @@ function ConnectionBadge({ state }: { state: ConnectionState }) {
   );
 }
 
-function WorkflowRail({
-  project,
-  events,
-  runtime: runtimeProp
-}: {
-  project: Project;
-  events: AgentEvent[];
-  runtime?: WorkflowRuntimeState;
-}) {
-  const runtime = runtimeProp ?? buildWorkflowRuntimeState(project, events);
-  const recentPath = runtime.recentInvocationPath.slice(-5);
-  const statusNode = runtime.currentNodeId ?? runtime.queuedNodeId;
-  const statusLabel = statusNode ? runtimeNodeLabel(runtime.nodeStates[statusNode]) : "等待运行";
-  return (
-    <div className="workflow-rail">
-      <div className="cycle-label">
-        <GitBranch size={14} />
-        <span className="cycle-label-copy">
-          <strong>第 {project.cycle} 轮</strong>
-          <small className={`workflow-rail-status status-${project.status}`}>
-            {displayProjectStatus(project.status, project.runtime)}
-          </small>
-        </span>
-      </div>
-      <div className="workflow-rail-summary">
-        <strong>{statusNode ? `${statusNode} · ${statusLabel}` : statusLabel}</strong>
-        <span className="workflow-rail-live-meta">
-          {project.currentAgent ? `${displayAgentName(project.currentAgent)} · ` : ""}
-          {project.runtime?.waiting?.reason ?? displayPhase(project.phase)}
-        </span>
-        <span className="workflow-rail-path">
-          {recentPath.length ? recentPath.map((entry, index) => <span key={`${entry.invocationId ?? entry.nodeId}-${index}`}>{index ? " → " : ""}{entry.nodeId}{entry.state === "completed" ? " ✓" : entry.state === "running" ? " ·" : ""}</span>) : "尚无实际路径"}
-        </span>
-      </div>
-    </div>
-  );
-}
 
 function formatLatency(milliseconds: number | undefined): string {
   if (milliseconds === undefined) return "—";
@@ -493,11 +451,9 @@ function formatLatency(milliseconds: number | undefined): string {
 
 function formatTokenSpeed(
   value: number | undefined,
-  source: InvocationPerformance["tokenSource"] | PerformanceAggregate["tokenSource"],
-  alwaysEstimated = false
+  approximate: boolean
 ): string {
   if (value === undefined) return "—";
-  const approximate = alwaysEstimated || source !== "official";
   return `${approximate ? "≈" : ""}${value.toFixed(1)} tok/s`;
 }
 
@@ -505,11 +461,15 @@ function PerformanceMetrics({
   performance,
   averageFallback,
   latestToken,
+  hideInactiveSpeed = false,
+  showApproximation = true,
   compact = false
 }: {
   performance?: InvocationPerformance;
   averageFallback?: InvocationPerformance | PerformanceAggregate;
   latestToken?: InvocationPerformance;
+  hideInactiveSpeed?: boolean;
+  showApproximation?: boolean;
   compact?: boolean;
 }) {
   const average = averageFallback?.averageTokensPerSecond ?? performance?.averageTokensPerSecond;
@@ -520,20 +480,21 @@ function PerformanceMetrics({
     ? averageFallback.firstTokenLatencyMs
     : undefined;
   const latency = latestToken?.firstTokenLatencyMs ?? performance?.firstTokenLatencyMs ?? fallbackLatency;
+  const active = performance?.status === "active" && performance.requestActive !== false;
   return (
     <div className={`performance-metrics ${compact ? "compact" : ""}`}>
       <span title="最近一次实际测得的首 Token 延迟"><small>首 Token 延迟</small><strong>{formatLatency(latency)}</strong></span>
-      <span>
+      {(active || !hideInactiveSpeed) && <span>
         <small>当前速度</small>
         <strong>
-          {performance?.status === "active" && performance.requestActive !== false && performance.streaming
-            ? formatTokenSpeed(performance.currentTokensPerSecond, performance.tokenSource, true)
-            : performance?.status === "active" && performance.requestActive !== false
+          {active && performance.streaming
+            ? formatTokenSpeed(performance.currentTokensPerSecond, showApproximation)
+            : active
               ? "非流式"
               : "—"}
         </strong>
-      </span>
-      <span><small>平均速度</small><strong>{formatTokenSpeed(average, averageSource)}</strong></span>
+      </span>}
+      <span><small>平均速度</small><strong>{formatTokenSpeed(average, showApproximation && averageSource !== "official")}</strong></span>
     </div>
   );
 }
@@ -832,71 +793,55 @@ export function AgentRoster({
           const state = runtime?.nodeStates[agent] ?? runtimeDisplayState(progress?.state ?? "waiting");
           const metrics = resolvePerformanceMetrics(project.performance, livePerformance, project.status, agent);
           const config = project.agents[agent];
-          const reasoningLabel = config.gatewaySnapshot?.reasoning?.label
-            ?? config.gatewayReasoningOption
+          const reasoningLabel = config?.gatewaySnapshot?.reasoning?.label
+            ?? config?.gatewayReasoningOption
             ?? "Provider 默认";
+          const hasMetrics = Boolean(metrics.current || metrics.average || metrics.latestToken);
           return (
-            <div
-              className={`roster-agent roster-${state} ${project.currentAgent === agent ? "current" : ""}`}
+            <details
+              className={`roster-agent roster-standalone roster-${state} ${project.currentAgent === agent ? "current" : ""}`}
               key={agent}
             >
-              <span className={`roster-agent-icon agent-${meta.color}`}>
-                <AgentIcon role={role} size={18} />
-                {state === "running" && <i />}
-              </span>
-              <div className="roster-agent-copy">
-                <strong>{agent}</strong>
-                <small>{agent === SYSTEM_CONTROLLER_AGENT ? "Main Agent" : `Worker · ${role}`}</small>
-                <span>
-                  {config.model || "未配置模型"} · 网关思考强度 {reasoningLabel}
+              <summary className="roster-standalone-summary">
+                <span className={`roster-agent-icon agent-${meta.color}`}>
+                  <AgentIcon role={role} size={16} />
+                  {state === "running" && <i />}
                 </span>
-                {config.reasoningMigrationWarning && <small className="field-error">
-                  {config.reasoningMigrationWarning}
-                </small>}
-                <small>
-                  {executionCount} 次执行
-                  {progress?.queuePosition
-                    ? ` · 队列 #${progress.queuePosition}`
-                    : ""}
-                </small>
-                <small className="roster-performance">
-                  平均 {formatTokenSpeed(metrics.average?.averageTokensPerSecond, metrics.average?.tokenSource ?? "estimated")}
-                  {metrics.current?.streaming && ` · 当前 ${formatTokenSpeed(metrics.current.currentTokensPerSecond, metrics.current.tokenSource, true)}`}
-                </small>
-              </div>
-              <span className={`run-state run-state-${state}`}>
-                {runtimeNodeLabel(state)}
-              </span>
+                <span className="roster-agent-copy">
+                  <span className="roster-agent-heading">
+                    <strong>{agent}</strong>
+                    <span className={`run-state run-state-${state}`}>
+                      {runtimeNodeLabel(state)}
+                    </span>
+                  </span>
+                  <span className="roster-agent-model">{config?.model || "未配置模型"}</span>
+                  <small>
+                    {agent === SYSTEM_CONTROLLER_AGENT ? "Main" : role} · {executionCount} 次执行
+                    {progress?.queuePosition ? ` · 队列 #${progress.queuePosition}` : ""}
+                  </small>
+                </span>
+                <ChevronRight className="roster-standalone-chevron" size={15} aria-hidden="true" />
+              </summary>
               <div className="roster-agent-detail">
-                <p>{meta.description}</p>
-                <div className="roster-progress-meta">
-                  <strong>已执行 {executionCount} 次</strong>
-                  {progress?.queuePosition && (
-                    <span>队列 #{progress.queuePosition}</span>
-                  )}
-                </div>
-                <PerformanceMetrics
+                <dl className="roster-agent-settings">
+                  <div><dt>网关思考强度</dt><dd>{reasoningLabel}</dd></div>
+                  {config?.skills.length ? <div>
+                    <dt>Skills</dt>
+                    <dd><ul>{config.skills.map(skill => <li key={skill}>{skill}</li>)}</ul></dd>
+                  </div> : null}
+                </dl>
+                {config?.reasoningMigrationWarning && <p className="field-error">
+                  {config.reasoningMigrationWarning}
+                </p>}
+                {hasMetrics && <PerformanceMetrics
                   performance={metrics.current}
                   averageFallback={metrics.average}
                   latestToken={metrics.latestToken}
+                  hideInactiveSpeed
                   compact
-                />
-                <div>
-                  {config.skills.length ? (
-                    <>
-                      {config.skills.slice(0, 2).map((skill) => (
-                        <span key={skill}>{skill}</span>
-                      ))}
-                      {config.skills.length > 2 && (
-                        <span>+{config.skills.length - 2}</span>
-                      )}
-                    </>
-                  ) : (
-                    <small>未挂载额外 Skill</small>
-                  )}
-                </div>
+                />}
               </div>
-            </div>
+            </details>
           );
         })}
       </div>
@@ -1944,11 +1889,18 @@ function eventPresentation(event: AgentEvent): {
   title: string;
   icon: React.ReactNode;
   tone: string;
+  diagnosticOnly?: true;
 } {
   const type = event.type.toLowerCase();
   const traceKind =
     typeof event.data?.kind === "string" ? event.data.kind.toLowerCase() : "";
   const canonical = canonicalTraceEvent(event);
+  if (isGatewayUsageTraceEvent(event)) {
+    return { title: "网关 Token 计量", icon: <Activity size={16} />, tone: "neutral" };
+  }
+  if (type === "control.action.staged") {
+    return { title: "操作待提交", icon: <Activity size={16} />, tone: "neutral" };
+  }
   if (canonical?.kind === "diagnostic") {
     return { title: "运行诊断", icon: <Activity size={16} />, tone: "neutral" };
   }
@@ -1973,6 +1925,9 @@ function eventPresentation(event: AgentEvent): {
   }
   if (type === "workflow.reconfigured") {
     return { title: "Workflow 已重新配置", icon: <GitBranch size={16} />, tone: "decision" };
+  }
+  if (type === "workflow.tick") {
+    return { title: "流程进展", icon: <Activity size={16} />, tone: "neutral" };
   }
   if (type.includes("error") || type.includes("failed")) {
     return { title: "运行异常", icon: <AlertTriangle size={16} />, tone: "error" };
@@ -2024,15 +1979,65 @@ function eventPresentation(event: AgentEvent): {
   if (type.includes("decision") || type.includes("state")) {
     return { title: "流程安排更新", icon: <GitBranch size={16} />, tone: "decision" };
   }
-  return { title: "过程更新", icon: <Activity size={16} />, tone: "neutral" };
+  return { title: "运行记录", icon: <Activity size={16} />, tone: "neutral", diagnosticOnly: true };
+}
+
+function TraceDisclosure({
+  projectId, events, className, icon, label, children
+}: {
+  projectId: string;
+  events: AgentEvent[];
+  className: string;
+  icon: React.ReactNode;
+  label: string;
+  children: (events: AgentEvent[]) => React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const [result, setResult] = useState<{ key: string; events?: Map<number, AgentEvent>; error?: true }>();
+  const sequenceKey = [...new Set(events.flatMap(event => event.data?.traceDetailDeferred === true
+    ? traceDetailParts(event).filter(part => part.data?.traceDetailDeferred === true).map(part => part.seq)
+    : []))].sort((left, right) => left - right).join(",");
+  const key = `${projectId}:${sequenceKey}:${retry}`;
+  const current = result?.key === key ? result : undefined;
+  const ready = current?.events;
+  const failed = current?.error;
+  useEffect(() => {
+    if (!open || !sequenceKey || ready || failed) return;
+    const controller = new AbortController();
+    void getProjectEventDetails(projectId, sequenceKey.split(",").map(Number), controller.signal)
+      .then(details => {
+        if (!controller.signal.aborted) setResult({ key, events: new Map(details.map(event => [event.seq, event])) });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setResult({ key, error: true });
+      });
+    return () => controller.abort();
+  }, [failed, key, open, projectId, ready, sequenceKey]);
+
+  return <details className={className} onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary className="trace-disclosure-toggle">
+      <ChevronRight size={14} className="trace-disclosure-chevron" aria-hidden="true" />
+      {icon}<strong>{label}</strong><span>{events.length}</span>
+    </summary>
+    {!sequenceKey ? children(events) : open && (ready
+      ? children(events.map(event => event.data?.traceDetailDeferred === true
+        ? traceDetailParts(event).map(part => ready.get(part.seq) ?? part).reduce(mergeCanonicalToolEvents)
+        : event))
+      : failed
+        ? <div className="trace-history-feedback" role="alert">详情加载失败 <Button variant="secondary" onClick={() => setRetry(value => value + 1)}>重试</Button></div>
+        : <div className="trace-history-feedback" role="status">正在加载详情…</div>)}
+  </details>;
 }
 
 export const AgentActivityCard = memo(function AgentActivityCard({
   entry,
-  projectCycle
+  projectCycle,
+  projectId
 }: {
   entry: AgentActivityEntry;
   projectCycle: number;
+  projectId?: string;
 }) {
   const event = entry.thought ?? entry.event;
   const canonical = canonicalTraceEvent(event);
@@ -2051,21 +2056,29 @@ export const AgentActivityCard = memo(function AgentActivityCard({
   const thought = entry.thought
     ? thoughtSummary(entry.thought.message)
     : "";
+  const streaming = entry.displayState === "streaming" && entry.contentKind !== "summary";
+  const outputRef = useRef<HTMLDivElement>(null);
+  const followOutput = useRef(true);
+  useLayoutEffect(() => {
+    const output = outputRef.current;
+    if (output && followOutput.current) output.scrollTop = Math.max(0, output.scrollHeight - output.clientHeight);
+    if (!streaming) followOutput.current = true;
+  }, [streaming, thought]);
   return (
-    <article className="trace-event trace-action-event">
+    <article className="trace-event trace-action-event" data-trace-message-seq={entry.thought?.seq}>
       <div className="trace-axis">
         <span><BrainCircuit size={16} /></span>
         <i />
       </div>
       <div className="trace-body">
         <div className="trace-meta">
+          {event.agent && <AgentBadge name={event.agent} role={event.agent} subtle />}
           <time>{formatClock(event.ts)}</time>
           <span>Cycle {cycle}</span>
-          <span>#{event.seq}</span>
+          {!event.data?.liveEphemeral && <span>#{event.seq}</span>}
           {canonical?.harnessId && <span className="trace-harness-tag">{canonical.harnessId}</span>}
-          {event.agent && <AgentBadge role={event.agent} subtle />}
         </div>
-        <div className={`agent-action-row${!thought || !entry.tools.length ? " is-single-panel" : ""}`}>
+        <div className="agent-action-row">
           {thought && <section className="agent-thought-panel">
             <header>
               <BrainCircuit size={15} />
@@ -2075,17 +2088,24 @@ export const AgentActivityCard = memo(function AgentActivityCard({
             {entry.contentKind === "summary" ? (
               <details className="agent-visible-summary">
                 <summary>阅读摘要</summary>
-                <div className="agent-message-markdown"><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeSanitize, rehypeKatex]}>{thought}</ReactMarkdown></div>
+                <div className="agent-message-markdown"><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeSanitize, rehypeKatex]}>{normalizeMarkdownMath(thought)}</ReactMarkdown></div>
               </details>
-            ) : entry.displayState === "streaming" ? (
-              <p className="agent-streaming-text">{thought}</p>
             ) : (
-              <div className="agent-message-markdown">
+              <div
+                className={streaming ? "agent-message-markdown agent-streaming-output" : "agent-message-markdown"}
+                ref={streaming ? outputRef : undefined}
+                role={streaming ? "region" : undefined}
+                aria-label={streaming ? "Agent 正在输出的正文" : undefined}
+                tabIndex={streaming ? 0 : undefined}
+                onScroll={streaming ? ({ currentTarget }) => {
+                  followOutput.current = currentTarget.scrollHeight - currentTarget.clientHeight - currentTarget.scrollTop <= 8;
+                } : undefined}
+              >
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm, remarkMath]}
                   rehypePlugins={[rehypeSanitize, rehypeKatex]}
                 >
-                  {thought}
+                  {normalizeMarkdownMath(thought)}
                 </ReactMarkdown>
               </div>
             )}
@@ -2096,47 +2116,57 @@ export const AgentActivityCard = memo(function AgentActivityCard({
               </div>
             )}
           </section>}
-          {entry.tools.length > 0 && <section className="agent-tools-panel">
-            <header>
-              <TerminalSquare size={15} />
-              <strong>工具调用</strong>
-              <span>{entry.tools.length}</span>
-            </header>
-              <div className="agent-tool-list">
-                {entry.tools.map((tool, index) => {
+          {entry.tools.length > 0 && <TraceDisclosure projectId={projectId ?? event.projectId ?? ""} events={entry.tools}
+            className="agent-tools-panel" label="工具调用" icon={<TerminalSquare size={15} aria-hidden="true" />}>
+            {tools => (
+              <div className="agent-tool-list" role="region" aria-label="工具调用列表" tabIndex={0}>
+                {tools.map((tool, index) => {
                   const status = toolStatus(tool);
-                  const command = toolCommand(tool);
                   const result = toolOutput(tool);
                   const canonicalTool = canonicalTraceEvent(tool)?.tool;
+                  const command = canonicalTool?.name && canonicalTool.input === undefined
+                    ? ""
+                    : toolCommand(tool);
+                  const label = toolLabel(tool);
+                  const preview = (
+                    <>
+                      <strong title={label}>{label === "command_execution" ? "Shell 命令" : label}</strong>
+                      <code>{command}</code>
+                      <span className={`tool-status tool-status-${status.tone}`}>{status.label}</span>
+                    </>
+                  );
                   return (
                     <div className="agent-tool-item" key={canonicalTool?.callId ?? `${tool.seq}-${index}`} data-tool-status={canonicalTool?.status ?? status.tone}>
-                      <div>
-                        <strong>{toolLabel(tool)}</strong>
-                        <span className={`tool-status tool-status-${status.tone}`}>
-                          {status.label}
-                        </span>
-                      </div>
-                      <code title={command}>{command || "等待工具详情"}</code>
-                      {result && (
-                        <details className="agent-tool-result">
-                          <summary>
-                            查看工具结果
-                            {result.truncated && <span>已截断至 40,000 字符</span>}
+                      {command || result ? (
+                        <details className="agent-tool-disclosure">
+                          <summary className="agent-tool-preview">
+                            <ChevronRight size={14} aria-hidden="true" />
+                            {preview}
                           </summary>
-                          <pre>{result.text}</pre>
+                          <div className="agent-tool-content">
+                            {command && <pre aria-label="工具输入">{command}</pre>}
+                            {result && (
+                              <div className="agent-tool-output">
+                                <strong>工具结果</strong>
+                                {result.truncated && <small>已截断至 40,000 字符</small>}
+                                <pre>{result.text}</pre>
+                              </div>
+                            )}
+                          </div>
                         </details>
-                      )}
+                      ) : <div className="agent-tool-preview">{preview}</div>}
                     </div>
                   );
                 })}
               </div>
-          </section>}
+            )}
+          </TraceDisclosure>}
         </div>
       </div>
     </article>
   );
 }, (previous, next) => {
-  if (previous.projectCycle !== next.projectCycle) return false;
+  if (previous.projectCycle !== next.projectCycle || previous.projectId !== next.projectId) return false;
   if (
     previous.entry.displayState !== next.entry.displayState ||
     previous.entry.contentKind !== next.entry.contentKind ||
@@ -2151,6 +2181,7 @@ export const AgentActivityCard = memo(function AgentActivityCard({
     const nextTool = next.entry.tools[index]!;
     if (tool === nextTool) return true;
     if (tool.seq !== nextTool.seq || tool.message !== nextTool.message) return false;
+    if (tool.data?.traceDetailDeferred || nextTool.data?.traceDetailDeferred) return false;
     const before = canonicalTraceEvent(tool)?.tool;
     const after = canonicalTraceEvent(nextTool)?.tool;
     return before?.name === after?.name && before?.status === after?.status &&
@@ -2183,9 +2214,19 @@ function AgentExecutionCard({ entry }: { entry: AgentExecutionEntry }) {
       <div className="trace-title-row"><strong>{titles[entry.state]}</strong></div>
       {task && <p>{task}</p>}
       {reason && <p>唤醒原因：{reason}</p>}
-      {entry.updates.length > 0 && <details className="trace-execution-details"><summary>本轮执行记录 · {entry.updates.length}</summary>
-        {entry.updates.map(event => <p key={event.seq}><time>{formatClock(event.ts)}</time> · {event.type}{event.message && ` · ${event.message}`}</p>)}
-      </details>}
+      {entry.updates.length > 0 && (
+        <details className="trace-execution-details">
+          <summary className="trace-disclosure-toggle">
+            <ChevronRight size={14} className="trace-disclosure-chevron" aria-hidden="true" />
+            <strong>本轮执行记录</strong><span>{entry.updates.length}</span>
+          </summary>
+          <ul aria-label="本轮执行记录">
+            {entry.updates.map(event => (
+              <li key={event.seq}><time>{formatClock(event.ts)}</time> · {event.type}{event.message && ` · ${event.message}`}</li>
+            ))}
+          </ul>
+        </details>
+      )}
     </div>
   </article>;
 }
@@ -2214,7 +2255,7 @@ const EventCard = memo(function EventCard({ event, projectCycle }: { event: Agen
         <div className="trace-meta">
           <time>{formatClock(event.ts)}</time>
           <span>Cycle {cycle}</span>
-          <span>#{event.seq}</span>
+          {!event.data?.liveEphemeral && <span>#{event.seq}</span>}
         </div>
         <div className="trace-title-row">
           <strong>{presentation.title}</strong>
@@ -2253,6 +2294,7 @@ function liveAssistantEvent(stream: LiveAssistantStream, index: number): AgentEv
     data: {
       kind: "message",
       invocationId: stream.invocationId,
+      liveEphemeral: true,
       livePhase: stream.phase,
       liveRole: stream.role,
       canonicalEvent: {
@@ -2277,10 +2319,50 @@ function canScrollTraceHistory(container: HTMLElement | null, target: EventTarge
   // the gesture as navigation in the outer trace.
   for (let element = target instanceof Element ? target : null;
     element && element !== container; element = element.parentElement) {
-    if (element.scrollTop > 0 && element.scrollHeight > element.clientHeight &&
-      /^(auto|scroll)$/.test(window.getComputedStyle(element).overflowY)) return false;
+    if (element.scrollHeight <= element.clientHeight) continue;
+    const style = window.getComputedStyle(element);
+    if (/^(auto|scroll)$/.test(style.overflowY) &&
+      (element.scrollTop > 0 || /^(contain|none)$/.test(style.overscrollBehaviorY))) return false;
   }
   return true;
+}
+
+function artifactWritePath(event: AgentEvent): string {
+  const artifact = event.data?.artifact as { path?: unknown } | undefined;
+  const path = event.data?.path ?? artifact?.path;
+  return typeof path === "string" && path ? path : event.message;
+}
+
+function ArtifactWriteGroup({ events, projectCycle }: { events: AgentEvent[]; projectCycle: number }) {
+  const first = events[0]!;
+  if (events.length === 1) return <EventCard event={first} projectCycle={projectCycle} />;
+  const agent = first.agent ?? first.agentId;
+  return (
+    <article className="trace-event trace-artifact">
+      <div className="trace-axis"><span><FileText size={16} /></span><i /></div>
+      <div className="trace-body trace-artifact-group">
+        <details>
+          <summary className="trace-disclosure-toggle">
+            <ChevronRight size={14} className="trace-disclosure-chevron" aria-hidden="true" />
+            <strong>研究产物已写入</strong>
+            <span>{events.length}</span>
+            {agent && <span className="trace-artifact-agent"><AgentBadge role={agent} subtle /></span>}
+          </summary>
+          <div className="trace-artifact-list" role="region" aria-label="研究产物写入列表" tabIndex={0}>
+            <ul>
+              {events.map(event => (
+                <li key={event.seq}>
+                  <time dateTime={event.ts}>{formatClock(event.ts)}</time>
+                  <span>#{event.seq}</span>
+                  <span className="trace-artifact-path">{artifactWritePath(event)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </details>
+      </div>
+    </article>
+  );
 }
 
 export const TraceView = memo(function TraceView({
@@ -2304,13 +2386,17 @@ export const TraceView = memo(function TraceView({
   hasOlder: boolean;
   historyLoading: boolean;
   historyError: string;
-  onLoadOlder: () => Promise<void>;
+  onLoadOlder: (filters?: { agent?: string; keyword?: string }) => Promise<number | void>;
 }) {
   const [agentFilter, setAgentFilter] = useState<"all" | AgentName>("all");
   const [displayLimit, setDisplayLimit] = useState<TraceDisplayLimit>(
     DEFAULT_TRACE_DISPLAY_LIMIT
   );
   const [search, setSearch] = useState("");
+  const [historyCount, setHistoryCount] = useState<number>();
+  const [historyBeforeSeq, setHistoryBeforeSeq] = useState<number>();
+  const [extraHistory, setExtraHistory] = useState(0);
+  const historyAnchor = useRef<{ node?: Element; offset: number; height: number; top: number }>();
   const [follow, setFollow] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const followRef = useRef(follow);
@@ -2322,17 +2408,15 @@ export const TraceView = memo(function TraceView({
     followRef.current = follow;
   }, [follow]);
 
-  const matchingEvents = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-    return events.filter(
-      (event) =>
-        !isHiddenReasoningTraceEvent(event) &&
-        (agentFilter === "all" || event.agent === agentFilter) &&
-        (!keyword ||
-          event.message.toLowerCase().includes(keyword) ||
-          event.type.toLowerCase().includes(keyword))
-    );
-  }, [agentFilter, events, search]);
+  const keyword = search.trim().toLowerCase();
+  const matchesTrace = useCallback((event: AgentEvent) =>
+    !isHiddenReasoningTraceEvent(event) && (agentFilter === "all" || event.agent === agentFilter),
+  [agentFilter]);
+  const matchesMessageText = useCallback((event: AgentEvent) => {
+    const text = thoughtSummary(event.message);
+    return Boolean(text && (!keyword || text.toLowerCase().includes(keyword)));
+  }, [keyword]);
+  const matchingEvents = useMemo(() => events.filter(matchesTrace), [events, matchesTrace]);
   const matchingDiagnosticEvents = useMemo(
     () => matchingEvents.filter(isDiagnosticTraceEvent),
     [matchingEvents]
@@ -2342,31 +2426,83 @@ export const TraceView = memo(function TraceView({
     [matchingEvents]
   );
   const diagnosticEvents = useMemo(
-    () => matchingDiagnosticEvents.slice(-displayLimit),
-    [displayLimit, matchingDiagnosticEvents]
+    () => matchingDiagnosticEvents.slice(-(displayLimit + extraHistory)),
+    [displayLimit, extraHistory, matchingDiagnosticEvents]
   );
   const primaryEvents = useMemo(
-    () => matchingPrimaryEvents.slice(-displayLimit),
-    [displayLimit, matchingPrimaryEvents]
+    () => matchingPrimaryEvents.slice(-(displayLimit + extraHistory)),
+    [displayLimit, extraHistory, matchingPrimaryEvents]
   );
   const liveAssistantEvents = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
     return liveStreams
       .filter((stream) =>
-        (agentFilter === "all" || stream.agent === agentFilter) &&
-        (!keyword || stream.content.toLowerCase().includes(keyword))
+        agentFilter === "all" || stream.agent === agentFilter
       )
       .map(liveAssistantEvent);
-  }, [agentFilter, liveStreams, search]);
+  }, [agentFilter, liveStreams]);
   const entries = useMemo(
     () => buildTraceEntries([
       ...primaryEvents,
-      ...[...liveEvents, ...liveAssistantEvents].sort((left, right) =>
+      ...[...liveEvents.filter(event => matchesTrace(event) && !isDiagnosticTraceEvent(event)), ...liveAssistantEvents].sort((left, right) =>
         left.ts.localeCompare(right.ts) || left.seq - right.seq
       )
     ]),
-    [liveAssistantEvents, liveEvents, primaryEvents]
+    [liveAssistantEvents, liveEvents, matchesTrace, primaryEvents]
   );
+  const timeline = useMemo(() => {
+    if (keyword) return entries.filter(entry =>
+      entry.kind === "activity" && entry.thought && matchesMessageText(entry.thought));
+    type DiagnosticGroup = { kind: "diagnostics"; id: string; events: AgentEvent[] };
+    type ArtifactGroup = { kind: "artifact-writes"; id: string; events: AgentEvent[] };
+    const items = [
+      ...entries.map(entry => ({
+        event: entry.event,
+        entry: entry.kind === "event" && eventPresentation(entry.event).diagnosticOnly ? undefined : entry
+      })),
+      ...diagnosticEvents.map(event => ({ event, entry: undefined })),
+      ...liveEvents.filter(event => matchesTrace(event) && isDiagnosticTraceEvent(event))
+        .map(event => ({ event, entry: undefined }))
+    ].sort((left, right) =>
+      left.event.ts.localeCompare(right.event.ts) || left.event.seq - right.event.seq
+    );
+    const groups: (TraceEntry | DiagnosticGroup | ArtifactGroup)[] = [];
+    for (const { entry, event } of items) {
+      const previous = groups.at(-1);
+      if (entry?.kind === "event" && event.type === "artifact.published") {
+        const first = previous?.kind === "artifact-writes" ? previous.events[0] : undefined;
+        if (previous?.kind === "artifact-writes" && first &&
+          (first.agent ?? first.agentId) === (event.agent ?? event.agentId) &&
+          String(first.data?.cycle ?? "") === String(event.data?.cycle ?? "") &&
+          (first.invocationId ?? first.data?.invocationId) === (event.invocationId ?? event.data?.invocationId) &&
+          (first.executionId ?? first.data?.executionId) === (event.executionId ?? event.data?.executionId)) {
+          previous.events.push(event);
+        } else {
+          groups.push({ kind: "artifact-writes", id: entry.id, events: [event] });
+        }
+        continue;
+      }
+      if (entry) {
+        groups.push(entry);
+        continue;
+      }
+      if (previous?.kind === "diagnostics") {
+        previous.events.push(event);
+      } else {
+        groups.push({ kind: "diagnostics", id: `diagnostics-${event.seq}`, events: [event] });
+      }
+    }
+    if (!extraHistory) return groups;
+    const firstMessage = groups.findIndex(entry => entry.kind === "activity" &&
+      entry.thought && matchesMessageText(entry.thought));
+    return firstMessage > 0 ? groups.slice(firstMessage) : groups;
+  }, [entries, diagnosticEvents, liveEvents, matchesTrace, keyword, matchesMessageText, extraHistory]);
+  const earlierMessages = useMemo(() => {
+    if (historyBeforeSeq === undefined) return [];
+    return timeline.filter(entry => {
+      const message = entry.kind === "activity" ? entry.thought : undefined;
+      return message && !message.data?.liveEphemeral && message.seq < historyBeforeSeq && matchesMessageText(message);
+    });
+  }, [historyBeforeSeq, matchesMessageText, timeline]);
   const visibleEventCount = primaryEvents.length + diagnosticEvents.length;
   const latestVisibleSeq = Math.max(
     primaryEvents.at(-1)?.seq ?? 0,
@@ -2471,15 +2607,50 @@ export const TraceView = memo(function TraceView({
     });
   }, []);
 
-  useEffect(() => {
-    if (
-      displayLimit > events.length &&
-      hasOlder &&
-      !historyLoading
-    ) {
-      void onLoadOlder();
+  const loadEarlier = async () => {
+    const container = scrollRef.current;
+    if (!container || historyLoading || historyAnchor.current) return;
+    const top = container.getBoundingClientRect().top;
+    const node = Array.from(container.querySelector(".trace-list")?.children ?? [])
+      .find(child => child.getBoundingClientRect().bottom > top);
+    historyAnchor.current = {
+      node, offset: node ? node.getBoundingClientRect().top - top : 0,
+      height: container.scrollHeight, top: container.scrollTop
+    };
+    pauseFollowing();
+    setHistoryCount(undefined);
+    setHistoryBeforeSeq(undefined);
+    const beforeSeq = events[0]?.seq;
+    const count = await onLoadOlder({ agent: agentFilter === "all" ? undefined : agentFilter, keyword: keyword || undefined });
+    if (count === undefined) {
+      historyAnchor.current = undefined;
+      return;
     }
-  }, [displayLimit, events.length, hasOlder, historyLoading, onLoadOlder]);
+    if (count > 0) {
+      setExtraHistory(current => Math.max(current + count, events.length + count - displayLimit));
+    }
+    setHistoryCount(count);
+    setHistoryBeforeSeq(beforeSeq);
+  };
+
+  useLayoutEffect(() => {
+    const anchor = historyAnchor.current;
+    const container = scrollRef.current;
+    if (historyCount === undefined || !anchor || !container) return;
+    historyAnchor.current = undefined;
+    if (anchor.node?.isConnected) {
+      container.scrollTop += anchor.node.getBoundingClientRect().top -
+        container.getBoundingClientRect().top - anchor.offset;
+    } else {
+      container.scrollTop = anchor.top + Math.max(0, container.scrollHeight - anchor.height);
+    }
+  }, [historyCount, extraHistory]);
+
+  useEffect(() => {
+    if (historyCount === undefined) return;
+    const timeout = window.setTimeout(() => setHistoryCount(undefined), 6_000);
+    return () => window.clearTimeout(timeout);
+  }, [historyCount]);
 
   useEffect(() => {
     if (!follow) {
@@ -2490,7 +2661,7 @@ export const TraceView = memo(function TraceView({
       autoScrollRef.current = false;
       return;
     }
-    if (!entries.length && !diagnosticEvents.length) return;
+    if (!timeline.length) return;
     scrollToBottom();
   }, [
     agentFilter,
@@ -2502,7 +2673,8 @@ export const TraceView = memo(function TraceView({
     liveStreamVersion,
     latestVisibleSeq,
     search,
-    scrollToBottom
+    scrollToBottom,
+    timeline.length
   ]);
 
   useEffect(() => {
@@ -2546,6 +2718,7 @@ export const TraceView = memo(function TraceView({
       ? ` · 当前已加载范围 ${events.length.toLocaleString()}`
       : loadedHistorySuffix;
   const eventCountLabel =
+    keyword ? `${timeline.length.toLocaleString()} 条 Agent 消息` :
     matchingEvents.length > visibleEventCount
       ? `显示最新 ${visibleEventCount.toLocaleString()} / ${matchingEvents.length.toLocaleString()} 条${allEventsSuffix}`
       : `${visibleEventCount.toLocaleString()} 条事件${allEventsSuffix}`;
@@ -2562,17 +2735,26 @@ export const TraceView = memo(function TraceView({
             <Search size={15} />
             <input
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="搜索轨迹"
+              onChange={(event) => {
+                setHistoryBeforeSeq(undefined);
+                setHistoryCount(undefined);
+                setSearch(event.target.value);
+              }}
+              disabled={historyLoading}
+              placeholder="搜索 Agent 消息"
+              maxLength={300}
             />
           </label>
           <label className="compact-select">
             <Filter size={14} />
             <select
               value={agentFilter}
-              onChange={(event) =>
-                setAgentFilter(event.target.value as "all" | AgentName)
-              }
+              onChange={(event) => {
+                setHistoryBeforeSeq(undefined);
+                setHistoryCount(undefined);
+                setAgentFilter(event.target.value as "all" | AgentName);
+              }}
+              disabled={historyLoading}
               aria-label="按智能体筛选"
             >
               <option value="all">全部 Agent</option>
@@ -2593,11 +2775,15 @@ export const TraceView = memo(function TraceView({
             <Clock3 size={14} />
             <select
               value={displayLimit}
-              onChange={(event) =>
+              disabled={historyLoading}
+              onChange={(event) => {
+                setExtraHistory(0);
+                setHistoryCount(undefined);
+                setHistoryBeforeSeq(undefined);
                 setDisplayLimit(
                   Number(event.target.value) as TraceDisplayLimit
-                )
-              }
+                );
+              }}
               aria-label="显示最新轨迹条数"
             >
               {TRACE_DISPLAY_LIMITS.map((limit) => (
@@ -2618,18 +2804,19 @@ export const TraceView = memo(function TraceView({
           </button>
         </div>
       </div>
-      {(hasOlder || historyError) && (
+      {hasOlder && (
         <div className="trace-history-loader">
-          {hasOlder && (
-            <Button
-              variant="ghost"
-              loading={historyLoading}
-              onClick={() => void onLoadOlder()}
-            >
-              加载更早 1,000 条轨迹
-            </Button>
-          )}
-          {historyError && <span role="alert">{historyError}</span>}
+          <Button variant="ghost" disabled={historyLoading} onClick={() => void loadEarlier()}>
+            查找更早正文
+          </Button>
+        </div>
+      )}
+      {historyError && <div className="trace-history-feedback" role="alert">{historyError}</div>}
+      {(historyLoading || historyCount !== undefined) && (
+        <div className="trace-history-feedback" role="status">
+          {historyLoading ? "正在查找更早的正文…" :
+            earlierMessages.length ? `找到 ${earlierMessages.length.toLocaleString()} 条更早的 Agent 消息` :
+              hasOlder ? "这批记录中没有匹配的正文" : "没有更早的匹配消息"}
         </div>
       )}
       <div
@@ -2664,12 +2851,27 @@ export const TraceView = memo(function TraceView({
             event.clientX >= bounds.right - gutter && followRef.current) pauseFollowing();
         }}
       >
-        {entries.length || diagnosticEvents.length ? (
+        {timeline.length ? (
           <div className="trace-list">
-            {entries.map((entry) => (
-              entry.kind === "activity" ? (
+            {timeline.map((entry) => (
+              entry.kind === "diagnostics" ? (
+                <TraceDisclosure projectId={project.id} events={entry.events} className="trace-diagnostics"
+                  label="运行诊断" icon={<Activity size={15} aria-hidden="true" />} key={entry.id}>
+                  {diagnostics => (
+                  <div className="trace-diagnostic-list" role="region" aria-label="运行诊断列表" tabIndex={0}>
+                    {diagnostics.map(event => (
+                      <EventCard event={event} projectCycle={project.cycle} key={event.seq} />
+                    ))}
+                  </div>
+                  )}
+                </TraceDisclosure>
+              ) :
+              entry.kind === "artifact-writes" ? (
+                <ArtifactWriteGroup events={entry.events} projectCycle={project.cycle} key={entry.id} />
+              ) : entry.kind === "activity" ? (
                 <AgentActivityCard
                   entry={entry}
+                  projectId={project.id}
                   projectCycle={project.cycle}
                   key={entry.id}
                 />
@@ -2681,24 +2883,6 @@ export const TraceView = memo(function TraceView({
                 />
               )
             ))}
-            {diagnosticEvents.length > 0 && (
-              <details className="trace-diagnostics">
-                <summary>
-                  <Activity size={14} />
-                  运行诊断
-                  <span>{diagnosticEvents.length}</span>
-                </summary>
-                <div className="trace-diagnostic-list">
-                  {diagnosticEvents.map((event) => (
-                    <EventCard
-                      event={event}
-                      projectCycle={project.cycle}
-                      key={`diagnostic-${event.seq}`}
-                    />
-                  ))}
-                </div>
-              </details>
-            )}
             {connection === "live" && project.status === "running" && (
               <div className="trace-waiting">
                 <span><i /><i /><i /></span>
@@ -3019,147 +3203,95 @@ function ArtifactsView({
   const searching = Boolean(query.trim());
   const directorySegments = directory ? directory.split("/") : [];
   const loadedCount = searching ? artifacts.length : directoryEntries.length;
+  const viewerOpen = Boolean(selected || contentLoading || contentError);
+  const rows = searching ? artifacts : directoryEntries;
 
   return (
-    <div className={`artifacts-layout ${selected || contentLoading || contentError ? "viewer-open" : ""}`}>
+    <div className={`artifacts-layout ${viewerOpen ? "viewer-open" : ""}`}>
       <div className="artifact-list">
-        <div className="artifact-list-head">
-          <span>
-            {searching
-              ? `在 ${fileCount} 份文件中搜索`
-              : `当前文件夹 ${directoryTotal} 项`}
-          </span>
-          <small>已加载 {loadedCount} · 当前项目文件与已发布产物</small>
-        </div>
-        <label className="artifact-path-search">
-          <Search size={14} />
-          <input
-            value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="搜索文件名或相对路径"
-            aria-label="搜索项目文件"
-            maxLength={200}
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => onQueryChange("")}
-              title="清空文件搜索"
-            >
-              <X size={13} />
-            </button>
+        <div className="artifact-list-toolbar">
+          {!searching && (
+            <nav className="artifact-breadcrumb" aria-label="研究产物文件夹路径">
+              <button
+                type="button"
+                className={!directory ? "active" : ""}
+                onClick={() => onDirectoryChange("")}
+              >
+                <FolderOpen size={14} />
+                项目文件
+              </button>
+              {directorySegments.map((segment, index) => {
+                const target = directorySegments.slice(0, index + 1).join("/");
+                return (
+                  <span key={target}>
+                    <ChevronRight size={12} />
+                    <button
+                      type="button"
+                      className={index === directorySegments.length - 1 ? "active" : ""}
+                      onClick={() => onDirectoryChange(target)}
+                      title={target}
+                    >
+                      {segment}
+                    </button>
+                  </span>
+                );
+              })}
+            </nav>
           )}
-        </label>
-        {!searching && (
-          <nav className="artifact-breadcrumb" aria-label="研究产物文件夹路径">
-            <button
-              type="button"
-              className={!directory ? "active" : ""}
-              onClick={() => onDirectoryChange("")}
-            >
-              <FolderOpen size={14} />
-              项目文件
-            </button>
-            {directorySegments.map((segment, index) => {
-              const target = directorySegments.slice(0, index + 1).join("/");
-              return (
-                <span key={target}>
-                  <ChevronRight size={12} />
-                  <button
-                    type="button"
-                    className={index === directorySegments.length - 1 ? "active" : ""}
-                    onClick={() => onDirectoryChange(target)}
-                    title={target}
-                  >
-                    {segment}
-                  </button>
-                </span>
-              );
-            })}
-          </nav>
-        )}
+          <span className="artifact-list-count">
+            {searching ? `在 ${fileCount} 份文件中搜索` : `${directoryTotal} 项`}
+            {hasMore && ` · 已加载 ${loadedCount}`}
+          </span>
+          <label className="artifact-path-search">
+            <Search size={14} />
+            <input
+              value={query}
+              onChange={(event) => onQueryChange(event.target.value)}
+              placeholder="搜索文件名或相对路径"
+              aria-label="搜索项目文件"
+              maxLength={200}
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => onQueryChange("")}
+                title="清空文件搜索"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </label>
+        </div>
         {pageLoading && loadedCount === 0 ? (
           <PageLoader label={searching ? "正在搜索研究产物…" : "正在读取当前文件夹…"} />
-        ) : searching && artifacts.length ? (
-          artifacts.map((artifact) => {
-            const canPreview = isPreviewableArtifact(artifact);
+        ) : rows.length ? (
+          rows.map(entry => {
+            const folder = "type" in entry && entry.type === "directory";
+            const canPreview = folder || isPreviewableArtifact(entry);
+            const parent = searching && entry.path.includes("/") ? entry.path.slice(0, entry.path.lastIndexOf("/")) : "";
+            const meta = [
+              !folder && entry.size !== undefined ? humanFileSize(entry.size) : "",
+              entry.updatedAt ? formatRelativeTime(entry.updatedAt) : "",
+              !folder ? entry.workspaceLabel : "",
+              !folder && (entry.variants?.length ?? 0) > 1 ? `${entry.variants!.length} 个来源` : ""
+            ].filter(Boolean).join(" · ");
             return (
               <button
-                className={selected?.path === artifact.path ? "active" : ""}
-                onClick={() => void openArtifact(artifact)}
-                key={artifactKey(artifact)}
+                type="button"
+                className={`artifact-entry-row${folder ? " artifact-directory-row" : selected?.path === entry.path ? " active" : ""}`}
+                onClick={() => folder ? onDirectoryChange(entry.path) : void openArtifact(entry)}
+                key={"type" in entry ? artifactDirectoryEntryKey(entry as ArtifactDirectoryEntry) : artifactKey(entry)}
+                title={folder ? `打开文件夹 ${entry.path}` : `${canPreview ? "预览" : "下载"} ${entry.path}`}
               >
-                <span className={`file-kind file-${artifact.kind}`}>
-                  {artifact.kind === "latex" ? <FileCode2 size={18} /> : <FileText size={18} />}
+                <span className={`file-kind file-${folder ? "directory" : entry.kind}`}>
+                  {folder ? <Folder size={15} /> : entry.kind === "latex" ? <FileCode2 size={15} /> : <FileText size={15} />}
                 </span>
-                <span>
-                  <strong>{artifact.name}</strong>
-                  <small className="artifact-file-path" title={artifact.path}>
-                    {artifact.path}
-                  </small>
-                  <small className="artifact-file-meta">
-                    {artifact.size !== undefined && `${humanFileSize(artifact.size)}`}
-                    {artifact.updatedAt && ` · ${formatRelativeTime(artifact.updatedAt)}`}
-                    {artifact.workspaceLabel && ` · ${artifact.workspaceLabel}`}
-                    {artifact.variants && ` · ${artifact.variants.length} 个来源`}
-                    {!canPreview && (artifact.variants && artifact.variants.length > 1 ? " · 选择来源后下载" : " · 点击下载")}
-                  </small>
-                </span>
-                {canPreview ? <ChevronRight size={16} /> : <Download size={16} />}
-              </button>
-            );
-          })
-        ) : !searching && directoryEntries.length ? (
-          directoryEntries.map((entry) => {
-            if (entry.type === "directory") {
-              return (
-                <button
-                  className="artifact-directory-row"
-                  onClick={() => onDirectoryChange(entry.path)}
-                  key={artifactDirectoryEntryKey(entry)}
-                  title={`打开文件夹 ${entry.path}`}
-                >
-                  <span className="file-kind file-directory">
-                    <Folder size={18} />
-                  </span>
-                  <span>
-                    <strong>{entry.name}</strong>
-                    <small className="artifact-file-path" title={entry.path}>
-                      {entry.path}
-                    </small>
-                    <small className="artifact-file-meta">
-                      文件夹
-                      {entry.updatedAt && ` · ${formatRelativeTime(entry.updatedAt)}`}
-                    </small>
-                  </span>
-                  <ChevronRight size={16} />
-                </button>
-              );
-            }
-            const canPreview = isPreviewableArtifact(entry);
-            return (
-              <button
-                className={selected?.path === entry.path ? "active" : ""}
-                onClick={() => void openArtifact(entry)}
-                key={artifactDirectoryEntryKey(entry)}
-              >
-                <span className={`file-kind file-${entry.kind}`}>
-                  {entry.kind === "latex" ? <FileCode2 size={18} /> : <FileText size={18} />}
-                </span>
-                <span>
+                <span className="artifact-entry-name">
                   <strong>{entry.name}</strong>
-                  <small className="artifact-file-path" title={entry.path}>
-                    {entry.path}
-                  </small>
-                  <small className="artifact-file-meta">
-                    {entry.size !== undefined && humanFileSize(entry.size)}
-                    {entry.updatedAt && ` · ${formatRelativeTime(entry.updatedAt)}`}
-                    {entry.workspaceLabel && ` · ${entry.workspaceLabel}`}
-                    {entry.variants && ` · ${entry.variants.length} 个来源`}
-                    {!canPreview && (entry.variants && entry.variants.length > 1 ? " · 选择来源后下载" : " · 点击下载")}
-                  </small>
+                  {parent && <small className="artifact-file-path">{parent}</small>}
                 </span>
-                {canPreview ? <ChevronRight size={16} /> : <Download size={16} />}
+                {meta && <small className="artifact-file-meta">{meta}</small>}
+                {canPreview ? <ChevronRight size={14} aria-hidden="true" /> : <Download size={14} aria-hidden="true" />}
               </button>
             );
           })
@@ -3179,7 +3311,7 @@ function ArtifactsView({
           </button>
         )}
       </div>
-      <ArtifactViewer
+      {viewerOpen && <ArtifactViewer
         projectId={projectId}
         artifact={selected}
         loading={contentLoading}
@@ -3191,7 +3323,7 @@ function ArtifactsView({
           setContentLoading(false);
           setContentError("");
         }}
-      />
+      />}
     </div>
   );
 }
@@ -3923,9 +4055,9 @@ function ContextPanel({
       <div className="context-card project-brief">
         <div className="context-card-head">
           <div><MessageSquareText size={17} /><strong>研究需求</strong></div>
-          <button onClick={() => setExpanded((value) => !value)}>
+          <Button type="button" variant="ghost" data-size="small" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
             {expanded ? "收起" : "展开"}
-          </button>
+          </Button>
         </div>
         <p className={expanded ? "expanded" : ""}>
           {project.requirement || "暂无研究需求描述。"}
@@ -4093,7 +4225,7 @@ function mergeProjectExplainerEvent(
   return mergeExplainerMessages(current, incoming);
 }
 
-export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
+export function ProjectExplainerPanel({ projectId, active = true, onClose }: { projectId: string; active?: boolean; onClose?: () => void }) {
   const [events, setEvents] = useState<ProjectExplainerEvent[]>(() => restoreExplainerMessages(readCachedResource<ProjectExplainerEvent[]>(`project-explainer:${projectId}:events`) ?? []));
   const [runtimeConfig, setRuntimeConfig] = useState<ProjectExplainerRuntimeConfig | undefined>(() => readCachedResource(`project-explainer:${projectId}:config`));
   const [configDraft, setConfigDraft] = useState<ProjectExplainerConfigInput>();
@@ -4104,11 +4236,9 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
   const [gatewayRefreshError, setGatewayRefreshError] = useState("");
   const [configError, setConfigError] = useState("");
   const [configNotice, setConfigNotice] = useState("");
-  // Keep the running page compact; tests open the editor so field-level
-  // validation remains directly exercisable without an extra click.
-  const [configEditorOpen, setConfigEditorOpen] = useState(
-    () => import.meta.env.MODE === "test"
-  );
+  const [configEditorOpen, setConfigEditorOpen] = useState(false);
+  const configOpenRef = useRef<HTMLButtonElement>(null);
+  const configCloseRef = useRef<HTMLButtonElement>(null);
   const [question, setQuestion] = useState("");
   const [historyLoading, setHistoryLoading] = useState(true);
   const [streaming, setStreaming] = useState(false);
@@ -4123,6 +4253,10 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
   const historyRequestRef = useRef(0);
   const gatewayRefreshRequestRef = useRef(0);
   const currentProjectRef = useRef(projectId); currentProjectRef.current = projectId;
+
+  useEffect(() => {
+    if (active && configEditorOpen) configCloseRef.current?.focus();
+  }, [active, configEditorOpen]);
 
   const loadRuntimeConfig = useCallback(async () => {
     try {
@@ -4233,9 +4367,9 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     const transcript = transcriptRef.current;
-    if (!transcript) return;
+    if (!active || !transcript) return;
     transcript.scrollTop = transcript.scrollHeight;
-  }, [events]);
+  }, [active, events]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -4320,7 +4454,7 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
       setQuestion("");
       setRemoteActive(false);
       setHistoryLoading(false);
-      setResetNotice("解说上下文已刷新，可以重新询问。");
+      setResetNotice("已开始新的解说会话。");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "解说上下文刷新失败");
     } finally {
@@ -4544,13 +4678,13 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
   };
 
   return (
-    <section className="project-explainer-panel" aria-label="项目解说 Agent">
+    <section className="project-explainer-panel project-interaction-surface" aria-label="项目解说 Agent">
       <div className="project-explainer-heading">
         <div>
           <span className="project-explainer-icon"><Bot size={18} /></span>
           <span>
-            <small>PROJECT EXPLAINER · {activeHarnessLabel}</small>
-            <strong>询问这个科研项目</strong>
+            <strong>项目解说</strong>
+            <small>只读问答</small>
           </span>
         </div>
         <div className="project-explainer-heading-actions">
@@ -4559,51 +4693,51 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
             className="project-explainer-reset"
             onClick={() => void resetConversation()}
             disabled={streaming || stopping || remoteActive || resetting || historyLoading}
-            aria-label="刷新解说上下文"
+            aria-label="新建解说会话"
             title="清空当前解说上下文并开始新会话"
           >
-            <RefreshCw className={resetting ? "spin" : undefined} size={13} />
-            刷新
+            {resetting ? <RefreshCw className="spin" size={13} /> : <Plus size={13} />}
+            新建会话
           </button>
-          <span className="project-explainer-policy">只读 · 无 Skills · 无 MCP</span>
+          {onClose && <button type="button" className="project-interaction-close" aria-label="关闭项目面板" title="关闭" onClick={onClose}><X size={17} /></button>}
         </div>
       </div>
       <div className="project-explainer-config-summary" aria-label="Project Explainer 当前运行配置">
         <div className="project-explainer-config-summary-copy">
-          <span className="project-explainer-config-kicker">只读运行配置</span>
-          <strong>{activeHarnessLabel} · {runtimeConfig?.model || configDraft?.model || "未选择 model"}</strong>
+          <strong>{activeHarnessLabel} · {runtimeConfig?.model || configDraft?.model || "未选择模型"}</strong>
           <small>
             {selectedGateway?.name || "未选择全局网关"} · {selectedGateway ? protocolLabel(selectedGateway.protocol) : "等待路由"}
             {routeNeeded && selectedHarness?.nativeProtocol && selectedGateway ? ` · ${protocolLabel(selectedHarness.nativeProtocol)} → ${protocolLabel(selectedGateway.protocol)}` : ""}
           </small>
         </div>
-        <span className={`project-explainer-config-state ${runtimeConfig?.available ? "available" : "pending"}`}>
-          {configStateLabel}
-        </span>
+        {runtimeConfig?.validationWarning ? (
+          <details className="project-explainer-validation">
+            <summary><AlertTriangle size={13} aria-hidden="true" />{configStateLabel}</summary>
+            <p>{runtimeConfig.validationWarning}</p>
+          </details>
+        ) : <span className={`project-explainer-config-state ${runtimeConfig?.available ? "available" : "pending"}`}>{configStateLabel}</span>}
         <button
           type="button"
           className="project-explainer-config-open"
-          onClick={() => setConfigEditorOpen(true)}
+          ref={configOpenRef}
+          onClick={() => setConfigEditorOpen(open => !open)}
           aria-expanded={configEditorOpen}
           aria-controls="project-explainer-runtime-config"
         >
-          切换配置
+          {configEditorOpen ? "收起配置" : "切换配置"}
         </button>
       </div>
-      {runtimeConfig?.validationWarning && <p className="project-explainer-config-warning" role="status">{runtimeConfig.validationWarning}</p>}
       <form
         id="project-explainer-runtime-config"
         className="project-explainer-runtime-config"
         data-open={configEditorOpen ? "true" : "false"}
         role="dialog"
-        aria-modal="true"
         onSubmit={saveRuntimeConfig}
         aria-label="Project Explainer 运行配置"
       >
         <div className="project-explainer-runtime-heading">
           <span>
             <strong>只读运行配置</strong>
-            <small>仅影响后续项目问答，不影响 Main/Worker 工作流</small>
           </span>
           <span className="project-explainer-runtime-heading-actions">
             <em className={runtimeConfig?.available ? "available" : "unavailable"}>
@@ -4612,10 +4746,11 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
             <button
               type="button"
               className="project-explainer-config-close"
-              onClick={() => setConfigEditorOpen(false)}
+              ref={configCloseRef}
+              onClick={() => { setConfigEditorOpen(false); configOpenRef.current?.focus(); }}
               aria-label="关闭 Project Explainer 配置"
             >
-              关闭
+              返回对话
             </button>
           </span>
         </div>
@@ -4730,6 +4865,7 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
       <div
         className="project-explainer-transcript"
         ref={transcriptRef}
+        hidden={configEditorOpen}
         aria-live="polite"
         aria-label="项目解说对话"
       >
@@ -4744,7 +4880,7 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
             if (action) return <ExplainerActionCard key={entry.id} action={action} />;
             if (entry.kind === "user") {
               return (
-                <div className="project-explainer-message user" key={entry.id}>
+                <div className="project-explainer-message user project-interaction-user-message" key={entry.id}>
                   <small>你</small>
                   <p>{entry.text}</p>
                   {!!entry.data?.clientPending && <small>{entry.data.clientPending === "sending" ? "发送中…" : "发送未确认，请检查后重试"}</small>}
@@ -4754,13 +4890,13 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
             if (entry.kind === "assistant") {
               return (
                 <div className="project-explainer-message assistant" key={entry.id}>
-                  <small><Bot size={12} /> {activeHarnessLabel}</small>
+                  <small><Bot size={14} aria-hidden="true" /> 项目解说</small>
                   <div className="markdown-body">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm, remarkMath]}
                       rehypePlugins={[rehypeSanitize, rehypeKatex]}
                     >
-                      {entry.text || (streaming ? "…" : "")}
+                      {normalizeMarkdownMath(entry.text || (streaming ? "…" : ""))}
                     </ReactMarkdown>
                   </div>
                 </div>
@@ -4788,35 +4924,31 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
           <div className="project-explainer-empty">
             <Bot size={24} />
             <strong>可直接询问项目现状、实验、论文或评审依据</strong>
-            <small>所选解说 Agent 只能读取本项目 workspaces，不会修改科研文件或流程。</small>
           </div>
         )}
         <ProjectExplainerReplyStatus events={events} active={streaming || remoteActive} />
       </div>
-      <form className="project-explainer-compose" onSubmit={submit}>
-        <textarea
-          value={question}
-          onChange={(event) => {
-            setQuestion(event.target.value);
-            if (error) setError("");
-            if (resetNotice) setResetNotice("");
-          }}
-          onKeyDown={handleQuestionKeyDown}
-          rows={2}
-          maxLength={50_000}
-          disabled={streaming || stopping || remoteActive || resetting || !runtimeConfig?.available}
-          placeholder={
-            remoteActive
+      <form className="project-interaction-form project-explainer-input" onSubmit={submit} hidden={configEditorOpen}>
+        <ProjectInteractionComposer
+          textarea={{
+            value: question,
+            onChange: (event) => {
+              setQuestion(event.target.value);
+              if (error) setError("");
+              if (resetNotice) setResetNotice("");
+            },
+            onKeyDown: handleQuestionKeyDown,
+            rows: 2,
+            maxLength: 50_000,
+            disabled: streaming || stopping || remoteActive || resetting || !runtimeConfig?.available,
+            placeholder: remoteActive
               ? "另一个页面中的解说正在回答…"
               : runtimeConfig && !runtimeConfig.available
-                ? "请先修复并保存上方 Project Explainer 配置…"
-              : "例如：当前实验做到哪一步？论文结论由哪些结果支持？"
-          }
-          aria-label="向项目解说 Agent 提问"
-        />
-        <div>
-          <small>Enter 发送 · Shift+Enter 换行</small>
-          {streaming || stopping ? (
+                ? "请先保存可用的解说配置"
+                : "询问进度、实验结果或论文依据…",
+            "aria-label": "向项目解说 Agent 提问"
+          }}
+          action={streaming || stopping ? (
             <Button
               type="button"
               variant="secondary"
@@ -4837,7 +4969,7 @@ export function ProjectExplainerPanel({ projectId }: { projectId: string }) {
               询问解说
             </Button>
           )}
-        </div>
+        />
         {error && <span className="project-explainer-error" role="alert">{error}</span>}
         {resetNotice && (
           <span className="project-explainer-reset-notice" role="status">
@@ -4879,6 +5011,24 @@ export function WorkspacePage({
   const [queue, setQueue] = useState<QueueSnapshot>();
   const [queueError, setQueueError] = useState("");
   const [tab, setTab] = useState<CenterTab>("trace");
+  const centerPanelRef = useRef<HTMLElement>(null);
+  const selectTabFromBottom = (next: CenterTab) => {
+    setTab(next);
+    centerPanelRef.current?.scrollIntoView({ block: "start", inline: "nearest" });
+  };
+  const [interaction, setInteraction] = useState<"request" | "explainer">();
+  const interactionDrawer = useRef<HTMLElement>(null);
+  const interactionTrigger = useRef<HTMLButtonElement | null>(null);
+  useLayoutEffect(() => {
+    if (interaction) interactionDrawer.current?.querySelector<HTMLButtonElement>(
+      '[data-active-panel="true"] .project-interaction-close'
+    )?.focus({ preventScroll: true });
+  }, [interaction]);
+  const closeInteraction = () => {
+    setInteraction(undefined);
+    interactionTrigger.current?.focus({ preventScroll: true });
+  };
+  const [inspectorView, setInspectorView] = useState<"calls" | "context">("calls");
   const [actionLoading, setActionLoading] = useState<
     "pause" | "resume" | "cancel" | undefined
   >();
@@ -5496,266 +5646,275 @@ export function WorkspacePage({
   const pendingProjectUserInputs = (project.userInputs ?? []).filter(
     (input) => input.status === "pending"
   );
+  const canExplain = workflowHarnessCatalog.some((item) => item.available && harnessSupportsPurpose(item, "explainer"));
   const performanceProject = { ...project, performance: performanceResults };
   const metrics = resolvePerformanceMetrics(performanceResults, livePerformance, project.status);
 
   return (
     <main className="workspace-page">
-      <header className="workspace-header">
-        <div className="workspace-brand-zone">
-          <button className="back-icon-button" onClick={onBack} title="返回项目列表">
-            <ArrowLeft size={18} />
-          </button>
-          <Brand compact />
-          <i />
-          <div className="workspace-title">
-            <h1>{project.title}</h1>
-            <span>
-              <StatusBadge status={project.status} phase={project.phase} runtime={project.runtime} />
-              <small title="项目资料和运行统计的最近更新时间">记录更新于 {formatRelativeTime(project.updatedAt)}</small>
-              <code>{project.id}</code>
-            </span>
-          </div>
-        </div>
-        <div
-          id="workspace-action-controls"
-          className={`workspace-controls ${mobileMenu ? "mobile-open" : ""}`}
-        >
-          {project.status !== "draft" && <Button variant="secondary" icon={<GitBranch size={16} />} onClick={() => setWorkflowAdjustmentOpen(true)}>查看与调整 Workflow</Button>}
-          {mainRecoveryRequired && (
-            <Button
-              variant="primary"
-              icon={<RefreshCw size={16} />}
-              loading={actionLoading === "resume"}
-              onClick={() => void doAction("resume")}
-            >
-              恢复 Main
-            </Button>
-          )}
-          {canPause && (
-            <Button
-              variant="secondary"
-              icon={<Pause size={16} />}
-              loading={actionLoading === "pause"}
-              onClick={() => void doAction("pause")}
-            >
-              暂停
-            </Button>
-          )}
-          {canResume && (
-            <Button
-              variant="primary"
-              icon={<Play size={16} />}
-              loading={actionLoading === "resume"}
-              onClick={() => void doAction("resume")}
-            >
-              {project.status === "interrupted"
-                ? "从断点恢复"
-                : project.status === "pausing"
-                  ? "撤销暂停"
-                  : "继续"}
-            </Button>
-          )}
-          {canCancel && (
-            <Button
-              variant="ghost"
-              icon={<CircleStop size={16} />}
-              onClick={() => setCancelOpen(true)}
-              className="stop-control"
-            >
-              停止
-            </Button>
-          )}
-        </div>
-        <button
-          className="mobile-menu-button"
-          onClick={() => setMobileMenu((value) => !value)}
-          aria-label="项目控制"
-          title="项目控制"
-          aria-expanded={mobileMenu}
-          aria-controls="workspace-action-controls"
-        >
-          <Menu size={20} />
-        </button>
-      </header>
-
-      <WorkflowRail project={project} events={timelineEvents} runtime={workflowRuntime} />
-      <div className="workspace-progress-strip">
-        <OverallProgressBar progress={project.overallProgress} />
-        <div className="workspace-performance-summary" role="region" aria-label="当前输出性能">
-          <span>
-            <small>输出性能</small>
-            <strong>{metrics.current?.agent ?? project.currentAgent ?? performanceResults.latest?.agent ?? "等待调用"}</strong>
-          </span>
-          <PerformanceMetrics
-            performance={metrics.current}
-            averageFallback={metrics.average}
-            latestToken={metrics.latestToken}
-            compact
-          />
-        </div>
-        <div className="workspace-phase-meta">
-          <span>
-            <small>当前阶段</small>
-            <strong>{project.runtime?.waiting?.reason ?? displayPhase(project.phase)}</strong>
-          </span>
-          <span>
-            <small>任务步数</small>
-            <strong>Turn {project.turn}</strong>
-          </span>
-          {project.runtime?.primaryActivity && (
-            <span title={project.runtime.primaryActivity.invocationId}>
-              <small>{["running", "pausing", "interrupting", "cancelling"].includes(project.status) ? "活动调用" : "保留调用"}</small>
-              <strong>
-                {project.runtime.primaryActivity.invocationId.slice(0, 12)}
-                {project.runtime.activityStartedAt
-                  ? ` · ${new Date(project.runtime.activityStartedAt).toLocaleTimeString()}`
-                  : ""}
-              </strong>
-            </span>
-          )}
-          {project.queuedAgent && !waitingForUser && (
-            <span>
-              <small>
-                {project.status === "interrupted"
-                  ? "恢复断点"
-                  : `${displayAgentName(project.queuedAgent)} 队列`}
-              </small>
-              <strong>
-                {project.status === "interrupted"
-                  ? displayAgentName(project.queuedAgent)
-                  : project.queuePosition
-                    ? `#${project.queuePosition}`
-                    : "等待中"}
-                {project.status !== "interrupted" && project.queueDepth
-                  ? ` / ${project.queueDepth}`
-                  : ""}
-              </strong>
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className="project-interaction-grid">
-        <section
-          className="project-user-input-panel"
-          aria-label="项目主动需求输入"
-        >
-        <span className="project-user-input-icon">
-          <MessageSquareText size={21} />
-        </span>
-        <div className="project-user-input-content">
-          <div className="project-user-input-heading">
-            <div>
-              <span className="section-kicker main-kicker">用户主动需求 · main</span>
-              <h2>新增科研需求</h2>
+      <div className="workspace-sticky-top">
+        <header className="workspace-header">
+          <div className="workspace-brand-zone">
+            <button className="back-icon-button" onClick={onBack} title="返回项目列表">
+              <ArrowLeft size={18} />
+            </button>
+            <Brand compact />
+            <i />
+            <div className="workspace-title">
+              <h1>{project.title}</h1>
+              <span>
+                <StatusBadge status={project.status} phase={project.phase} runtime={project.runtime} />
+                <small title="项目资料和运行统计的最近更新时间">记录更新于 {formatRelativeTime(project.updatedAt)}</small>
+                <code>{project.id}</code>
+              </span>
             </div>
-            {pendingProjectUserInputs.length > 0 && (
-              <span className="project-user-input-count">
-                待投递 {pendingProjectUserInputs.length} 条
+          </div>
+          <div
+            id="workspace-action-controls"
+            className={`workspace-controls ${mobileMenu ? "mobile-open" : ""}`}
+          >
+            {project.status !== "draft" && <Button variant="secondary" icon={<GitBranch size={16} />} onClick={() => setWorkflowAdjustmentOpen(true)}>查看与调整 Workflow</Button>}
+            {mainRecoveryRequired && (
+              <Button
+                variant="primary"
+                icon={<RefreshCw size={16} />}
+                loading={actionLoading === "resume"}
+                onClick={() => void doAction("resume")}
+              >
+                恢复 Main
+              </Button>
+            )}
+            {canPause && (
+              <Button
+                variant="secondary"
+                icon={<Pause size={16} />}
+                loading={actionLoading === "pause"}
+                onClick={() => void doAction("pause")}
+              >
+                暂停
+              </Button>
+            )}
+            {canResume && (
+              <Button
+                variant="primary"
+                icon={<Play size={16} />}
+                loading={actionLoading === "resume"}
+                onClick={() => void doAction("resume")}
+              >
+                {project.status === "interrupted"
+                  ? "从断点恢复"
+                  : project.status === "pausing"
+                    ? "撤销暂停"
+                    : "继续"}
+              </Button>
+            )}
+            {canCancel && (
+              <Button
+                variant="ghost"
+                icon={<CircleStop size={16} />}
+                onClick={() => setCancelOpen(true)}
+                className="stop-control"
+              >
+                停止
+              </Button>
+            )}
+          </div>
+          <button
+            className="mobile-menu-button"
+            onClick={() => setMobileMenu((value) => !value)}
+            aria-label="项目控制"
+            title="项目控制"
+            aria-expanded={mobileMenu}
+            aria-controls="workspace-action-controls"
+          >
+            <Menu size={20} />
+          </button>
+        </header>
+
+        <div className="workspace-progress-strip">
+          <div className="workspace-progress-primary">
+            <OverallProgressBar
+              progress={project.overallProgress}
+              label={<>
+                <small className="workspace-progress-phase-label">当前阶段</small>{" "}
+                {project.runtime?.waiting?.reason || displayPhase(project.phase)}
+              </>}
+            />
+          </div>
+          <div className="workspace-performance-summary" role="region" aria-label="当前输出性能">
+            <PerformanceMetrics
+              performance={metrics.current}
+              averageFallback={metrics.average}
+              latestToken={metrics.latestToken}
+              hideInactiveSpeed
+              showApproximation={false}
+              compact
+            />
+          </div>
+          <div className="workspace-phase-meta">
+            <span>
+              <small>任务步数</small>
+              <strong>Turn {project.turn}</strong>
+            </span>
+            {project.queuedAgent && !waitingForUser && (
+              <span>
+                <small>
+                  {project.status === "interrupted"
+                    ? "恢复断点"
+                    : "队列"}
+                </small>
+                <strong title={displayAgentName(project.queuedAgent)}>
+                  {project.status === "interrupted"
+                    ? displayAgentName(project.queuedAgent)
+                    : project.queuePosition
+                      ? `#${project.queuePosition}`
+                      : "等待中"}
+                  {project.status !== "interrupted" && project.queueDepth
+                    ? ` / ${project.queueDepth}`
+                    : ""}
+                </strong>
               </span>
             )}
           </div>
-          <p>
-            {project.status === "completed"
-              ? "输入会保留在当前项目并由 main 重新启动科研流程。历史结果仍可查看，main 会根据新的需求重新安排工作。"
-              : project.status === "running" && project.currentAgent === SYSTEM_CONTROLLER_AGENT
-                ? "输入会先持久化，当前 main 完成后直接进入新一轮工作上下文（包含该输入）；不会中断正在进行的调用。"
-                : "输入会保存在当前科研任务中，不中断正在工作的 Agent；当前调用完成后进入新一轮工作上下文，并在下一次 main 调度时作为用户上下文送达。"}
-          </p>
-          {pendingProjectUserInputs.length > 0 && (
-            <div className="project-user-input-pending" aria-label="待投递用户需求">
-              {pendingProjectUserInputs.slice(-3).map((input) => (
-                <span key={input.id} title={input.message}>
-                  {input.message}
-                </span>
-              ))}
-            </div>
-          )}
-          {canAddProjectUserInput ? (
-            <form onSubmit={submitProjectUserInput}>
-              <label htmlFor="project-user-input">
-                补充要求、调整方向或添加约束
-              </label>
-              <fieldset
-                className="project-user-input-mode"
-                aria-label="主动需求处理模式"
-                disabled={projectUserInputLoading || project.status === "interrupting"}
-              >
-                <legend>送达方式</legend>
-                <label className="project-user-input-mode-option mode-wait">
-                  <input
-                    type="radio"
-                    name="project-user-input-mode"
-                    value="wait"
-                    checked={projectUserInputMode === "wait"}
-                    onChange={() => setProjectUserInputMode("wait")}
-                  />
-                  <span className="project-user-input-mode-copy">
-                    <span><strong>等待当前 Agent 完成</strong><em>推荐</em></span>
-                    <small>保留当前调用，完成后唤起 Main</small>
-                  </span>
-                </label>
-                <label className="project-user-input-mode-option mode-interrupt">
-                  <input
-                    type="radio"
-                    name="project-user-input-mode"
-                    value="interrupt"
-                    checked={projectUserInputMode === "interrupt"}
-                    onChange={() => setProjectUserInputMode("interrupt")}
-                    disabled={!(project.status === "running" && Boolean(project.currentAgent))}
-                  />
-                  <span className="project-user-input-mode-copy">
-                    <span><strong>立即中断当前 Agent</strong><em>立即接管</em></span>
-                    <small>保存断点与部分输出，再由 Main 接管</small>
-                  </span>
-                </label>
-              </fieldset>
-              <div className="project-user-input-compose">
-                <textarea
-                  id="project-user-input"
-                  value={projectUserInput}
-                  onChange={(event) => {
-                    setProjectUserInput(event.target.value);
-                    if (projectUserInputError) setProjectUserInputError("");
-                    if (projectUserInputNotice) setProjectUserInputNotice("");
-                  }}
-                  rows={3}
-                  maxLength={100_000}
-                  placeholder="例如：新增一个消融实验，并优先比较不同训练数据规模下的表现。"
-                />
-                <Button
-                  type="submit"
-                  variant="primary"
-                  icon={<Send size={16} />}
-                  loading={projectUserInputLoading}
-                  disabled={!projectUserInput.trim()}
-                >
-                  提交给 main
-                </Button>
-              </div>
-              <small>内容会持久化到项目记录；请勿输入密码、Token 或私钥。</small>
-              {projectUserInputError && (
-                <span className="project-user-input-error" role="alert">
-                  {projectUserInputError}
-                </span>
-              )}
-              {projectUserInputNotice && (
-                <span className="project-user-input-notice" role="status">
-                  <CheckCircle2 size={14} />
-                  {projectUserInputNotice}
-                </span>
-              )}
-            </form>
-          ) : (
-            <small>该科研任务已经结束，不能再添加待处理需求。</small>
-          )}
+          <div className="project-interaction-actions" role="group" aria-label="项目操作">
+            <button type="button" aria-expanded={interaction === "request"} aria-controls="workspace-user-request"
+              onClick={event => {
+                interactionTrigger.current = event.currentTarget;
+                setInteraction(current => current === "request" ? undefined : "request");
+              }}>
+              <MessageSquareText size={16} aria-hidden="true" />补充科研需求
+              {pendingProjectUserInputs.length > 0 && <span>{pendingProjectUserInputs.length} 待投递</span>}
+            </button>
+            {canExplain && <button type="button" aria-expanded={interaction === "explainer"} aria-controls="workspace-project-explainer"
+              onClick={event => {
+                interactionTrigger.current = event.currentTarget;
+                setInteraction(current => current === "explainer" ? undefined : "explainer");
+              }}>
+              <Bot size={16} aria-hidden="true" />项目解说
+            </button>}
+          </div>
         </div>
-        </section>
-        {workflowHarnessCatalog.some((item) => item.available && harnessSupportsPurpose(item, "explainer")) && (
-          <ProjectExplainerPanel projectId={projectId} />
-        )}
       </div>
+
+        <aside className="project-interaction-drawer" aria-label="项目操作面板" ref={interactionDrawer}
+          data-view={interaction} hidden={!interaction || (interaction === "explainer" && !canExplain)}
+          onKeyDown={event => {
+            if (event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing) return;
+            const config = event.currentTarget.querySelector('[data-active-panel="true"] .project-explainer-runtime-config[data-open="true"]');
+            if (config && event.target instanceof Node && config.contains(event.target)) {
+              config.querySelector<HTMLButtonElement>(".project-explainer-config-close")?.click();
+              return;
+            }
+            closeInteraction();
+          }}>
+          <div id="workspace-user-request" data-active-panel={interaction === "request"} hidden={interaction !== "request"}>
+            <section
+              className="project-request-panel project-interaction-surface"
+              aria-label="项目主动需求输入"
+            >
+            <div className="project-explainer-heading">
+              <div>
+                <span className="project-explainer-icon"><MessageSquareText size={18} aria-hidden="true" /></span>
+                <span><strong>补充科研需求</strong><small>发送给 Main</small></span>
+              </div>
+              <button type="button" className="project-interaction-close" aria-label="关闭项目面板" title="关闭" onClick={closeInteraction}><X size={17} /></button>
+            </div>
+            <div className="project-request-body">
+                {canAddProjectUserInput && <p className="project-request-context">
+                  {projectUserInputMode === "interrupt"
+                    ? "保存当前断点与部分输出后，由 Main 接管。"
+                    : project.status === "completed"
+                    ? "输入会保留在当前项目并由 main 重新启动科研流程。历史结果仍可查看，main 会根据新的需求重新安排工作。"
+                    : project.status === "running" && project.currentAgent === SYSTEM_CONTROLLER_AGENT
+                      ? "输入会先持久化，当前 main 完成后直接进入新一轮工作上下文（包含该输入）；不会中断正在进行的调用。"
+                      : "输入会保存在当前科研任务中，不中断正在工作的 Agent；当前调用完成后进入新一轮工作上下文，并在下一次 main 调度时作为用户上下文送达。"}
+                </p>}
+                {pendingProjectUserInputs.length > 0 && (
+                  <details className="project-request-queue" aria-label="待投递用户需求">
+                    <summary>待投递 {pendingProjectUserInputs.length} 条</summary>
+                    <ul>
+                      {pendingProjectUserInputs.map((input) => (
+                        <li className="project-interaction-user-message" key={input.id}>{input.message}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+                {canAddProjectUserInput ? (
+                  <form className="project-interaction-form" onSubmit={submitProjectUserInput}>
+                    <ProjectInteractionComposer
+                      textarea={{
+                        "aria-label": "补充要求、调整方向或添加约束",
+                        value: projectUserInput,
+                        onChange: (event) => {
+                          setProjectUserInput(event.target.value);
+                          if (projectUserInputError) setProjectUserInputError("");
+                          if (projectUserInputNotice) setProjectUserInputNotice("");
+                        },
+                        rows: 3,
+                        maxLength: 100_000,
+                        placeholder: "例如：新增一个消融实验，并优先比较不同训练数据规模下的表现。"
+                      }}
+                      options={
+                        <fieldset
+                          className="project-request-modes"
+                          aria-label="主动需求处理模式"
+                          disabled={projectUserInputLoading || project.status === "interrupting"}
+                        >
+                          <label>
+                            <input
+                              type="radio"
+                              name="project-user-input-mode"
+                              value="wait"
+                              checked={projectUserInputMode === "wait"}
+                              onChange={() => setProjectUserInputMode("wait")}
+                            />
+                            <span>等待当前 Agent 完成</span>
+                          </label>
+                          <label data-interrupt>
+                            <input
+                              type="radio"
+                              name="project-user-input-mode"
+                              value="interrupt"
+                              checked={projectUserInputMode === "interrupt"}
+                              onChange={() => setProjectUserInputMode("interrupt")}
+                              disabled={!(project.status === "running" && Boolean(project.currentAgent))}
+                            />
+                            <span>立即中断当前 Agent</span>
+                          </label>
+                        </fieldset>
+                      }
+                      action={<Button
+                        type="submit"
+                        variant="primary"
+                        icon={<Send size={16} />}
+                        loading={projectUserInputLoading}
+                        disabled={!projectUserInput.trim() || projectUserInputLoading}
+                      >
+                        提交给 main
+                      </Button>}
+                    />
+                    {projectUserInputError && (
+                      <span className="project-user-input-error" role="alert">
+                        {projectUserInputError}
+                      </span>
+                    )}
+                    {projectUserInputNotice && (
+                      <span className="project-user-input-notice" role="status">
+                        <CheckCircle2 size={14} />
+                        {projectUserInputNotice}
+                      </span>
+                    )}
+                  </form>
+                ) : (
+                  <small>该科研任务已经结束，不能再添加待处理需求。</small>
+                )}
+            </div>
+            </section>
+          </div>
+          {canExplain && <div id="workspace-project-explainer" data-active-panel={interaction === "explainer"} hidden={interaction !== "explainer"}>
+            <ProjectExplainerPanel projectId={projectId} active={interaction === "explainer"} onClose={closeInteraction} />
+          </div>}
+        </aside>
 
       {project.status === "interrupted" && !project.interruptionSnapshot && (
         <section className="checkpoint-recovery-banner" aria-label="项目断点恢复">
@@ -5967,7 +6126,7 @@ export function WorkspacePage({
           onEditGroups={openGroupEditor}
         />
 
-        <section className={`workspace-panel workspace-center ${tab === "trace" ? "workspace-center-trace" : ""}`}>
+        <section ref={centerPanelRef} className={`workspace-panel workspace-center ${tab === "trace" ? "workspace-center-trace" : ""}`}>
           <div className="center-tabs">
             <div role="tablist">
               <button
@@ -6061,29 +6220,27 @@ export function WorkspacePage({
           )}
         </section>
 
-        <AgentCallGraph project={project} events={timelineEvents} harnesses={workflowHarnessCatalog} runtime={workflowRuntime}
-          hasOlder={eventStream.timelineHasOlder} historyLoading={eventStream.timelineHistoryLoading}
-          historyError={eventStream.timelineHistoryError} onLoadOlder={eventStream.loadOlderTimeline} />
-
-        <ContextPanel
-          project={performanceProject}
-          events={recentOperationalEvents}
-          eventCount={totalEventCount}
-          artifactCount={artifactSummary?.total ?? 0}
-          queue={queue}
-          queueError={queueError}
-          livePerformance={livePerformance}
-        />
+        <section className="workspace-inspector" aria-label="项目监控">
+          <ScionTabs label="项目监控视图" value={inspectorView} onChange={setInspectorView} tabs={[
+            { value: "calls", label: <><GitBranch size={15} aria-hidden="true" />调用轨迹</>,
+              content: <AgentCallGraph project={project} events={timelineEvents} harnesses={workflowHarnessCatalog} runtime={workflowRuntime}
+                hasOlder={eventStream.timelineHasOlder} historyLoading={eventStream.timelineHistoryLoading}
+                historyError={eventStream.timelineHistoryError} onLoadOlder={eventStream.loadOlderTimeline} /> },
+            { value: "context", label: <><Gauge size={15} aria-hidden="true" />运行详情</>,
+              content: <ContextPanel project={performanceProject} events={recentOperationalEvents} eventCount={totalEventCount}
+                artifactCount={artifactSummary?.total ?? 0} queue={queue} queueError={queueError} livePerformance={livePerformance} /> }
+          ]} />
+        </section>
       </div>
 
-      <nav className="mobile-workspace-nav">
-        <button className={tab === "trace" ? "active" : ""} onClick={() => setTab("trace")}>
+      <nav className="mobile-workspace-nav" aria-label="项目内容导航">
+        <button type="button" aria-current={tab === "trace" ? "true" : undefined} onClick={() => selectTabFromBottom("trace")}>
           <Activity size={18} />轨迹
         </button>
-        <button className={tab === "artifacts" ? "active" : ""} onClick={() => setTab("artifacts")}>
+        <button type="button" aria-current={tab === "artifacts" ? "true" : undefined} onClick={() => selectTabFromBottom("artifacts")}>
           <FolderOpen size={18} />产物
         </button>
-        <button className={tab === "results" ? "active" : ""} onClick={() => setTab("results")}>
+        <button type="button" aria-current={tab === "results" ? "true" : undefined} onClick={() => selectTabFromBottom("results")}>
           <Gauge size={18} />结果
         </button>
       </nav>
@@ -6117,7 +6274,8 @@ export function WorkspacePage({
         />
       )}
       {workflowAdjustmentOpen && <WorkflowAdjustmentEditor key={project.id} project={project} eventRevision={workflowAdjustmentEventRevision} gateways={recommendationGateways}
-        harnesses={workflowHarnessCatalog} skills={skillOptions} mcpDirectory={mcpDirectory} onAddSkill={addSkillCandidate} onClose={() => setWorkflowAdjustmentOpen(false)} />}
+        harnesses={workflowHarnessCatalog} skills={skillOptions} mcpDirectory={mcpDirectory} onAddSkill={addSkillCandidate}
+        onWorkflowApplied={scheduleProjectRefresh} onClose={() => setWorkflowAdjustmentOpen(false)} />}
       {groupEditorOpen && project.git?.enabled && (
         <CollaborationGroupEditor
           project={project}

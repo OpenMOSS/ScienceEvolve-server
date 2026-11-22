@@ -1,8 +1,9 @@
 import { memo, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, GitBranch } from "lucide-react";
-import { agentTemplateFor, formatClock, SYSTEM_CONTROLLER_AGENT } from "../lib";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { formatClock, SYSTEM_CONTROLLER_AGENT } from "../lib";
 import type { AgentEvent, AgentName, HarnessCatalogEntry, Project } from "../types";
 import { WorkflowCanvasRuntime } from "./workflow-canvas/WorkflowCanvasRuntime";
+import { Button } from "./Common";
 import type { WorkflowRuntimeState } from "./workflow-canvas/core/workflow-runtime";
 
 import { buildAgentInvocations, isAgentInvocationActive } from "../agent-invocations";
@@ -131,11 +132,6 @@ function interventionStatus(step: UserInterventionStep): string {
   return step.respondedSeq === undefined ? "等待回复" : "已回复";
 }
 
-/**
- * The panel keeps the invocation ledger, but its upper visualization is now
- * the shared read-only runtime canvas. The former fixed 420px SVG topology is
- * intentionally not rendered here.
- */
 export const AgentCallGraph = memo(function AgentCallGraph({
   project,
   events,
@@ -171,37 +167,23 @@ export const AgentCallGraph = memo(function AgentCallGraph({
 
   return (
     <aside className="workspace-panel agent-call-graph-panel" role="region" aria-label="Agent 调用轨迹图">
-      <div className="agent-call-graph-head">
-        <div>
-          <span className="agent-call-graph-icon"><GitBranch size={17} /></span>
-          <div>
-            <span>INVOCATION MAP</span>
-            <h2>Agent 调用轨迹</h2>
-          </div>
-        </div>
-        <span className="agent-call-svg-badge">WORKFLOW · LIVE</span>
-      </div>
-
       <div className="agent-call-graph-scroll">
-        <div className="agent-call-summary">
-          <span><strong>{calls.length}</strong><small>{hasOlder ? "已加载调用" : "总调用"}</small></span>
-          <span><strong>{new Set(calls.map((call) => call.role)).size}</strong><small>已参与 Agent</small></span>
-          <span><strong>{calls.length ? `#${calls.length}` : "—"}</strong><small>{hasOlder ? "已加载步骤" : "最新步骤"}</small></span>
-        </div>
-
         <div className="agent-call-runtime-map" data-runtime-ledger="true">
           <WorkflowCanvasRuntime project={project} events={events} harnesses={harnesses} runtime={runtime} />
         </div>
 
+        <h2 className="agent-call-ledger-title">调用记录</h2>
         <div className="agent-call-page-row">
-          <span>{calls.length ? `${pageStart + 1}–${pageStart + visibleCalls.length} / ${calls.length}` : "尚无调用"}</span>
+          <span>{calls.length ? `${pageStart + 1}–${pageStart + visibleCalls.length} / ${calls.length}` : "尚无调用"}{hasOlder && calls.length > 0 && "（已加载）"}</span>
           <div>
-            {hasOlder && <button type="button" className="agent-call-history-load" disabled={historyLoading} onClick={() => { void onLoadOlder?.(); }}>
+            {hasOlder && <Button type="button" variant="ghost" data-size="small" disabled={historyLoading} onClick={() => { void onLoadOlder?.(); }}>
               {historyLoading ? "正在加载…" : "加载更早调用"}
-            </button>}
-            <button type="button" aria-label="查看上一组调用" disabled={page === 0} onClick={() => goToPage(page - 1)}><ChevronLeft size={15} /></button>
+            </Button>}
+            <button type="button" data-component="icon-button" data-variant="ghost" data-size="normal" title="查看上一组调用"
+              aria-label="查看上一组调用" disabled={page === 0} onClick={() => goToPage(page - 1)}><ChevronLeft size={15} data-slot="icon-svg" aria-hidden="true" /></button>
             <small>{page + 1} / {latestPage + 1}</small>
-            <button type="button" aria-label="查看下一组调用" disabled={page === latestPage} onClick={() => goToPage(page + 1)}><ChevronRight size={15} /></button>
+            <button type="button" data-component="icon-button" data-variant="ghost" data-size="normal" title="查看下一组调用"
+              aria-label="查看下一组调用" disabled={page === latestPage} onClick={() => goToPage(page + 1)}><ChevronRight size={15} data-slot="icon-svg" aria-hidden="true" /></button>
           </div>
         </div>
         {historyError && <p role="alert">{historyError}</p>}
@@ -211,20 +193,12 @@ export const AgentCallGraph = memo(function AgentCallGraph({
             {visibleCalls.map((call, index) => {
               const number = pageStart + index + 1;
               const current = isAgentInvocationActive(call, project, calls);
-              const group = project.scopedGroupRuns?.find(group => group.id === call.groupRunId);
-              const purpose = call.kind === "management" ? "Leader 协调" : call.kind === "integration" ? "最终集成" : "组内任务";
               return (
                 <div className={current ? "current" : ""} key={call.id}>
                   <span className="agent-call-sequence-number">{number}</span>
-                  <span className="agent-call-sequence-copy">
-                    <strong>{agentLabel(call.role)}</strong>
-                    <span>模板：{agentTemplateFor(project.orchestration, call.role)}</span>
-                    {call.groupRunId && <span>协作组：{group?.groupId ?? call.groupRunId} · {purpose}</span>}
-                    <small title={call.invocationId}>
-                      {call.cycle ? `Cycle ${call.cycle} · ` : ""}{formatClock(call.ts)} · {call.invocationId.slice(0, 12)}…
-                    </small>
-                  </span>
+                  <strong className="agent-call-sequence-name">{agentLabel(call.role)}</strong>
                   {current && <i>运行中</i>}
+                  <time dateTime={call.ts} title={call.invocationId}>{formatClock(call.ts)}</time>
                 </div>
               );
             })}
@@ -247,10 +221,6 @@ export const AgentCallGraph = memo(function AgentCallGraph({
           </section>
         )}
 
-        <p className="agent-call-graph-note">
-          {hasOlder ? "当前编号仅对应已加载记录，可加载更早调用。" : "编号按逻辑调用顺序生成。"}失败重试和中断恢复合并为同一次调用；用户介入与主动需求不占用 Agent 调用编号。
-          上方 Workflow 画布只读展示当前项目配置拓扑及真实状态，路径顺序和调用次数以本记录为准。
-        </p>
       </div>
     </aside>
   );

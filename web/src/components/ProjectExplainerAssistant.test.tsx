@@ -34,12 +34,12 @@ function action(title = "助手设计的课题", revision = backend.revision + 1
   return { kind: "draft.saved", context: structuredClone(backend), summary: "已保存草稿，尚未启动运行。", href: `/saved-tasks/${taskId}/edit` };
 }
 async function open() {
-  fireEvent.click(screen.getByRole("button", { name: "打开 Project Explainer 助手" }));
+  fireEvent.click(screen.getByRole("button", { name: "工作流助手" }));
   await waitFor(() => expect(api.getExplainerConversationConfig).toHaveBeenCalled());
   await screen.findByText("codex · configured-model");
 }
 async function send(text = "帮我修改并保存草稿") {
-  fireEvent.change(screen.getByRole("textbox", { name: "给 Project Explainer 的消息" }), { target: { value: text } });
+  fireEvent.change(screen.getByRole("textbox", { name: "给工作流助手的消息" }), { target: { value: text } });
   fireEvent.click(screen.getByRole("button", { name: "发送" }));
   await waitFor(() => expect(api.streamExplainerConversation).toHaveBeenCalled());
 }
@@ -74,6 +74,23 @@ beforeEach(() => {
 });
 
 describe("shared Project Explainer floating assistant", () => {
+  it("toggles the anchored assistant and restores focus when dismissed", async () => {
+    render(<ProjectExplainerAssistantProvider target={{}}><div /></ProjectExplainerAssistantProvider>);
+    const launcher = screen.getByRole("button", { name: "工作流助手" });
+    expect(launcher).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await open();
+    const dialog = screen.getByRole("dialog", { name: "工作流助手" });
+    expect(launcher).toHaveAttribute("aria-expanded", "true");
+    expect(dialog).toHaveFocus();
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(dialog).not.toBeInTheDocument();
+    expect(launcher).toHaveFocus();
+    await open();
+    fireEvent.click(launcher);
+    expect(launcher).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("shows deletion receipts without dead links, removes stale draft snapshots and preserves manual editor changes", async () => {
     backend.taskId = taskId;
     const otherId = `task_${"d".repeat(32)}`;
@@ -140,7 +157,7 @@ describe("shared Project Explainer floating assistant", () => {
     });
     render(<ProjectExplainerAssistantProvider target={{ newProject: true }}><Editor /></ProjectExplainerAssistantProvider>);
     await open();
-    fireEvent.change(screen.getByRole("textbox", { name: "给 Project Explainer 的消息" }), { target: { value: "马上显示这条消息" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "给工作流助手的消息" }), { target: { value: "马上显示这条消息" } });
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
     expect(screen.getByText("马上显示这条消息")).toBeVisible();
     expect(screen.getByText("发送中…")).toBeVisible();
@@ -168,7 +185,7 @@ describe("shared Project Explainer floating assistant", () => {
     vi.useFakeTimers();
     const view = render(<ProjectExplainerAssistantProvider target={{}}>首页</ProjectExplainerAssistantProvider>);
     try {
-      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "打开 Project Explainer 助手" })); });
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "工作流助手" })); });
       expect(api.getExplainerConversationHistory).toHaveBeenCalledTimes(1);
       vi.mocked(api.getExplainerConversationHistory).mockImplementation(() => new Promise(() => undefined));
       await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
@@ -346,7 +363,7 @@ describe("shared Project Explainer floating assistant", () => {
     const stream = deferredStream();
     render(<ProjectExplainerAssistantProvider target={{}}>首页</ProjectExplainerAssistantProvider>);
     await open(); await send();
-    fireEvent.click(screen.getByRole("button", { name: "最小化助手" }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭助手" }));
     await open(); expect(api.createExplainerConversation).toHaveBeenCalledTimes(1); expect(stream.signal?.aborted).toBe(false);
     await act(async () => { await stream.emit(event("assistant", "仍然沿用刚才的回答。")); stream.finish(); });
     expect(screen.getByText("仍然沿用刚才的回答。")).toBeVisible();
@@ -365,16 +382,18 @@ describe("shared Project Explainer floating assistant", () => {
   });
 
   it("allows unverified models and saves configurable Harness/model fields without response-only metadata", async () => {
+    vi.mocked(api.getExplainerConversationConfig).mockResolvedValue({ ...runtimeConfig, reasoningEffort: "max" });
     render(<ProjectExplainerAssistantProvider target={{}}>首页</ProjectExplainerAssistantProvider>);
     await open();
-    fireEvent.change(screen.getByRole("textbox", { name: "给 Project Explainer 的消息" }), { target: { value: "继续调整" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "给工作流助手的消息" }), { target: { value: "继续调整" } });
     expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "助手 Harness 与模型设置" }));
+    expect(screen.getByRole("combobox", { name: "助手思考强度" })).toHaveValue("max");
     fireEvent.change(screen.getByRole("combobox", { name: "助手 Harness" }), { target: { value: "pi" } });
     fireEvent.change(screen.getByRole("combobox", { name: "助手模型" }), { target: { value: "other-model" } });
     fireEvent.click(screen.getByRole("button", { name: "保存助手配置" }));
     await waitFor(() => expect(api.updateExplainerConversationConfig).toHaveBeenCalledWith(id, {
-      harness: "pi", gatewayId, model: "other-model", reasoningEffort: "high"
+      harness: "pi", gatewayId, model: "other-model", reasoningEffort: "max"
     }));
     expect(await screen.findByText("Project Explainer 配置已更新，已有对话历史保留。")).toBeVisible();
   });

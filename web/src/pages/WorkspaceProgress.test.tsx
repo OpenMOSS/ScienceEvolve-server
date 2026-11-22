@@ -708,27 +708,37 @@ describe("Workspace task progress", () => {
     const view = render(<WorkspacePage projectId={fixture.id} onBack={vi.fn()} />);
     await screen.findByRole("region", { name: "当前输出性能" });
     const value = (label: string) => within(screen.getByRole("region", { name: "当前输出性能" }))
-      .getByText(label).parentElement!.querySelector("strong")!.textContent;
+      .queryByText(label)?.parentElement?.querySelector("strong")?.textContent;
+    const sidebarMetrics = (agent: string) => {
+      const roster = view.container.querySelector(".workspace-layout > .agent-roster")!;
+      const row = Array.from(roster.querySelectorAll(".roster-standalone"))
+        .find(element => element.querySelector(".roster-agent-heading strong")?.textContent === agent)!;
+      return within(row as HTMLElement);
+    };
+    expect(sidebarMetrics("idea").getByText("420 ms")).toBeInTheDocument();
+    expect(sidebarMetrics("idea").queryByText("当前速度")).not.toBeInTheDocument();
     expect(value("平均速度")).toBe("15.0 tok/s");
     expect(value("首 Token 延迟")).toBe("420 ms");
-    expect(value("当前速度")).toBe("—");
+    expect(value("当前速度")).toBeUndefined();
     eventStreamMock.performance = { invocationId: "inv-worker", agent: "execution", attempt: 0,
       status: "active", requestActive: true, startedAt: "2026-10-09T00:00:05Z", currentTokensPerSecond: 8,
       outputTokens: 2, tokenSource: "estimated", streaming: true };
     view.rerender(<WorkspacePage projectId={fixture.id} onBack={vi.fn()} />);
-    expect(value("当前速度")).toBe("≈8.0 tok/s");
+    expect(value("当前速度")).toBe("8.0 tok/s");
+    expect(sidebarMetrics("execution").getByText("≈8.0 tok/s")).toBeInTheDocument();
     expect(value("平均速度")).toBe("15.0 tok/s");
     expect(value("首 Token 延迟")).toBe("420 ms");
     eventStreamMock.performance = { ...eventStreamMock.performance, requestActive: false,
       firstTokenAt: "2026-10-09T00:00:06Z", firstTokenLatencyMs: 250 };
     view.rerender(<WorkspacePage projectId={fixture.id} onBack={vi.fn()} />);
-    expect(value("当前速度")).toBe("—");
+    expect(value("当前速度")).toBeUndefined();
     expect(value("首 Token 延迟")).toBe("250 ms");
+    expect(sidebarMetrics("execution").queryByText("当前速度")).not.toBeInTheDocument();
     eventStreamMock.performance = undefined;
     view.rerender(<WorkspacePage projectId={fixture.id} onBack={vi.fn()} />);
     expect(value("平均速度")).toBe("15.0 tok/s");
     expect(value("首 Token 延迟")).toBe("250 ms");
-    expect(value("当前速度")).toBe("—");
+    expect(value("当前速度")).toBeUndefined();
     const nextProject = { ...fixture, id: "prj_second", title: "新项目", performance: undefined };
     vi.mocked(getProject).mockResolvedValue(nextProject);
     eventStreamMock.performance = { ...measured, status: "active", currentTokensPerSecond: 8 };
@@ -736,7 +746,7 @@ describe("Workspace task progress", () => {
     await screen.findByRole("heading", { name: nextProject.title });
     expect(value("平均速度")).toBe("—");
     expect(value("首 Token 延迟")).toBe("—");
-    expect(value("当前速度")).toBe("—");
+    expect(value("当前速度")).toBeUndefined();
   });
 
   it("keeps nested member badges, the compact workflow and its expanded canvas consistent through live pause", async () => {
@@ -749,20 +759,19 @@ describe("Workspace task progress", () => {
     expect(roster).toHaveTextContent("Inner");
     expect(roster).toHaveTextContent("执行 1 次 · 运行中");
     fireEvent.click(screen.getByRole("button", { name: "打开大型运行 Workflow 画布" }));
-    const frame = screen.getByTitle("运行 Workflow 大画布") as HTMLIFrameElement;
-    const send = vi.spyOn(frame.contentWindow!, "postMessage");
-    fireEvent.load(frame);
-    expect(send.mock.calls.at(-1)?.[0].snapshot.nodeStates.research).toBe("running");
+    const canvas = screen.getByLabelText("运行 Workflow 大画布");
+    const groupState = () => canvas.querySelector('[data-node-id="research"] [data-runtime-state]');
+    expect(groupState()).toHaveAttribute("data-runtime-state", "running");
 
     eventStreamMock.runtime = { ...fixture.runtime!, stateRevision: 13, status: "paused", activities: [] };
     view.rerender(<WorkspacePage projectId={fixture.id} onBack={vi.fn()} />);
     await waitFor(() => expect(roster.querySelectorAll("[data-member-agent].member-paused")).toHaveLength(2));
-    expect(send.mock.calls.at(-1)?.[0].snapshot.nodeStates.research).toBe("paused");
+    expect(groupState()).toHaveAttribute("data-runtime-state", "paused");
     expect(view.container.querySelector('[data-runtime-surface-mode="preview"] [data-runtime-state="paused"]')).not.toBeNull();
     expect(roster.querySelectorAll("[data-member-agent].member-running")).toHaveLength(0);
   });
 
-  it("uses the same recovery label and reason in the workspace header and workflow rail", async () => {
+  it("keeps the recovery status in the header and the reason by progress", async () => {
     const reason = "等待恢复：opportunity 的 Git 操作结果待确认";
     const waiting: Project = { ...project, status: "queued", currentAgent: undefined, queuedAgent: undefined,
       runtime: { stateRevision: 3, status: "queued", phase: "collaboration:scoped-recovery-waiting", executionCount: 2, activities: [],
@@ -771,7 +780,8 @@ describe("Workspace task progress", () => {
     render(<WorkspacePage projectId={waiting.id} onBack={vi.fn()} />);
     expect(await screen.findAllByText("等待恢复")).not.toHaveLength(0);
     expect(screen.getAllByText(reason).length).toBeGreaterThan(0);
-    expect(document.querySelector(".workflow-rail-status")).toHaveTextContent("等待恢复");
+    expect(document.querySelector(".workspace-header .status-badge")).toHaveTextContent("等待恢复");
+    expect(document.querySelector(".workspace-progress-primary .overall-progress-copy strong")).toHaveTextContent(`当前阶段 ${reason}`);
   });
 
   it("shows an actionable GitHub authorization warning and matching wait labels in the workspace", async () => {
@@ -779,7 +789,7 @@ describe("Workspace task progress", () => {
     render(<WorkspacePage projectId={project.id} onBack={vi.fn()} />);
     expect(await screen.findByRole("alert", { name: "GitHub 授权异常" })).toHaveTextContent("test-owner");
     expect(screen.getByRole("link", { name: "前往 GitHub 账号" })).toHaveAttribute("href", "#/github-accounts");
-    expect(document.querySelector(".workflow-rail-status")).toHaveTextContent("等待授权修复");
+    expect(document.querySelector(".workspace-header .status-badge")).toHaveTextContent("等待授权修复");
   });
 
   it("shows task id, overall progress and authoritative per-agent progress", async () => {
@@ -801,13 +811,19 @@ describe("Workspace task progress", () => {
     expect(screen.getAllByText("流程进度 48%").length).toBeGreaterThan(0);
     expect(document.body).not.toHaveTextContent("里程碑");
     expect(
-      screen.getAllByText("nex-agi/Nex-N2-Pro · 网关思考强度 Provider 默认").length
+      screen.getAllByText("nex-agi/Nex-N2-Pro").length
     ).toBeGreaterThan(0);
-    expect(document.body).toHaveTextContent("3 次执行");
-    expect(document.body).toHaveTextContent("已执行 3 次");
+    const executionRoster = screen.getByText("3 次执行", { exact: false }).closest(".roster-standalone");
+    expect(executionRoster?.querySelector("summary")).toHaveTextContent("execution");
+    expect(executionRoster?.querySelector("summary")).toHaveTextContent("3 次执行 · 队列 #2");
     expect(document.body).not.toHaveTextContent("7 次执行");
-    expect(screen.getAllByText("队列 #2").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Turn 4").length).toBeGreaterThan(0);
+    const callsTab = screen.getByRole("tab", { name: "调用轨迹" });
+    callsTab.focus();
+    fireEvent.keyDown(callsTab, { key: "ArrowRight" });
+    const detailsTab = screen.getByRole("tab", { name: "运行详情" });
+    expect(detailsTab).toHaveFocus();
+    expect(detailsTab).toHaveAttribute("aria-selected", "true");
     const tokenUsage = screen.getByRole("region", {
       name: "项目 Token 消耗"
     });
@@ -830,6 +846,7 @@ describe("Workspace task progress", () => {
     });
     render(<WorkspacePage projectId={project.id} onBack={vi.fn()} />);
 
+    fireEvent.click(await screen.findByRole("tab", { name: "运行详情" }));
     const integrity = await screen.findByRole("region", { name: "运行合同与完整性" });
     expect(integrity).toHaveTextContent(
       "Published artifact content changed after publication: art_verified"
@@ -888,7 +905,8 @@ describe("Workspace task progress", () => {
     const view = render(<TraceView events={events} liveStreams={[]} liveEvents={[]} project={project}
       connection="offline" totalEventCount={events.length} hasOlder={false} historyLoading={false} historyError="" onLoadOlder={async () => undefined} />);
     expect(screen.getByText("正在核对固定 sentinel 文件。")).toBeVisible();
-    fireEvent.click(screen.getByText("查看工具结果"));
+    fireEvent.click(view.container.querySelector(".agent-tools-panel > summary")!);
+    fireEvent.click(view.container.querySelector(".agent-tool-disclosure > summary")!);
     expect(screen.getByText("OPENFARS_SMOKE_SENTINEL")).toBeVisible();
     expect(view.container.querySelectorAll(".agent-tool-item")).toHaveLength(1);
     expect(view.container.querySelector(".trace-list")).not.toHaveTextContent("Resident Harness event");
@@ -901,12 +919,14 @@ describe("Workspace task progress", () => {
     const props = { project, connection: "live" as const, totalEventCount: tools.length, hasOlder: false,
       historyLoading: false, historyError: "", onLoadOlder: async () => undefined, liveStreams: [] };
     const view = render(<TraceView {...props} events={[]} liveEvents={tools.map(event => ({ ...event, seq: 8_000_000_000 + event.seq }))} />);
-    fireEvent.click(screen.getByText("查看工具结果"));
+    fireEvent.click(view.container.querySelector(".agent-tools-panel > summary")!);
+    fireEvent.click(view.container.querySelector(".agent-tool-disclosure > summary")!);
     const details = screen.getByText("OPENFARS_SMOKE_SENTINEL").closest("details");
     expect(details).toHaveAttribute("open");
     view.rerender(<TraceView {...props} events={tools} liveEvents={[]} />);
     expect(screen.getByText("OPENFARS_SMOKE_SENTINEL").closest("details")).toBe(details);
     expect(details).toHaveAttribute("open");
+    expect(screen.getByText("OPENFARS_SMOKE_SENTINEL")).toBeVisible();
   });
 
   it("renders tool details that arrive as an update to an existing event sequence", () => {
@@ -918,9 +938,10 @@ describe("Workspace task progress", () => {
     const props = { project, connection: "live" as const, totalEventCount: 2, hasOlder: false,
       historyLoading: false, historyError: "", onLoadOlder: async () => undefined, liveStreams: [], liveEvents: [] };
     const view = render(<TraceView {...props} events={[start!, pendingResult]} />);
-    expect(screen.queryByText("查看工具结果")).not.toBeInTheDocument();
+    expect(screen.queryByText("工具结果")).not.toBeInTheDocument();
     view.rerender(<TraceView {...props} events={[start!, complete!]} />);
-    fireEvent.click(screen.getByText("查看工具结果"));
+    fireEvent.click(view.container.querySelector(".agent-tools-panel > summary")!);
+    fireEvent.click(view.container.querySelector(".agent-tool-disclosure > summary")!);
     expect(screen.getByText("OPENFARS_SMOKE_SENTINEL")).toBeVisible();
   });
 
@@ -947,9 +968,9 @@ describe("Workspace task progress", () => {
       expect(trace?.querySelectorAll(".agent-tool-item")).toHaveLength(1);
       expect(trace?.querySelector(".agent-tool-item strong")).toHaveTextContent("Read");
       expect(trace?.querySelector(".agent-thought-panel")).toHaveTextContent("Agent 过程摘要");
-      expect(trace?.querySelector(".agent-tool-result")).not.toHaveAttribute("open");
-      expect(trace?.querySelector(".agent-tool-result")).toHaveTextContent("OPENFARS_SMOKE_SENTINEL");
-      expect(trace?.querySelector(".agent-tool-result")).toHaveTextContent("已截断至 40,000 字符");
+      expect(trace?.querySelector(".agent-tool-disclosure")).not.toHaveAttribute("open");
+      expect(trace?.querySelector(".agent-tool-disclosure")).toHaveTextContent("OPENFARS_SMOKE_SENTINEL");
+      expect(trace?.querySelector(".agent-tool-disclosure")).toHaveTextContent("已截断至 40,000 字符");
       expect(trace?.querySelector(".trace-diagnostics")).not.toHaveAttribute("open");
       expect(trace?.querySelector(".trace-diagnostics")).toHaveTextContent("运行诊断");
       expect(trace).not.toHaveTextContent("RAW_CANONICAL_REASONING_MUST_NOT_RENDER");
@@ -976,7 +997,7 @@ describe("Workspace task progress", () => {
           harnessId: "fixture",
           attempt: 0,
           itemId: "assistant-0-0",
-          content: "**尚未闭合",
+          content: "## 阶段记录\n\n- **已完成**\n- **尚未闭合",
           phase: "streaming",
           role: "active",
           updatedAt: "2026-09-19T00:00:00.000Z"
@@ -992,8 +1013,14 @@ describe("Workspace task progress", () => {
       />
     );
     expect(view.getByText("Agent 正在输出")).toBeVisible();
-    expect(view.container.querySelector(".agent-streaming-text")).toHaveTextContent("**尚未闭合");
-    expect(view.container.querySelector(".agent-streaming-text strong")).toBeNull();
+    const markdown = view.container.querySelector(".agent-message-markdown");
+    expect(markdown?.querySelector("h2")).toHaveTextContent("阶段记录");
+    expect(markdown?.querySelectorAll("li")).toHaveLength(2);
+    expect(markdown?.querySelector("strong")).toHaveTextContent("已完成");
+    expect(markdown).toHaveTextContent("**尚未闭合");
+    expect(view.queryByText("#9000000000")).not.toBeInTheDocument();
+    const card = view.container.querySelector(".trace-action-event");
+    expect(card).not.toBeNull();
 
     view.rerender(
       <TraceView
@@ -1041,7 +1068,8 @@ describe("Workspace task progress", () => {
         onLoadOlder={async () => undefined}
       />
     );
-    expect(view.getByText("Agent 过程摘要")).toBeVisible();
+    expect(view.getByText("Agent 正在输出")).toBeVisible();
+    expect(view.container.querySelector(".trace-action-event")).toBe(card);
     expect(view.container.querySelectorAll(".agent-tool-item")).toHaveLength(1);
 
     const completeMessage: AgentEvent = {
@@ -1082,7 +1110,7 @@ describe("Workspace task progress", () => {
           harnessId: "fixture",
           attempt: 0,
           itemId: "assistant-0-0",
-          content: "**完整结果**",
+          content: "**已过时的快照**",
           phase: "complete",
           role: "final",
           updatedAt: "2026-09-19T00:00:02.000Z"
@@ -1099,6 +1127,9 @@ describe("Workspace task progress", () => {
     );
 
     expect(view.getByText("Agent 最终结果")).toBeVisible();
+    expect(view.getByText("#10")).toBeVisible();
+    expect(view.queryByText("已过时的快照")).not.toBeInTheDocument();
+    expect(view.container.querySelector(".trace-action-event")).toBe(card);
     expect(view.getAllByText("完整结果")).toHaveLength(1);
     expect(view.container.querySelectorAll(".agent-thought-panel")).toHaveLength(1);
     expect(view.container.querySelector(".agent-message-markdown strong")).toHaveTextContent("完整结果");
@@ -1358,7 +1389,7 @@ describe("Workspace task progress", () => {
       />
     );
 
-    const result = view.container.querySelector(".agent-tool-result");
+    const result = view.container.querySelector(".agent-tool-disclosure");
     expect(result).not.toHaveAttribute("open");
     expect(result).toHaveTextContent("（空结果）");
   });
@@ -1398,6 +1429,38 @@ describe("Workspace task progress", () => {
     for (const event of primary) expect(view.container).toHaveTextContent(event.message);
     expect(view.container.querySelector(".trace-diagnostics")).not.toHaveAttribute("open");
     expect(view.container.querySelectorAll(".trace-diagnostic-list .trace-event")).toHaveLength(1_000);
+  });
+
+  it("places consecutive diagnostics between messages, including messages with synthetic live sequence numbers", () => {
+    const event = (seq: number, ts: string, message: string, diagnostic = false): AgentEvent => ({
+      seq, ts, message, type: diagnostic ? "agent.trace" : "workflow.tick",
+      agent: "execution", data: diagnostic ? { kind: "stderr" } : {}
+    });
+    const events = [
+      event(1, "2026-09-16T08:00:00.000Z", "前一条消息"),
+      event(2, "2026-09-16T08:00:01.000Z", "诊断一", true),
+      event(3, "2026-09-16T08:00:02.000Z", "诊断二", true),
+      { ...event(5, "2026-09-16T08:00:02.500Z", "未知内部事件"), type: "control.internal.fixture" },
+      event(4, "2026-09-16T08:00:04.000Z", "诊断三", true)
+    ];
+    const view = render(<TraceView events={events} liveStreams={[]}
+      liveEvents={[
+        event(9_000_000_001, "2026-09-16T08:00:03.000Z", "实时消息"),
+        { ...event(9_000_000_002, "2026-09-16T08:00:03.500Z", "实时内部状态"), type: "agent.trace", data: { traceKind: "status" } }
+      ]}
+      project={project} connection="live" totalEventCount={events.length}
+      hasOlder={false} historyLoading={false} historyError="" onLoadOlder={async () => undefined} />);
+    const rows = view.container.querySelectorAll(".trace-list > .trace-event, .trace-list > .trace-diagnostics");
+    expect(rows).toHaveLength(4);
+    expect(rows[0]).toHaveTextContent("前一条消息");
+    expect(rows[1]?.querySelectorAll(".trace-event")).toHaveLength(3);
+    expect(rows[1]).not.toHaveAttribute("open");
+    expect(rows[2]).toHaveTextContent("实时消息");
+    expect(rows[3]).toHaveTextContent("诊断三");
+    expect(rows[3]).toHaveTextContent("实时内部状态");
+    fireEvent.click(rows[1]!.querySelector("summary")!);
+    expect(screen.getByText("诊断一")).toBeVisible();
+    expect(screen.getByText("诊断三")).not.toBeVisible();
   });
 
   it("folds historical CLI stderr traces into the diagnostic disclosure", () => {
@@ -1475,9 +1538,11 @@ describe("Workspace task progress", () => {
     });
     render(<WorkspacePage projectId={project.id} onBack={vi.fn()} />);
 
+    fireEvent.click(await screen.findByRole("button", { name: "项目解说" }));
     const explainer = await screen.findByRole("region", { name: "项目解说 Agent" });
-    await waitFor(() => expect(explainer).toHaveTextContent("PROJECT EXPLAINER · Codex"));
+    await waitFor(() => expect(explainer).toHaveTextContent("Codex · model-a"));
     expect(within(explainer).getByLabelText("向项目解说 Agent 提问")).toBeEnabled();
+    fireEvent.click(within(explainer).getByRole("button", { name: "切换配置" }));
     const selector = within(explainer).getByLabelText("Project Explainer Harness");
     expect(within(selector).getByRole("option", { name: "Codex" })).toBeEnabled();
     expect(within(selector).getByRole("option", { name: "pi" })).toBeEnabled();
@@ -1618,6 +1683,7 @@ describe("Workspace task progress", () => {
     const user = userEvent.setup();
     render(<WorkspacePage projectId={project.id} onBack={vi.fn()} />);
 
+    fireEvent.click(await screen.findByRole("button", { name: "项目解说" }));
     const explainer = await screen.findByRole("region", {
       name: "项目解说 Agent"
     });
@@ -1627,19 +1693,16 @@ describe("Workspace task progress", () => {
     vi.mocked(getProjectExplainerHistory).mockImplementation(
       () => new Promise(() => {})
     );
-    expect(explainer).toHaveTextContent("只读 · 无 Skills · 无 MCP");
+    expect(explainer).toHaveTextContent("只读问答");
     await waitFor(() => {
-      expect(explainer).toHaveTextContent("PROJECT EXPLAINER · Fixture Harness");
+      expect(explainer).toHaveTextContent("Fixture Harness");
       expect(explainer).toHaveTextContent("Responses Gateway · OpenAI Responses");
       expect(explainer).toHaveTextContent("Anthropic Messages → OpenAI Responses");
     });
-    const interactionGrid = explainer.closest(".project-interaction-grid");
-    expect(interactionGrid).not.toBeNull();
-    expect(interactionGrid?.children[1]).toBe(explainer);
-    expect(interactionGrid?.children[0]).toHaveAttribute(
-      "aria-label",
-      "项目主动需求输入"
-    );
+    const interactionDrawer = explainer.closest(".project-interaction-drawer");
+    expect(interactionDrawer).not.toBeNull();
+    expect(explainer).toBeVisible();
+    expect(interactionDrawer?.querySelector("#workspace-user-request")).toHaveAttribute("hidden");
 
     await user.type(
       within(explainer).getByLabelText("向项目解说 Agent 提问"),
@@ -1665,12 +1728,12 @@ describe("Workspace task progress", () => {
     expect(explainer).toHaveTextContent("回答完成");
 
     await user.click(
-      within(explainer).getByRole("button", { name: "刷新解说上下文" })
+      within(explainer).getByRole("button", { name: "新建解说会话" })
     );
     await waitFor(() =>
       expect(resetProjectExplainer).toHaveBeenCalledWith(project.id)
     );
-    expect(explainer).toHaveTextContent("解说上下文已刷新，可以重新询问。");
+    expect(explainer).toHaveTextContent("已开始新的解说会话。");
     expect(explainer).toHaveTextContent(
       "可直接询问项目现状、实验、论文或评审依据"
     );
@@ -1754,6 +1817,7 @@ describe("Workspace task progress", () => {
 
     render(<ProjectExplainerPanel projectId={project.id} />);
 
+    fireEvent.click(screen.getByRole("button", { name: "切换配置" }));
     const gatewaySelect = await screen.findByLabelText("Project Explainer 全局网关");
     const modelInput = screen.getByLabelText("Project Explainer Model");
     await user.selectOptions(gatewaySelect, updatedGateway.id);
@@ -1800,6 +1864,7 @@ describe("Workspace task progress", () => {
     const user = userEvent.setup();
 
     render(<ProjectExplainerPanel projectId={project.id} />);
+    fireEvent.click(screen.getByRole("button", { name: "切换配置" }));
     await user.selectOptions(
       await screen.findByLabelText("Project Explainer 全局网关"),
       explainerGatewayB.id
@@ -1849,6 +1914,12 @@ describe("Workspace task progress", () => {
 
     render(<ProjectExplainerPanel projectId={project.id} />);
 
+    const warning = await screen.findByText("未验证", { selector: "summary" });
+    await userEvent.click(warning);
+    expect(screen.getByText("当前组合尚未通过验证，仍可使用，但运行可能失败。")).toBeVisible();
+    await userEvent.click(warning);
+    expect(screen.getByLabelText("向项目解说 Agent 提问")).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "切换配置" }));
     expect(await screen.findByText(
       status === "failed"
         ? "当前 Harness / 网关 / model 组合验证失败：上游返回 HTTP 401；仍可使用，但运行可能失败。"
@@ -1862,7 +1933,6 @@ describe("Workspace task progress", () => {
     })).toBeEnabled();
     if (status === "failed") expect(screen.getByText(/以下 model 验证失败，仍可选择并使用：model-a.*HTTP 401/)).toBeVisible();
     expect(screen.getByRole("button", { name: "保存问答配置" })).toBeEnabled();
-    expect(screen.getByLabelText("向项目解说 Agent 提问")).toBeEnabled();
     fireEvent.submit(screen.getByRole("dialog", { name: "Project Explainer 运行配置" }));
     await waitFor(() => expect(updateProjectExplainerConfig).toHaveBeenCalledWith(project.id, expect.objectContaining({
       harness: initialExplainerConfig.harness, gatewayId: failedGateway.id, model: "model-a"
@@ -1889,6 +1959,7 @@ describe("Workspace task progress", () => {
 
     render(<ProjectExplainerPanel projectId={project.id} />);
 
+    fireEvent.click(screen.getByRole("button", { name: "切换配置" }));
     const selector = await screen.findByLabelText("Project Explainer Harness");
     expect(within(selector).getByRole("option", { name: "Fixture Harness" })).toBeEnabled();
     expect(within(selector).getByRole("option", {
@@ -1919,6 +1990,7 @@ describe("Workspace task progress", () => {
 
     render(<ProjectExplainerPanel projectId={project.id} />);
 
+    fireEvent.click(screen.getByRole("button", { name: "切换配置" }));
     expect(await screen.findByText("Harness 目录待确认")).toBeVisible();
     expect(screen.queryByText("直连")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "保存问答配置" })).toBeDisabled();
@@ -1945,6 +2017,7 @@ describe("Workspace task progress", () => {
 
     render(<ProjectExplainerPanel projectId={project.id} />);
 
+    fireEvent.click(screen.getByRole("button", { name: "切换配置" }));
     expect(await screen.findByText(
       "当前服务端没有注册可用的只读 Project Explainer Harness。"
     )).toHaveAttribute("role", "alert");
@@ -2048,6 +2121,7 @@ describe("Workspace task progress", () => {
     render(<ProjectExplainerPanel projectId={project.id} />);
 
     expect(await screen.findByText("此前完整回答仍然保留。")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "切换配置" }));
     await user.selectOptions(screen.getByLabelText("Project Explainer Harness"), alternateExplainer.id);
     await user.click(screen.getByRole("button", { name: "保存问答配置" }));
 
@@ -2078,6 +2152,7 @@ describe("Workspace task progress", () => {
     const user = userEvent.setup();
     render(<WorkspacePage projectId={project.id} onBack={vi.fn()} />);
 
+    fireEvent.click(await screen.findByRole("button", { name: "项目解说" }));
     const explainer = await screen.findByRole("region", {
       name: "项目解说 Agent"
     });
@@ -2135,6 +2210,7 @@ describe("Workspace task progress", () => {
     );
     render(<WorkspacePage projectId={project.id} onBack={vi.fn()} />);
 
+    fireEvent.click(await screen.findByRole("button", { name: "项目解说" }));
     const explainer = await screen.findByRole("region", {
       name: "项目解说 Agent"
     });
@@ -2353,7 +2429,11 @@ describe("Workspace task progress", () => {
         currentVersion: status === "applied" ? appliedVersion : context.current.version,
         ...(status === "pending" ? { waitingReason: "原最终 PR 尚未终结" } : {}),
         history: [{ requestId: input.requestId, status, at: "2026-10-10T22:00:00Z", ...(status === "applied" ? { appliedVersion } : {}) }] };
-      context.records.push(record); if (status === "applied") context.current = { version: appliedVersion, snapshot: structuredClone(input.proposal) };
+      context.records.push(record);
+      if (status === "applied") {
+        context.current = { version: appliedVersion, snapshot: structuredClone(input.proposal) };
+        vi.mocked(getProject).mockResolvedValue({ ...original, orchestration: context.current.snapshot.orchestration });
+      }
       return { record, revision: 50, replay: false };
     });
     const user = userEvent.setup();
@@ -2364,13 +2444,36 @@ describe("Workspace task progress", () => {
     const dialog = await screen.findByRole("dialog", { name: "查看与调整当前 Workflow" });
     const name = await within(dialog).findByLabelText("协作组显示名称");
     expect(name).toBeEnabled(); fireEvent.change(name, { target: { value: "证据整合组" } });
-    await user.click(within(dialog).getByRole("button", { name: "提交完整修改" }));
+    await user.click(within(dialog).getByRole("button", { name: "提交修改" }));
+    const submitDialog = screen.getByRole("dialog", { name: "提交 Workflow 修改" });
+    await user.click(within(submitDialog).getByRole("button", { name: "提交完整修改" }));
     await waitFor(() => expect(submitWorkflowAdjustment).toHaveBeenCalledOnce());
     expect(vi.mocked(submitWorkflowAdjustment).mock.calls[0]).toEqual([original.id, expect.objectContaining({ base: { revision: 1, hash: "1".repeat(64) },
       proposal: expect.objectContaining({ orchestration: expect.objectContaining({ collaborations: [expect.objectContaining({ id: "research_group", displayName: "证据整合组" })] }) }) })]);
     expect(await within(dialog).findByText(finalStatus === "open" ? "已提交，等待安全时机应用" : "已应用，实际接受版本 r2")).toBeVisible();
+    const runtimeCanvas = screen.getByRole("region", { name: "运行中 Workflow 画布" });
+    if (finalStatus === "merged") {
+      await within(runtimeCanvas).findByText("证据整合组", {}, { timeout: 3500 });
+    } else {
+      expect(within(runtimeCanvas).queryByText("证据整合组")).not.toBeInTheDocument();
+    }
     expect(original.groupRuns).toEqual(before.groupRuns); expect(original.nodeRuns).toEqual(before.nodeRuns); expect(original.pullRequests).toEqual(before.pullRequests);
     expect(updateProjectCollaborationGroup).not.toHaveBeenCalled(); expect(projectAction).not.toHaveBeenCalled();
+  });
+
+  it("refreshes the running canvas when a Workflow adjustment is applied in the event stream", async () => {
+    const original = collaborationProject("merged");
+    vi.mocked(getProject).mockResolvedValue(original);
+    const page = <WorkspacePage projectId={original.id} onBack={vi.fn()} />;
+    const view = render(page);
+    const runtimeCanvas = await screen.findByRole("region", { name: "运行中 Workflow 画布" });
+    const orchestration = structuredClone(original.orchestration);
+    orchestration.collaborations![0].displayName = "已生效的协作组";
+    vi.mocked(getProject).mockResolvedValue({ ...original, orchestration });
+    eventStreamMock.events = [{ seq: 12, type: "workflow.adjustment.transitioned",
+      message: "Workflow applied", ts: "2026-10-10T22:00:00Z", data: { transition: { status: "applied" } } }];
+    view.rerender(<WorkspacePage projectId={original.id} onBack={vi.fn()} />);
+    await within(runtimeCanvas).findByText("已生效的协作组", {}, { timeout: 3500 });
   });
 
   it("renders the shared runtime workflow canvas and logical invocation ledger to the right of the workspace tabs", async () => {
@@ -2431,7 +2534,7 @@ describe("Workspace task progress", () => {
       name: "Agent 调用轨迹图"
     });
     const center = document.querySelector(".workspace-center");
-    expect(center?.nextElementSibling).toBe(graph);
+    expect(center?.nextElementSibling).toContainElement(graph);
     const runtimeMap = graph.querySelector(".agent-call-runtime-map");
     expect(runtimeMap).not.toBeNull();
     expect(runtimeMap?.querySelector('[data-runtime-surface-mode="preview"]')).not.toBeNull();
@@ -2727,7 +2830,7 @@ describe("Workspace task progress", () => {
       )
     ).toEqual([11, 12]);
     expect(graph).toHaveTextContent("11–12 / 12");
-    expect(graph).toHaveTextContent("编号按逻辑调用顺序生成");
+    expect(graph.querySelector(".agent-call-graph-scroll")?.firstElementChild).toHaveClass("agent-call-runtime-map");
 
     const displayLimit = screen.getByLabelText("显示最新轨迹条数");
     const agentFilter = screen.getByLabelText("按智能体筛选");
@@ -2837,6 +2940,7 @@ describe("Workspace task progress", () => {
     expect(actionRow?.children[1]).toHaveTextContent("完成");
     expect(document.querySelectorAll(".agent-tool-item")).toHaveLength(1);
 
+    fireEvent.click(screen.getByRole("tab", { name: "运行详情" }));
     const currentAgent = screen.getByRole("region", {
       name: "当前 Agent 工作信息"
     });
@@ -3060,6 +3164,7 @@ describe("Workspace task progress", () => {
 
     render(<WorkspacePage projectId={project.id} onBack={vi.fn()} />);
 
+    fireEvent.click(await screen.findByRole("button", { name: /^补充科研需求/ }));
     const panel = await screen.findByRole("region", {
       name: "项目主动需求输入"
     });
@@ -3111,6 +3216,7 @@ describe("Workspace task progress", () => {
 
     render(<WorkspacePage projectId={runningMain.id} onBack={vi.fn()} />);
 
+    fireEvent.click(await screen.findByRole("button", { name: /^补充科研需求/ }));
     const panel = await screen.findByRole("region", {
       name: "项目主动需求输入"
     });
@@ -3204,7 +3310,7 @@ describe("Workspace task progress", () => {
         limit: 50
       })
     );
-    expect(screen.getAllByText("proposal.md")).toHaveLength(2);
+    expect(screen.getByText("proposal.md")).toBeInTheDocument();
     expect(screen.queryByText("metrics.json")).not.toBeInTheDocument();
 
     await user.click(screen.getByTitle("打开文件夹 results"));
@@ -3232,7 +3338,7 @@ describe("Workspace task progress", () => {
     eventStreamMock.events = [{ projectId: project.id, seq: 1, type: "collaboration.project.updated", agent: "idea", message: "Git publication projected", ts: "2026-10-13T12:00:00Z" }];
     view.rerender(<WorkspacePage projectId={project.id} onBack={vi.fn()} />);
     // Full snapshots coalesce at two seconds; live Agent status stays immediate.
-    await waitFor(() => expect(screen.getAllByText("accepted.md")).toHaveLength(2), { timeout: 3_000 });
+    await waitFor(() => expect(screen.getByText("accepted.md")).toBeInTheDocument(), { timeout: 3_000 });
     await waitFor(() => expect(getArtifactDirectory).toHaveBeenLastCalledWith(project.id, expect.objectContaining({ scope: "project", directory: "" })));
   });
 
@@ -3246,7 +3352,7 @@ describe("Workspace task progress", () => {
     eventStreamMock.events = [{ projectId: project.id, seq: 1, type: "artifact.published", agent: "idea", message: "Revised publication", ts: "2026-10-13T12:00:00Z" }];
     view.rerender(<WorkspacePage projectId={project.id} onBack={vi.fn()} />);
     // Publication refreshes share the bounded background refresh interval.
-    await waitFor(() => expect(screen.getAllByText("updated.md")).toHaveLength(2), { timeout: 3_000 });
+    await waitFor(() => expect(screen.getByText("updated.md")).toBeInTheDocument(), { timeout: 3_000 });
     expect(screen.queryByText("old.md")).not.toBeInTheDocument();
   });
 
@@ -3334,6 +3440,7 @@ describe("Workspace task progress", () => {
 
     render(<WorkspacePage projectId={completed.id} onBack={vi.fn()} />);
 
+    fireEvent.click(await screen.findByRole("button", { name: /^补充科研需求/ }));
     const panel = await screen.findByRole("region", {
       name: "项目主动需求输入"
     });

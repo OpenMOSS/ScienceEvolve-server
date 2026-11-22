@@ -17,8 +17,9 @@ import type {
   ProjectLiveSnapshot
 } from "./types";
 
-const INITIAL_EVENT_LIMIT = 200;
+const INITIAL_EVENT_LIMIT = 400;
 const HISTORY_PAGE_LIMIT = 200;
+const TRACE_HISTORY_PAGE_LIMIT = 20;
 const LIVE_BATCH_MS = 120;
 
 const NAMED_EVENTS = [
@@ -200,7 +201,7 @@ export function useProjectEvents(
   timelineHistoryLoading: boolean;
   timelineHistoryError: string;
   live: ProjectLiveSnapshot;
-  loadOlder: () => Promise<void>;
+  loadOlder: (filters?: { agent?: string; keyword?: string }) => Promise<number | void>;
   loadOlderTimeline: () => Promise<void>;
   reset: () => void;
 } {
@@ -383,7 +384,7 @@ export function useProjectEvents(
       };
     };
 
-    void getProjectEventBootstrap(projectId, INITIAL_EVENT_LIMIT)
+    void getProjectEventBootstrap(projectId, INITIAL_EVENT_LIMIT, true)
       .then((bootstrap) => {
         if (disposed) return;
         for (const event of [...bootstrap.events, ...bootstrap.timelineEvents]) {
@@ -418,7 +419,7 @@ export function useProjectEvents(
     };
   }, [enabled, generation, projectId]);
 
-  const loadOlder = useCallback(async () => {
+  const loadOlder = useCallback(async (filters?: { agent?: string; keyword?: string }) => {
     const requestedProjectId = projectId;
     const before = events[0]?.seq;
     if (
@@ -433,15 +434,15 @@ export function useProjectEvents(
     setHistoryLoading(true);
     setHistoryError("");
     try {
-      const page = await getProjectEventHistory(
-        requestedProjectId,
-        before,
-        HISTORY_PAGE_LIMIT
-      );
+      const page = await getProjectEventHistory(requestedProjectId, before, TRACE_HISTORY_PAGE_LIMIT, "messages", true, filters);
       if (activeProjectId.current !== requestedProjectId) return;
-      setEvents((current) => mergeEvents(current, page.events));
-      setTimelineEvents(current => collapseBusinessAssignments(mergeEvents(current, page.events.filter(isAgentTimelineEvent))));
-      setHasOlder(page.hasMore);
+      const older = page.events.filter(event => event.seq < before);
+      if (older.length) {
+        setEvents(current => mergeEvents(current, older));
+        setTimelineEvents(current => collapseBusinessAssignments(mergeEvents(current, older.filter(isAgentTimelineEvent))));
+      }
+      setHasOlder(page.hasMore && older.length > 0);
+      return older.length;
     } catch (reason) {
       if (activeProjectId.current !== requestedProjectId) return;
       setHistoryError(

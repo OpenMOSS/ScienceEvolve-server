@@ -14,6 +14,18 @@ function lifecycle(seq: number, type: string, invocationId = "inv-1"): AgentEven
 }
 
 describe("research trace content and invocation identity", () => {
+  it("treats staged actions as diagnostics while preserving published artifacts in the main trace", () => {
+    expect(isDiagnosticTraceEvent(lifecycle(1, "control.action.staged"))).toBe(true);
+    expect(isDiagnosticTraceEvent(lifecycle(2, "artifact.published"))).toBe(false);
+  });
+
+  it("classifies gateway usage as diagnostic without hiding assistant messages with the same text", () => {
+    const usage = { ...trace(1, "activity", "Gateway token usage"), data: { traceKind: "status" } };
+    expect(isDiagnosticTraceEvent(usage)).toBe(true);
+    expect(isDiagnosticTraceEvent({ ...usage, message: "Gateway token usage unknown", data: { usageScope: "request" } })).toBe(true);
+    expect(isDiagnosticTraceEvent(trace(2, "assistant.message", usage.message))).toBe(false);
+  });
+
   it("omits missing or empty optional content and never reveals legacy reasoning", () => {
     expect(buildTraceEntries([trace(1, "reasoning.summary"), trace(2, "assistant.message", "  "),
       { ...trace(3, "activity"), data: { kind: "reasoning", itemType: "thinking" }, message: "private" }])).toEqual([]);

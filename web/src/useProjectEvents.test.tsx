@@ -106,6 +106,27 @@ describe("useProjectEvents bounded event stream", () => {
     expect(MockEventSource.instances[0].url).toBe("stream:prj_call_pages:after:100");
   });
 
+  it("reads one bounded history page per click and reuses the updated cursor", async () => {
+    apiMocks.getProjectEventHistory
+      .mockResolvedValueOnce({ events: [event(98, "agent.trace")], hasMore: true })
+      .mockResolvedValueOnce({ events: [event(96, "assistant.message"), event(97, "assistant.message")], hasMore: true });
+    const { result } = renderHook(() => useProjectEvents("prj_older_messages"));
+    await waitFor(() => expect(result.current.hasOlder).toBe(true));
+    await act(async () => {
+      expect(await result.current.loadOlder()).toBe(1);
+    });
+    expect(apiMocks.getProjectEventHistory).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      expect(await result.current.loadOlder({ agent: "main", keyword: "result" })).toBe(2);
+    });
+    expect(apiMocks.getProjectEventHistory.mock.calls).toEqual([
+      ["prj_older_messages", 99, 20, "messages", true, undefined],
+      ["prj_older_messages", 98, 20, "messages", true, { agent: "main", keyword: "result" }]
+    ]);
+    expect(result.current.events.map(item => item.seq)).toEqual([96, 97, 98, 99, 100]);
+    expect(result.current.hasOlder).toBe(true);
+  });
+
   it("reuses unchanged runtime and performance across live text updates", async () => {
     const { result } = renderHook(() => useProjectEvents("prj_stable"));
     await waitFor(() => expect(MockEventSource.instances).toHaveLength(1));
@@ -134,7 +155,7 @@ describe("useProjectEvents bounded event stream", () => {
     const { result } = renderHook(() => useProjectEvents("prj_fast"));
 
     await waitFor(() => expect(MockEventSource.instances).toHaveLength(1));
-    expect(apiMocks.getProjectEventBootstrap).toHaveBeenCalledWith("prj_fast", 200);
+    expect(apiMocks.getProjectEventBootstrap).toHaveBeenCalledWith("prj_fast", 400, true);
     expect(result.current.events.map((item) => item.seq)).toEqual([99, 100]);
     expect(result.current.timelineEvents.map((item) => item.seq)).toEqual([1]);
     expect(result.current.totalEvents).toBe(100);
@@ -276,7 +297,10 @@ describe("useProjectEvents bounded event stream", () => {
     expect(apiMocks.getProjectEventHistory).toHaveBeenCalledWith(
       "prj_fast",
       99,
-      200
+      20,
+      "messages",
+      true,
+      undefined
     );
     expect(result.current.events.map((item) => item.seq)).toEqual([
       98,

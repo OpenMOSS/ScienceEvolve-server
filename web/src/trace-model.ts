@@ -85,14 +85,28 @@ export function canonicalTraceEvent(event: AgentEvent): CanonicalTraceEvent | un
   };
 }
 
+export function isGatewayUsageTraceEvent(event: AgentEvent): boolean {
+  return event.type === "agent.trace" &&
+    (event.message === "Gateway token usage" || event.message === "Gateway token usage unknown") &&
+    (event.data?.traceKind === "status" || event.data?.usageScope === "request") &&
+    !canonicalTraceEvent(event)?.kind.startsWith("assistant.");
+}
+
 export function isDiagnosticTraceEvent(event: AgentEvent): boolean {
+  if (isGatewayUsageTraceEvent(event)) return true;
   const canonical = canonicalTraceEvent(event);
   if (canonical?.kind === "diagnostic" || event.data?.diagnostic === true) return true;
-  if (["workflow.node.started", "workflow.node.completed", "session.started", "iteration.started"].includes(event.type)) return true;
+  if ([
+    "workflow.node.started", "workflow.node.completed", "session.started", "iteration.started",
+    "control.action.staged", "control.action.committed", "handoff.saved", "route.queued", "agent.queued"
+  ].includes(event.type)) return true;
   const source = traceDataString(event, "diagnosticSource").toLowerCase();
   if (source === "proxy" || source === "cli" || source === "adapter") return true;
   const legacyKind = traceDataString(event, "kind").toLowerCase();
   const legacyItemType = traceDataString(event, "itemType").toLowerCase();
+  const traceKind = traceDataString(event, "traceKind").toLowerCase();
+  if (!canonical && event.type === "agent.trace" && ["status", "stderr"].includes(traceKind) &&
+    !isThoughtEvent(event) && !isToolEvent(event)) return true;
   if (legacyKind === "stderr" || legacyKind === "diagnostic" || legacyItemType === "diagnostic") {
     return true;
   }
@@ -266,7 +280,12 @@ function safeStructuredPreview(value: unknown): string {
   }
 }
 
-function mergeCanonicalToolEvents(previous: AgentEvent, next: AgentEvent): AgentEvent {
+export function traceDetailParts(event: AgentEvent): AgentEvent[] {
+  const parts = event.data?.traceDetailParts;
+  return Array.isArray(parts) ? parts as AgentEvent[] : [event];
+}
+
+export function mergeCanonicalToolEvents(previous: AgentEvent, next: AgentEvent): AgentEvent {
   const previousCanonical = canonicalTraceEvent(previous);
   const nextCanonical = canonicalTraceEvent(next);
   if (!previousCanonical?.tool || !nextCanonical?.tool) return next;
@@ -276,6 +295,10 @@ function mergeCanonicalToolEvents(previous: AgentEvent, next: AgentEvent): Agent
     data: {
       ...(previous.data ?? {}),
       ...(next.data ?? {}),
+      ...((previous.data?.traceDetailDeferred === true || next.data?.traceDetailDeferred === true) && {
+        traceDetailDeferred: true,
+        traceDetailParts: [...traceDetailParts(previous), ...traceDetailParts(next)]
+      }),
       canonicalEvent: {
         ...previousCanonical,
         ...nextCanonical,
@@ -376,13 +399,14 @@ export function buildTraceEntries(events: AgentEvent[]): TraceEntry[] {
   };
   const createActivity = (event: AgentEvent, thought?: AgentEvent): AgentActivityEntry => {
     const canonical = canonicalTraceEvent(event);
-    const itemKey = canonical?.kind.startsWith("tool.") ? canonical.tool?.callId
+    const standaloneTool = canonical?.kind.startsWith("tool.") && !canonical.parentItemId;
+    const itemKey = canonical?.kind.startsWith("tool.") ? canonical.parentItemId ?? canonical.tool?.callId
       : canonical?.itemId ?? (canonical?.kind === "reasoning.summary" ? canonical.eventId : undefined);
     const entry: AgentActivityEntry = {
       kind: "activity",
       id: canonical && itemKey
         ? `activity-${JSON.stringify([eventAgent(event), canonical.invocationId, canonical.attempt ?? 0,
-            canonical.kind.startsWith("tool.") ? "tool" : canonical.kind === "reasoning.summary" ? "summary" : "message", itemKey])}`
+            standaloneTool ? "tool" : canonical.kind === "reasoning.summary" ? "summary" : "message", itemKey])}`
         : `activity-${event.seq}`,
       event, thought, tools: [],
       ...(canonical?.kind === "reasoning.summary" ? { contentKind: "summary" as const } : {})
@@ -441,6 +465,9 @@ export function buildTraceEntries(events: AgentEvent[]): TraceEntry[] {
       if (!event.message.trim() && !(isAssistantDeltaEvent(event) && activeGroups.has(streamKey) && event.message.length)) continue;
       updateExecution(event, "processing", false);
       const group = activeGroups.get(streamKey) ?? createActivity(event);
+      if (event.data?.liveEphemeral === true && group.thought &&
+        group.thought.data?.liveEphemeral !== true &&
+        canonicalTraceEvent(group.thought)?.kind === "assistant.message") continue;
       group.thought = isAssistantDeltaEvent(event) && event.data?.livePhase === undefined
         ? appendAssistantDelta(group.thought, event) : event;
       continue;
