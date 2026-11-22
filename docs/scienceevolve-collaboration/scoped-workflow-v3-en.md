@@ -16,14 +16,14 @@ A group entry can start multiple parallel paths, such as 1→2→3, 4, and 5. On
 
 The running view reuses the same live canvas at the root and in every group. Selecting an Agent shows execution counts and its shared configuration. Counts within a group use the current execution batch for that reference; retry epochs do not double count or borrow state from other scopes or historical parent batches. All groups expose child nodes and navigation through the same right-side details panel.
 
-Position, zoom, and pan persist per scope and affect display only. New layouts submitted by Main/Leader take precedence. Live node/edge changes and selected paths use the same rendering flow. Switching scope does not rebuild the canvas, and delayed clicks from an old scope cannot act on identically named references in the new one.
+Position, zoom, and pan persist per scope and affect display only. New layouts submitted by the user or authorized Main take precedence. Live node/edge changes and selected paths use the same rendering flow. Switching scope does not rebuild the canvas, and delayed clicks from an old scope cannot act on identically named references in the new one.
 
 ## Identity, capabilities, and queues
 
 - All references share one Agent configuration, session, and fixed execution directory. Saving Agent settings inside a group warns that all references are affected; graph edges and layouts are independent.
 - Valid arrivals for the same Agent execute serially in FIFO order. Different Agents may run concurrently. Failure blocks that Agent's queue and dependent successors, while independent paths under other identities continue.
 - Main manages the root graph. Leaders manage only their own scope and direct child-group proxies. Management turns do no business work. Main or another existing Agent may lead a group but cannot also be a business node inside that same group. Valid outer business nodes remain available.
-- Graph changes use formal `workflow.json` proposals, current execution authority, capability checks, and atomic commits. Main's global switch and each Leader's group switch control separate scopes. Static identity or an enabled switch alone cannot authorize edits during another type of invocation. Leader proposals reuse Main validation and cannot change out-of-scope identities, authorization switches, or locked fields.
+- Main receives global Workflow, Agent configuration, and state references, including in group-management turns. Only actual Main with `allowMainReconfiguration=true` may submit the bound global `workflow.json` proposal through `apply_workflow`. Main decides whether to adjust. Non-Main Leaders cannot reconfigure. Historical `allowLeaderReconfiguration` metadata remains readable but grants no authority, and the editor exposes no group adjustment switch. Identity, base version, locked fields, active work, and native stop evidence remain checked; acceptance is distinct from atomic publication at a safe boundary. Global workflow editing does not expand local routing, business writes, skip, or completion authority.
 - If one identity leads multiple levels, management calls also queue instead of concurrently invoking the same session. Nesting cannot bypass the project's maximum of 10 Agents or capacity limits.
 
 ## Hierarchical Git delivery

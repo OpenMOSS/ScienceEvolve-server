@@ -21,13 +21,14 @@ afterEach(async () => {
   }
 });
 
-async function fixture() {
+async function fixture(ideaRoute?: { gatewayId: string; model: string }) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "scienceevolve-serial-publication-worker-"));
   const options = { databasePath: path.join(root, "state.sqlite"), serviceId: "serial-publication-test",
     hostId: "test", topology: "single-host" as const };
   const resource = { root, database: await openCollaborationStateWorker(options) }; resources.push(resource);
   const storage = new ProjectStorage(path.join(root, "data"), new EventHub()); await storage.initialize();
   const orchestration = cloneAgentOrchestrationTemplate(), agents = mergeAgentConfigs(undefined, orchestration);
+  if (ideaRoute) Object.assign(agents.idea, ideaRoute);
   const state: ProjectState = { id: "prj_" + "e".repeat(32), title: "Serial publication worker regression",
     requirement: "Preserve original tasks and sessions while restoring the accepted configuration",
     status: "paused", phase: "paused", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
@@ -100,16 +101,13 @@ it("restores a serial checkpoint through the real database worker and reopens wi
 });
 
 it("revalidates a runtime route whose public selection changed but private Gateway snapshot is stale", async () => {
-  const f = await fixture();
   const oldGateway = "gwy_" + "1".repeat(32), newGateway = "gwy_" + "2".repeat(32);
-  f.state.agents.idea.gatewayId = newGateway;
-  f.state.agents.idea.model = "model-new";
+  const f = await fixture({ gatewayId: newGateway, model: "model-new" });
   f.state.agents.idea.gatewaySnapshot = { id: oldGateway, name: "Old route", url: "https://old.invalid/v1",
     apiKey: "old-private-key", models: ["model-old"], defaultModel: "model-old", protocol: "responses" };
   const current = (await f.resource.database.serialWorkflowAdjustmentCurrent(f.state.id))!;
-  const next = structuredClone(current.snapshot);
-  next.agents.idea.gatewayId = newGateway; next.agents.idea.model = "model-new";
-  await f.resource.database.updateScopedRuntimeConfiguration(f.state.id, current.snapshot, next);
+  expect(current.snapshot.agents.idea).toMatchObject({ gatewayId: newGateway, model: "model-new" });
+  expect(current.snapshot.agents.idea.gatewaySnapshot).toBeUndefined();
   const original = business(f.state);
   const validate = vi.fn(async (_state, proposal) => {
     expect(proposal.agents.idea.gatewayId).toBe(newGateway);
@@ -170,7 +168,8 @@ it.each(["view failure", "late session", "writer fence"] as const)("rolls back a
     }, workflowVersion);
   });
   await expect(restoreSerialWorkflowConfiguration(f.resource.database, f.storage, f.state, async () => undefined))
-    .rejects.toThrow(failure === "view failure" ? /View publication failed/ : failure === "late session" ? /Original Session changed/ : /writer epoch\/expiry fence/);
+    .rejects.toThrow(failure === "view failure" ? /View publication failed/ : failure === "late session" ? /Original Session changed/
+      : expect.objectContaining({ code: "WRITER_LEASE_STALE", message: "Writer ownership was explicitly relinquished" }));
   expect(await f.resource.database.projectStateDocument(f.state.id, "project.checkpoint")).toEqual(prior);
   expect(await fs.readFile(f.file)).toEqual(bytes);
   expect(await f.resource.database.serialWorkflowAdjustmentCurrent(f.state.id)).toEqual(accepted);
@@ -187,6 +186,19 @@ it.each(["view failure", "late session", "writer fence"] as const)("rolls back a
     expect(loaded.workflowRevision).toBe(accepted.version.revision);
     expect(business(loaded)).toEqual(original);
   }
+});
+
+it("freezes the submitted turn before the asynchronous workflow check without losing a later live edit", async () => {
+  const f = await fixture();
+  const { version } = (await f.resource.database.serialWorkflowAdjustmentCurrent(f.state.id))!;
+  const submittedTurn = ++f.state.turn;
+  const save = f.storage.saveState(f.state, undefined, {
+    beforeWrite: async () => { await f.resource.database.assertWriterLeaseHeld(); }, workflowVersion: version
+  });
+  f.state.turn++;
+  await save;
+  expect(await f.resource.database.projectStateDocument(f.state.id, "project.checkpoint")).toMatchObject({ value: { turn: submittedTurn } });
+  expect(f.state.turn).toBe(submittedTurn + 1);
 });
 
 it("forwards the exact workflow fence through the production coordinator document store", async () => {

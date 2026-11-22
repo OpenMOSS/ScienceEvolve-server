@@ -2400,18 +2400,13 @@ describe("Workspace task progress", () => {
     } finally { confirm.mockRestore(); }
   });
 
-  it("locks every Agent configuration after the project starts", async () => {
+  it("opens Agent configuration for an already started project", async () => {
+    const user = userEvent.setup();
     render(<WorkspacePage projectId={project.id} onBack={vi.fn()} />);
-
-    expect((await screen.findAllByText("Main Agent")).length).toBeGreaterThan(0);
-    expect(
-      screen.queryByRole("button", {
-        name: "编辑 Agent 模型、Prompt、Skills 与 MCP"
-      })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("dialog", { name: "编辑 Agent 完整配置" })
-    ).not.toBeInTheDocument();
+    const edit = await screen.findByRole("button", { name: "编辑 Agent 模型、Prompt、Skills 与 MCP" });
+    expect(edit).toBeEnabled();
+    await user.click(edit);
+    expect(await screen.findByRole("dialog", { name: "编辑 Agent 完整配置" })).toBeInTheDocument();
     expect(updateProjectAgentConfigs).not.toHaveBeenCalled();
   });
 

@@ -110,15 +110,34 @@ try {
   await page.getByRole("button", { name: "返回父图", exact: true }).click();
   await page.locator('[data-node-id="idea"]').click();
   assert.equal(await page.getByRole("textbox", { name: "Agent 指令", exact: true }).inputValue(), "Browser-verified shared standing instructions");
+  await page.getByRole("button", { name: /新增 Gate/ }).click();
+  const gateDialog = page.getByRole("dialog", { name: "新增 Gate 配置" });
+  await gateDialog.getByLabel("Gate ID", { exact: true }).fill("evidence-gate");
+  await gateDialog.getByLabel("Gate 名称", { exact: true }).fill("证据检查");
+  await gateDialog.getByLabel("检查代码").fill('print("actual evidence")');
+  await gateDialog.getByRole("checkbox", { name: "idea", exact: true }).check();
+  await gateDialog.getByRole("button", { name: "保存 Gate" }).click();
+  const gateInspector = page.locator(".inspector > .workflow-gate-editor");
+  const gateScroll = gateInspector.locator(".gate-form-scroll");
+  const gateBounds = await gateScroll.boundingBox();
+  assert.ok(gateBounds);
+  await page.mouse.move(gateBounds.x + gateBounds.width / 2, gateBounds.y + gateBounds.height / 2);
+  await page.mouse.wheel(0, 1800);
+  await page.waitForFunction(() => document.querySelector(".inspector > .workflow-gate-editor .gate-form-scroll")?.scrollTop > 0);
+  await gateInspector.locator(".gate-advanced summary").click();
+  await gateInspector.getByLabel("Gate 硬规则").fill("[]");
+  await gateInspector.getByRole("button", { name: "保存 Gate" }).click();
+  assert.equal(await gateInspector.getByRole("alert").isVisible(), true);
+  await page.screenshot({ path: path.join(output, "gate-inspector-scroll.png"), fullPage: true });
   assert.deepEqual(errors, []);
   assert.equal(git("rev-parse", "HEAD"), sourceSha, "Source commit changed during acceptance");
   assert.equal(Boolean(git("status", "--porcelain", "--untracked-files=no")), sourceTrackedDirty, "Tracked source state changed during acceptance");
-  const captures = await Promise.all(["scoped-desktop.png", "scoped-compact.png", "scoped-edge-kinds.png"].map(async (filename) => {
+  const captures = await Promise.all(["scoped-desktop.png", "scoped-compact.png", "scoped-edge-kinds.png", "gate-inspector-scroll.png"].map(async (filename) => {
     const data = await readFile(path.join(output, filename));
     return { filename, bytes: data.length, sha256: createHash("sha256").update(data).digest("hex") };
   }));
   const manifest = { kind: "scoped-shared-canvas-browser-v1", status: "passed", sourceSha, sourceTrackedDirty,
-    capturedAt: new Date().toISOString(), checks: ["shared canvas", "Input/Finish labels", "3 parallel edges and bundled selection", "Loop editing and undo", "edge editing and undo", "shared Agent cancel/apply", "nested breadcrumbs", "desktop/compact layout", "outer Agent config persistence"],
+    capturedAt: new Date().toISOString(), checks: ["shared canvas", "Input/Finish labels", "3 parallel edges and bundled selection", "Loop editing and undo", "edge editing and undo", "shared Agent cancel/apply", "nested breadcrumbs", "desktop/compact layout", "outer Agent config persistence", "Gate inspector wheel scroll and validation"],
     viewports: [{ width: 1800, height: 1100 }, { width: 1200, height: 900 }], captures, errors, output };
   await writeFile(path.join(output, "scoped-canvas-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(JSON.stringify({ ...manifest, captures: captures.map((capture) => capture.filename) }));

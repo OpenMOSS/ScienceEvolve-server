@@ -27,7 +27,7 @@ The SDK does not include Web pages. Web / Server does not accept arbitrary absol
 Main has two control modes:
 
 - `autonomous`: initial scheduling, deterministic routing, final acceptance, failure recovery, user input, Loop batch returns, and continuation after reconfiguration. It can select any configured ordinary Agent. Completion, user requests, and Workflow changes each require that turn's separate capability.
-- `weak-branch`: handles multiple weak-edge candidates from one source Agent. It can select only the current candidates and cannot request user input or change the Workflow.
+- `weak-branch`: handles multiple weak-edge candidates from one source Agent. It can select only the current candidates and cannot request user input. Workflow editing depends separately on the project's Main authorization.
 
 A `finish` candidate does not permit a weak branch to finish directly. Selecting it schedules a new autonomous final-acceptance turn; completion authority exists only in a valid terminal context. Main and Control tools use the same capability snapshot, aligning prompts, tool schemas, and server validation.
 
@@ -57,11 +57,11 @@ Without Git, Agents share the business workspace and `Memory.md`. Git projects u
 
 ### Advanced dynamic reconfiguration
 
-`orchestration.allowMainReconfiguration` defaults to `false` and must be enabled by the user before execution. When enabled, only an authorized autonomous Main turn can expose `apply_workflow`. Main cannot change the authorization switch.
+`orchestration.allowMainReconfiguration` defaults to `false`. When enabled, actual Main can edit the global Workflow in outer turns, weak-branch turns, and v3 group-management turns. Main receives global topology, Agent configuration, and state references even when editing is disabled. Authorized turns expose the bound `workflow.json` proposal and `apply_workflow`; Main decides whether to use them. Non-Main Leaders cannot edit the Workflow, and historical `allowLeaderReconfiguration` values grant no authority. Main cannot change authorization switches. Local routing, skip, completion, and execution permissions remain independently scoped.
 
 Editable fields include:
 
-- Ordinary Agent roster, input targets, routing, decision plans, Loops, termination policy, result format, and user-intervention policy.
+- Ordinary Agent roster, input targets, routing, decision plans, Loops, termination policy, and result format.
 - Agent instructions, model, Harness, configured `gatewayId`, Skills, automatic Skills, MCP, `experimentMcp`, and `decisionBy`.
 - New Project Skill and Project stdio MCP definitions, and Agent resource assignments.
 

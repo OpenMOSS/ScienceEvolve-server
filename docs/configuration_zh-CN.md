@@ -258,7 +258,7 @@ Harness 的用途按 Catalog 能力分别发布，不会因为能运行工作流
 | 会话持久化 | Worker 是否在同一项目内复用线程；Main 始终持久化。 |
 | 弱边决策 | 普通弱边由 Main 或当前 Worker 决定；Main 固定由自身决策。 |
 
-`main` 是每个项目唯一且必需的 Agent，不能删除或重命名。它负责项目级调度、用户输入、失败恢复和完成判断。每轮 Main 都使用服务端生成的唯一 capability 快照：`autonomous` 可在全部普通 Agent 中调度，`weak-branch` 只能选择本轮弱边候选；完成、用户介入和动态重配置权限分别受快照控制。项目正式启动后，直接更新配置的用户 API 保持锁定；用户可通过专用 Workflow 调整机制提交允许范围内的变更（见 [Project Explainer](#推荐配置与-project-explainer)）。若要由 Main 自主改编排，还必须在创建前显式开启“允许 Main 动态重配置（高级权限）”，autonomous Main 才能通过服务端生成的 `workflow.json` 提交白名单内的变更。该开关默认关闭，Main 不能自行开启或关闭。
+`main` 是每个项目唯一且必需的 Agent，不能删除或重命名。它负责项目级调度、用户输入、失败恢复和完成判断。每轮 Main 都使用服务端生成的唯一 capability 快照：`autonomous` 可在全部普通 Agent 中调度，`weak-branch` 只能选择本轮弱边候选；完成、用户介入和动态重配置权限分别受快照控制。项目正式启动后，直接更新配置的用户 API 保持锁定；用户可通过专用 Workflow 调整机制提交允许范围内的变更（见 [Project Explainer](#推荐配置与-project-explainer)）。若要由 Main 自主改编排，还必须在创建前显式开启“允许 Main 动态重配置（高级权限）”，Main 才能通过服务端生成的全局 `workflow.json` 提交允许范围内的变更，包括弱边与 v3 协作组管理回合。该开关默认关闭，Main 不能自行开启或关闭。
 
 ### Workflow
 
@@ -283,7 +283,7 @@ Workflow 画布主要配置以下内容：
 - 用强边闭合确定路径，画布会自动建立 Loop；再设置每批迭代数和退出目标。
 - 哪个 Agent 负责触发结束判断。
 - 是否允许非 Main 终止 Agent 依据自然语言条件自动完成。
-- 是否允许 Main 在 autonomous 轮动态重配置（高级权限，默认关闭）。
+- 是否允许 Main 调整全局 Workflow，包括 v3 协作组管理回合（高级权限，默认关闭）。
 - 节点位置、端口和展示布局。
 
 强边表示完成后直接进入唯一目标；多条弱边表示候选路径，由配置的决策方选择。新建 Agent 或从模板添加副本时不自动创建出边，需要手动连接；Main 到全部 Worker 的分发边由系统维护，不受这一默认值影响。默认由 Main 验收终止；仅当非 Main 终止 Agent 显式开启“允许自动完成”且处于合法终止上下文时，它才获得受限完成能力，不会同时获得通用路由或高级权限。
@@ -292,7 +292,7 @@ Loop 不创建新节点。可编辑画布中，普通 Agent 的强边闭合为�
 
 Agent 后续调用的脚本网络沿用服务统一环境；旧文件中的 Agent 代理字段在读取时忽略，新配置不再提供逐 Agent 代理选择。
 
-开启高级权限后，服务端在允许重配置的 autonomous Main 轮提供 `workflow.json` 提案。文件包含宏观 `orchestration`、可编辑 Agent 字段、Project Skill/MCP、只读 `lockedRuntime`、编辑说明和防止覆盖新状态的 `baseHash`。Main 可修改 Agent 名单、输入、路由、Loop、终止、结果形式、用户介入、instructions、model、Harness、已配置 `gatewayId`、Skills、MCP、SII 工具选择 `experimentMcp` 和弱边决策归属 `decisionBy`；permission、Web Search、Session 持久策略、Harness reasoning、Gateway reasoning、凭据、运行快照及授权开关保持锁定。已接受的 Project Skill/MCP 定义保持不可变；调整内容时新增定义名称并更新 Agent 引用。
+Main 在 v3 协作组管理回合及高级权限关闭时仍能读取全局 Workflow、Agent 配置和状态。开启高级权限后，服务端为 Main 提供全局 `workflow.json` 提案，是否调整由 Main 自己决定。文件包含宏观 `orchestration`、可编辑 Agent 字段、Project Skill/MCP、只读 `lockedRuntime`、编辑说明和防止覆盖新状态的 `baseHash`。Main 可修改 Agent 名单、输入、路由、Loop、终止、结果形式、instructions、model、Harness、已配置 `gatewayId`、Skills、MCP、SII 工具选择 `experimentMcp` 和弱边决策归属 `decisionBy`；非 Main Leader 不得改图，历史组级 `allowLeaderReconfiguration` 元数据不授予权限。permission、Web Search、Session 持久策略、Harness reasoning、Gateway reasoning、凭据、运行快照、用户介入授权及 Main 授权开关保持锁定。全局改图权限不扩大本组路由、skip 或完成权限。已接受的 Project Skill/MCP 定义保持不可变；调整内容时新增定义名称并更新 Agent 引用。
 
 Main 编辑后必须以 `apply_workflow` 作为本轮唯一终结控制动作。服务端先校验完整文档、引用、图和运行能力，再通过 invocation journal 原子提交；过期 base hash 或任一错误都保留旧状态，不会部分应用。成功后保存已接受的配置并继续调度，后续调用按运行时的会话连续性规则加载新配置。动态编排没有一次性限制，只要后续 Main capability 仍允许，就能继续提交。
 

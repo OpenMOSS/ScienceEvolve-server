@@ -28,7 +28,7 @@ Git 协作通过组内 Workflow 和嵌套协作组组织并行路径。相同 Ag
 
 ![Evolver 位于工作流内部，依据反馈修改流程配置](images/self-evolving-workflow.png)
 
-当前 Evolver 对应获得授权的 Main。创建前开启 `orchestration.allowMainReconfiguration` 后，获准的 autonomous Main 轮可编辑系统生成的 `workflow.json` 提案，再调用 `apply_workflow`。Server 校验完整文档、图、引用、运行能力与基础版本，原子提交接受的配置；校验失败保留原状态。
+当前 Evolver 对应获得授权的 Main。创建前开启 `orchestration.allowMainReconfiguration` 后，获准的 Main 回合（包括弱边及 v3 协作组管理回合）可编辑系统生成的全局 `workflow.json` 提案，再调用 `apply_workflow`。是否调整由 Main 判断，保持当前图正常执行也合法；非 Main Leader 不得重配。Server 校验完整文档、图、引用、运行能力与基础版本，原子提交接受的配置；校验失败保留原状态。
 
 Main 可调整自身及其他 Agent 的可编辑配置；凭据、权限、会话与思考策略、授权开关由宿主管理。已接受的 Project Skill/MCP 内容不可同名覆盖，变更需创建新定义并更新引用。详见 [Workflow 范围](configuration_zh-CN.md#workflow)。流程变化是否改善研究表现，需要实际任务评估。
 

@@ -301,6 +301,43 @@ describe("NewProjectPage agent configuration", () => {
     vi.mocked(updateSavedResearchTask).mockReset();
   });
 
+  it("edits the same search tree from Workflow and the project page and includes it at launch", async () => {
+    vi.mocked(createProject).mockResolvedValue({ id: "prj_search_tree" } as Project);
+    const user = userEvent.setup();
+    render(<NewProjectPage onBack={vi.fn()} onCreated={vi.fn()} />);
+    await waitFor(() => expect(getAgentConfigPresets).toHaveBeenCalled());
+    fireEvent.change(screen.getByLabelText("项目名称"), { target: { value: "搜索树入口同步" } });
+    fireEvent.change(screen.getByLabelText("课题方向与具体要求"), { target: { value: "在相同的初始搜索树上记录研究方案与可验证的执行证据。" } });
+    await user.click(screen.getByRole("button", { name: "打开 Workflow 画布编辑器" }));
+    const workflow = screen.getByRole("dialog", { name: "编辑 Workflow 画布" });
+    await user.click(within(workflow).getByRole("button", { name: "编辑搜索树" }));
+    let dialog = screen.getByRole("dialog", { name: "编辑搜索树" });
+    expect(within(dialog).getByRole("checkbox", { name: "启用搜索树" })).not.toBeChecked();
+    await user.click(within(dialog).getByRole("checkbox", { name: "启用搜索树" }));
+    fireEvent.change(within(dialog).getByLabelText("根节点名称"), { target: { value: "推理优化" } });
+    await user.click(within(dialog).getByRole("button", { name: "添加方向" }));
+    fireEvent.change(within(dialog).getByLabelText("方向名称", { exact: true }), { target: { value: "计算优化" } });
+    await user.click(within(dialog).getByRole("button", { name: "返回 Workflow" }));
+    expect(workflow).toBeInTheDocument();
+    await user.click(workflow.querySelector<HTMLButtonElement>(".canvas-close-button")!);
+    await user.click(screen.getByRole("button", { name: "展开搜索树规划" }));
+    expect(screen.getByRole("button", { name: "方向：计算优化" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "方向：计算优化" }));
+    fireEvent.change(screen.getByLabelText("方向名称", { exact: true }), { target: { value: "计算与缓存优化" } });
+    await user.click(screen.getByRole("button", { name: "打开 Workflow 画布编辑器" }));
+    await user.click(within(screen.getByRole("dialog", { name: "编辑 Workflow 画布" })).getByRole("button", { name: "编辑搜索树" }));
+    dialog = screen.getByRole("dialog", { name: "编辑搜索树" });
+    expect(within(dialog).getByRole("button", { name: "方向：计算与缓存优化" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "编辑搜索树" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "编辑 Workflow 画布" })).toBeInTheDocument();
+    await user.click(screen.getByRole("dialog", { name: "编辑 Workflow 画布" }).querySelector<HTMLButtonElement>(".canvas-close-button")!);
+    await user.click(screen.getByRole("button", { name: "创建并启动研究" }));
+    await waitFor(() => expect(createProject).toHaveBeenCalledOnce());
+    expect(vi.mocked(createProject).mock.calls[0][0].searchTree).toEqual({ root: { name: "推理优化" },
+      directions: [{ id: expect.any(String), kind: "direction", parentId: "root", name: "计算与缓存优化" }] });
+  });
+
   it("shows matching read-only Harness prompts in text configuration and the canvas without changing user instructions", async () => {
     const user = userEvent.setup();
     renderExpanded(<NewProjectPage onBack={vi.fn()} onCreated={vi.fn()} />);

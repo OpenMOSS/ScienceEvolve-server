@@ -28,7 +28,7 @@ The task loop uses execution feedback to improve methods. The process loop uses 
 
 ![Evolver lives inside the workflow and updates its configuration using feedback](images/self-evolving-workflow-en.png)
 
-The current Evolver is an authorized Main. Enable `orchestration.allowMainReconfiguration` before creation. Permitted autonomous Main turns can edit the generated `workflow.json` proposal and call `apply_workflow`. Server validates the entire document, graph, references, runtime capabilities, and base version before accepting it atomically. Failed validation preserves the previous state.
+The current Evolver is an authorized Main. Enable `orchestration.allowMainReconfiguration` before creation. Authorized Main turns, including weak-branch and v3 group-management turns, can edit the generated global `workflow.json` proposal and call `apply_workflow`. Main decides whether adjustment is useful; normal execution without changing the graph remains valid. Non-Main Leaders cannot reconfigure. Server validates the entire document, graph, references, runtime capabilities, and base version before accepting it atomically. Failed validation preserves the previous state.
 
 Main can change its own and other Agents' editable settings. Credentials, permissions, session/reasoning policies, and authorization remain managed by the host. Accepted Project Skill/MCP content cannot be overwritten under the same name; add a definition and update references for a new version. See the [Workflow scope](configuration.md#workflow). Actual task evaluation determines whether the change improves research.
 

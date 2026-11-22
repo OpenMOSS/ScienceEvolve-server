@@ -425,6 +425,29 @@ describe("HTTP API", () => {
     }
   });
 
+  it("updates running Agent configuration over HTTP and retains the active invocation", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "scienceevolve-runtime-config-api-")); temporaryRoots.push(root);
+    const eventHub = new EventHub(), storage = new ProjectStorage(root, eventHub), skills = testSkillCatalog();
+    const orchestrator = new Orchestrator(storage, skills, new HoldingRunner(), { retryBaseMs: 1, retryMaxMs: 10 });
+    await orchestrator.initialize();
+    const app = createApp({ orchestrator, storage, eventHub, skills,
+      config: { modelSuggestions: ["test-model"], maxEventHistory: 2 } });
+    try {
+      const project = await orchestrator.createProject({ title: "Runtime configuration", requirement: "Keep this current task and accept future configuration", agents: { main: { skills: [], autoSkills: [] } } });
+      await vi.waitFor(async () => expect((await orchestrator.getProject(project.id))?.configurationLocked).toBe(true));
+      const before = (await orchestrator.getProject(project.id))!;
+      const model = await request(app).patch(`/api/projects/${project.id}/agents/models`).send({ models: { main: "explicit-next-model" } }).expect(200);
+      expect(model.body.project.agents.main.model).toBe("explicit-next-model");
+      const prompt = await request(app).patch(`/api/projects/${project.id}/agents/config`).send({ agents: { main: { instructions: "Explicit next Prompt" } } }).expect(200);
+      expect(prompt.body.project.agents.main).toMatchObject({ model: "explicit-next-model", instructions: "Explicit next Prompt" });
+      expect(prompt.body.project.activeInvocationId).toBe(before.activeInvocationId);
+      expect((await storage.loadState(project.id)).agents.main.instructions).toBe("Explicit next Prompt");
+      const updates = (await storage.readEvents(project.id)).filter(event => event.type === "project.config.updated");
+      expect(updates).toHaveLength(2);
+      expect(updates.every(event => event.data?.effectiveFor === "future-invocations")).toBe(true);
+    } finally { await orchestrator.shutdown(); }
+  });
+
   it("validates creation, exposes project snapshots, replays SSE, and cancels explicitly", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "scienceevolve-api-"));
     temporaryRoots.push(root);
@@ -1004,19 +1027,19 @@ describe("HTTP API", () => {
           })
         }
       );
-      expect(modelUpdateResponse.status).toBe(409);
-      expect(await modelUpdateResponse.json()).toEqual({
-        error: "Project configuration is locked after startup"
-      });
+      expect(modelUpdateResponse.status).toBe(200);
+      expect(await modelUpdateResponse.json()).toMatchObject({ project: { agents: {
+        main: { model: "gpt-5.6-terra" }, execution: { model: "gpt-5.6-sol" }
+      } } });
       const persistedAfterModelUpdate = await storage.loadState(projectId);
-      expect(persistedAfterModelUpdate.agents.main.model).toBe("test-model");
+      expect(persistedAfterModelUpdate.agents.main.model).toBe("gpt-5.6-terra");
       expect(
         (await storage.readEvents(projectId)).some(
-          (event) => event.type === "project.config.updated"
+          (event) => event.type === "project.config.updated" && event.data?.effectiveFor === "future-invocations"
         )
-      ).toBe(false);
+      ).toBe(true);
 
-      const incompleteRuntimeConfig = await fetch(
+      const partialRuntimeConfig = await fetch(
         `${base}/api/projects/${projectId}/agents/config`,
         {
           method: "PATCH",
@@ -1026,7 +1049,7 @@ describe("HTTP API", () => {
           })
         }
       );
-      expect(incompleteRuntimeConfig.status).toBe(409);
+      expect(partialRuntimeConfig.status).toBe(200);
 
       const runtimeConfigResponse = await fetch(
         `${base}/api/projects/${projectId}/agents/config`,
@@ -1067,7 +1090,7 @@ describe("HTTP API", () => {
       expect(runtimeConfigResponse.status).toBe(400);
       const persistedRuntimeConfig = await storage.loadState(projectId);
       expect(persistedRuntimeConfig.agents.main).not.toHaveProperty("reasoningEffort");
-      expect(persistedRuntimeConfig.agents.main.model).toBe("test-model");
+      expect(persistedRuntimeConfig.agents.main.model).toBe("gpt-5.6-sol");
 
       const prematureArchive = await fetch(
         `${base}/api/projects/${projectId}/archive`,

@@ -98,7 +98,8 @@ export interface ScopedCollaboration {
   parentGroupId?: string;
   leaderAgentId: AgentId;
   decisionBy?: "main" | "agent";
-  allowLeaderReconfiguration: boolean;
+  /** Preserved snapshot metadata; does not grant workflow adjustment authority. */
+  allowLeaderReconfiguration?: boolean;
   workflow: ScopedWorkflow;
 }
 

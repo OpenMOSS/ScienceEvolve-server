@@ -28,6 +28,7 @@ import {
 } from "./collaboration-runtime.js";
 import { createProductionCollaborationResidentLauncher } from "./collaboration-resident-launcher.js";
 import { createApp } from "./app.js";
+import { installServiceShutdown } from "./service-shutdown.js";
 import {
   GatewayStore,
   systemGatewayInputFromEnvironment
@@ -172,10 +173,7 @@ async function main(): Promise<void> {
   });
   computeUsageMonitor.start();
 
-  let shuttingDown = false;
-  const shutdown = async (signal: string) => {
-    if (shuttingDown) return;
-    shuttingDown = true;
+  installServiceShutdown(async signal => {
     console.log(`Received ${signal}; closing HTTP server`);
     server.close();
     await gatewayStore.close();
@@ -187,18 +185,6 @@ async function main(): Promise<void> {
     agentToolRecommendations.shutdown();
     await orchestrator.shutdown();
     await siiExperiments.stop();
-    process.exit(0);
-  };
-  const forceExit = () => {
-    setTimeout(() => process.exit(1), 15_000).unref();
-  };
-  process.once("SIGINT", () => {
-    forceExit();
-    void shutdown("SIGINT");
-  });
-  process.once("SIGTERM", () => {
-    forceExit();
-    void shutdown("SIGTERM");
   });
 }
 

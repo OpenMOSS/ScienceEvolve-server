@@ -85,7 +85,7 @@ function displayProject(value: unknown): Project {
         groups: array(scoped.groups).map((value) => {
           const group = object(value);
           return { id: string(group.id), parentGroupId: optionalString(group.parentGroupId),
-            leaderAgentId: "", allowLeaderReconfiguration: false,
+            leaderAgentId: "",
             workflow: { nodes: [], input: { source: "input", edges: [] }, routes: {} } };
         }) } : undefined,
       input: { source: "input", target: "" }, routes: {}, decisionPlans: {}, allowUserIntervention: false,

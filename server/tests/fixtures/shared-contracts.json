@@ -27,7 +27,7 @@
       "schemaVersion": 1,
       "controlMode": "weak-branch",
       "routeCandidates": ["main", "writing", "finish"],
-      "canReconfigure": false,
+      "canReconfigure": true,
       "canComplete": false,
       "canRequestUser": false
     }

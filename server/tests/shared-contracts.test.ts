@@ -28,6 +28,17 @@ describe("shared host contracts", () => {
     });
   }
 
+  it.each(["initial", "weak-branch", "route-missing", "exception", "termination", "loop-limit"] as const)(
+    "uses only the project adjustment grant in Main's %s invocation", wakeReason => {
+      for (const allowMainReconfiguration of [false, true]) {
+        const value = deriveMainCapabilities({ wakeReason, configuredAgents: ["main", "review", "execution"],
+          candidateAgents: ["review", "execution"], allowMainReconfiguration, allowUserIntervention: false, completionEligible: false });
+        expect(value.canReconfigure).toBe(allowMainReconfiguration);
+        expect(value.canComplete).toBe(false); expect(value.canRequestUser).toBe(false);
+      }
+    }
+  );
+
   it("keeps the published loop and reconfiguration event names stable", () => {
     expect(SHARED_RUNTIME_EVENT_NAMES).toEqual([
       "workflow.loop.batch.started",

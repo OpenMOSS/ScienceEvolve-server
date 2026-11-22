@@ -39,7 +39,6 @@ export function upgradeLegacyFlatCollaborations(
       id: group.id,
       leaderAgentId,
       decisionBy: "main" as const,
-      allowLeaderReconfiguration: false,
       workflow: {
         nodes,
         input: {

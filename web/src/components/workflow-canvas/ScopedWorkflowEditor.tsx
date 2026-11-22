@@ -813,8 +813,7 @@ function ScopedWorkflowEditorSurface({
         </select></label>
         <small>“组内 Leader”由当前组的 Leader 选边；“自身选择”由子组 Leader 选边。</small>
         <small>Leader 负责协调，不能同时担任本组或后代组的业务节点。</small>
-        <label className="scoped-switch"><input type="checkbox" role="switch" aria-label="允许 Leader 自动调整本组 Workflow" checked={group.allowLeaderReconfiguration} disabled={locked} onChange={(event) => mutate((_draft, current) => { current.allowLeaderReconfiguration = event.target.checked; })} />允许 Leader 自动调整本组 Workflow</label>
-        <small>仅允许调整本组范围，不扩大现有权限。</small>
+        <small>仅 Main 可按项目的调整权限修改全局 Workflow，包括组内结构；是否调整由 Main 决定。</small>
         </section>
         <section className="scoped-settings-card" aria-label="协作组直接成员">
         <h4>直接成员<span className="scoped-count">{workflow.nodes.length}</span></h4>

@@ -1,0 +1,60 @@
+.gate-create-entry { display: flex; align-items: center; gap: 10px; width: 100%; margin: 8px 0; padding: 12px; text-align: left; border: 1px solid #e9d7b5; border-radius: 10px; color: var(--amber); background: #fffaf1; cursor: pointer; }
+.gate-create-entry:hover:not(:disabled) { border-color: var(--amber); background: var(--amber-soft); }
+.gate-create-entry > span { display: grid; flex: 1; gap: 4px; }
+.gate-create-entry strong { font-size: 12px; }
+.gate-create-entry small { color: var(--muted); font-size: 10px; }
+.gate-dialog-backdrop { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: 24px; background: rgba(22, 35, 28, .42); backdrop-filter: blur(4px); }
+.workflow-gate-editor { min-width: 0; color: var(--ink); }
+.workflow-gate-editor.gate-dialog { display: flex; flex-direction: column; width: min(680px, 100%); max-height: calc(100dvh - 48px); overflow: hidden; padding: 0; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow-md); }
+.workflow-gate-editor .gate-heading { display: flex; align-items: flex-start; gap: 12px; padding: 18px 0; border-bottom: 1px solid var(--line-soft); }
+.gate-dialog .gate-heading { flex-shrink: 0; padding: 24px; background: linear-gradient(110deg, #fffaf1, var(--surface)); }
+.gate-heading > div { flex: 1; min-width: 0; }
+.gate-heading-icon { display: grid; flex-shrink: 0; place-items: center; width: 42px; height: 42px; border: 1px solid #ecd9b4; border-radius: 12px; color: var(--amber); background: var(--amber-soft); }
+.gate-heading small { color: var(--amber); font-size: 9px; font-weight: 750; letter-spacing: .15em; }
+.workflow-gate-editor .gate-heading h3 { margin: 5px 0; font-size: 18px; overflow-wrap: anywhere; }
+.workflow-gate-editor .gate-heading p { margin: 0; color: var(--muted); font-size: 12px; }
+.workflow-gate-editor fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.workflow-gate-editor .gate-form { display: grid; gap: 0; }
+.gate-dialog .gate-form-scroll { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.gate-dialog .gate-form { padding: 0 24px; }
+.gate-section { display: grid; gap: 14px; padding: 20px 0; }
+.gate-section + .gate-section { border-top: 1px solid var(--line-soft); }
+.gate-section h4 { display: flex; align-items: center; gap: 9px; margin: 0; font-size: 13px; }
+.gate-section h4 > span { color: var(--amber); font: 11px ui-monospace, monospace; }
+.gate-fields-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.workflow-gate-editor .field { display: grid; gap: 7px; margin: 0; font-size: 12px; }
+.workflow-gate-editor .field :is(input, select, textarea) { width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 12px; }
+.workflow-gate-editor .field textarea { resize: vertical; line-height: 1.7; }
+.workflow-gate-editor .field :disabled { color: var(--muted); background: var(--surface-soft); }
+.gate-methods { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.gate-methods button { display: grid; gap: 5px; padding: 14px; text-align: left; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: pointer; }
+.gate-methods button[aria-pressed="true"] { border-color: var(--amber); background: #fffaf1; box-shadow: inset 0 0 0 1px var(--amber); }
+.gate-methods svg { margin-bottom: 4px; color: var(--amber); }
+.gate-methods strong { font-size: 12px; }
+.gate-methods small { font-size: 10px; color: var(--muted); }
+.workflow-gate-editor .field .gate-code { font: 12px/1.7 ui-monospace, SFMono-Regular, Consolas, monospace; background: #f7f9f7; tab-size: 2; }
+.workflow-gate-editor .gate-hint { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.75; overflow-wrap: anywhere; }
+.gate-targets legend { margin-bottom: 9px; font-size: 12px; font-weight: 650; }
+.gate-targets legend small { margin-left: 6px; font-size: 10px; font-weight: 400; color: var(--muted); }
+.gate-target-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; max-height: 220px; overflow: auto; }
+.workflow-gate-editor .gate-target-list label { display: flex; align-items: center; gap: 8px; padding: 9px; border: 1px solid var(--line); border-radius: 7px; font-size: 11px; cursor: pointer; }
+.workflow-gate-editor .gate-target-list input { flex: 0 0 auto; width: 14px; height: 14px; margin: 0; accent-color: var(--green); }
+.gate-target-list label > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.gate-target-list label.is-selected { border-color: #9ebdaa; background: var(--green-soft); color: var(--green-dark); }
+.gate-advanced { border: 1px solid var(--line); border-radius: 9px; padding: 12px; }
+.gate-advanced summary { cursor: pointer; font-size: 12px; font-weight: 650; }
+.gate-advanced summary span { margin-left: 5px; font-size: 10px; color: var(--muted); font-weight: 400; }
+.gate-advanced[open] summary { margin-bottom: 14px; }
+.gate-advanced .gate-hint { margin-top: 10px; }
+.gate-actions { display: grid; flex-shrink: 0; gap: 12px; padding: 16px 0; border-top: 1px solid var(--line-soft); }
+.gate-action-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.gate-dialog .gate-actions { padding: 16px 24px; background: var(--surface); }
+.workflow-gate-editor .gate-error { max-height: 120px; overflow: auto; margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--danger-soft); color: var(--danger); font-size: 12px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .gate-dialog-backdrop { padding: 10px; }
+  .workflow-gate-editor.gate-dialog { max-height: calc(100dvh - 20px); border-radius: 12px; }
+  .gate-dialog .gate-heading { padding: 18px; }
+  .gate-dialog .gate-form { padding: 0 18px; }
+  .gate-dialog .gate-actions { padding: 14px 18px; }
+  .gate-fields-row { grid-template-columns: minmax(0, 1fr); }
+}

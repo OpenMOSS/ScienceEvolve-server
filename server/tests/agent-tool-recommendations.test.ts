@@ -64,12 +64,11 @@ describe("single Agent tool recommendations", () => {
         routes: { same_worker: [{ target: "finish", kind: "strong" }] }, loops: [{ id: "repeat", from: "same_worker", to: "same_worker", exitTo: "finish", maxIterations: 2 }] } }
     ] };
     expect((await service.recommend(current, new AbortController().signal)).selection.experimentMcp).toBe(true);
-    expect(explainer.generateRecommendation.mock.calls[0]![0].evidence).toMatchObject({ businessWorker: true,
-      task: { orchestration: { scopedWorkflow: current.orchestration.scopedWorkflow } } });
+    expect(explainer.generateRecommendation.mock.calls[0]![0].evidence).toMatchObject({ task: { orchestration: { scopedWorkflow: current.orchestration.scopedWorkflow } } });
     // Remove the Worker occurrence but retain the same identity as a Leader.
     current.orchestration.scopedWorkflow.rootAgentIds = ["main"];
     current.orchestration.scopedWorkflow.groups[1]!.workflow.nodes = [];
-    await expect(service.recommend(current, new AbortController().signal)).rejects.toMatchObject({ status: 502 });
+    expect((await service.recommend(current, new AbortController().signal)).selection.experimentMcp).toBe(true);
   });
 
   it("uses only accepted sanitized project resources and the target's own custom MCP", async () => {
@@ -100,13 +99,13 @@ describe("single Agent tool recommendations", () => {
     expect(explainer.generateRecommendation).toHaveBeenCalledTimes(2);
   });
 
-  it("rejects unsupported target Harness capabilities and Main experiment selection", async () => {
+  it("rejects unsupported Harness capabilities and accepts explicit Main experiment selection", async () => {
     const { service, harnesses } = setup({ ...empty(), skills: ["builtin:verify"] }); const current = await input(service);
     harnesses.find(item => item.id === "codex")!.capabilities.skills = false;
     current.catalogFingerprint = (await service.catalog()).fingerprint;
     await expect(service.recommend(current, new AbortController().signal)).rejects.toMatchObject({ status: 502 });
     const main = setup({ ...empty(), experimentMcp: true }); const mainInput = await input(main.service); mainInput.targetAgent = "main";
-    await expect(main.service.recommend(mainInput, new AbortController().signal)).rejects.toMatchObject({ status: 502 });
+    expect((await main.service.recommend(mainInput, new AbortController().signal)).selection.experimentMcp).toBe(true);
   });
 
   it("gives its one regeneration a precise missing-field diagnostic without changing the draft", async () => {

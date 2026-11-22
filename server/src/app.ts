@@ -1680,24 +1680,12 @@ export function createApp(dependencies: AppDependencies) {
           artifactPath,
           exactBinding
         );
-        const isDisplayed = !workspaceId && project.display && [
-          project.display.primary,
-          ...project.display.items
-        ].some((item) =>
-          item.agent === agent && item.path === workspaceArtifact.relativePath
-        );
         const published = !workspaceId ? project.artifacts?.filter((artifact) =>
           artifact.agent === agent &&
           artifact.path === workspaceArtifact.relativePath &&
           (!project.git?.enabled || ((!artifactId || artifact.id === artifactId) &&
           (!commitSha || artifact.gitSource?.commitSha === commitSha)))
         ).reverse().sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)).at(0) : undefined;
-        if (isDisplayed && !published) {
-          response.status(409).json({
-            error: "Displayed artifact is no longer present in the published catalog"
-          });
-          return;
-        }
         if (published) {
           try {
             await storage.resolvePublishedArtifactRecord(

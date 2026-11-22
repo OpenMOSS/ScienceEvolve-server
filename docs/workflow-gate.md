@@ -2,6 +2,8 @@
 
 Gate 是 Workflow 检查节点，在 `orchestration.gates` 中定义，出边仍放在同一作用域的 `routes`。Web 的根画布和协作组编辑器可创建、编辑和选择 Gate；运行视图显示原输入、实际结果、执行证据、所选路径和故障。SDK 导入、运行、CLI `workflow validate` 使用共同校验，`run.snapshot()` / CLI `run show` 的 `workflowGates` 保留同一批运行事实。
 
+在 Web 中点击「新增 Gate」打开独立弹窗，依次配置节点信息、检查方式、反馈与去向。代码检查和 Agent 检查通过卡片切换，出边目标使用复选项，硬规则 JSON 在可选详情中编辑。表单独立滚动，关闭、保存按钮和校验错误保留在可视区域；取消或 Escape 不保存草稿。选中已有 Gate 时可在画布右侧修改；右侧表单独立滚动，可访问底部出边和硬规则，标题及保存操作保持可见。Gate ID 不可更改。
+
 ```json
 {
   "id": "quality",

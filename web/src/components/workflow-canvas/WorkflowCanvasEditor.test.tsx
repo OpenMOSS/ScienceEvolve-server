@@ -301,8 +301,9 @@ describe("WorkflowCanvasEditor interactions", () => {
     expect(screen.getByText("2 个直接节点 · 2 条并行入口")).toBeInTheDocument();
     fireEvent.click(within(screen.getByLabelText("Research 组内 Workflow 编辑器")).getByRole("button", { name: "缩小画布" }));
     expect(view.latest().orchestration.scopedWorkflow?.groups[0]?.workflow.canvas?.viewport.zoom).toBeLessThan(.82);
-    fireEvent.click(screen.getByRole("switch", { name: "允许 Leader 自动调整本组 Workflow" }));
-    expect(view.latest().orchestration.scopedWorkflow?.groups[0]?.allowLeaderReconfiguration).toBe(true);
+    expect(screen.queryByRole("switch", { name: "允许 Leader 自动调整本组 Workflow" })).not.toBeInTheDocument();
+    expect(view.latest().orchestration.scopedWorkflow?.groups[0]).not.toHaveProperty("allowLeaderReconfiguration");
+    expect(screen.getByText(/仅 Main 可按项目的调整权限修改全局 Workflow/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "返回父图" }));
     expect(view.container.querySelector('[data-node-id="idea"]')).not.toBeNull();
     expect(view.container.querySelector('[data-node-id="execution"]')).not.toBeNull();
@@ -515,13 +516,14 @@ describe("WorkflowCanvasEditor interactions", () => {
     expect(view.latest().orchestration.scopedWorkflow?.groups[0]?.workflow.loops).toHaveLength(1);
     expect(view.latest().agents.idea.instructions).toBe("保留共享配置");
     fireEvent.click(within(toolbar).getByRole("button", { name: "撤销" }));
-    fireEvent.click(within(scoped).getByRole("switch", { name: "允许 Leader 自动调整本组 Workflow" }));
-    expect(view.latest().orchestration.scopedWorkflow?.groups[0]?.allowLeaderReconfiguration).toBe(true);
+    const originalName = view.latest().orchestration.collaborations?.[0]?.displayName;
+    fireEvent.change(within(scoped).getByLabelText("协作组显示名称"), { target: { value: "Updated research group" } });
+    expect(view.latest().orchestration.collaborations?.[0]?.displayName).toBe("Updated research group");
     expect(within(toolbar).getByRole("button", { name: "重做" })).toBeDisabled();
     fireEvent.keyDown(window, { key: "z", ctrlKey: true });
-    expect(view.latest().orchestration.scopedWorkflow?.groups[0]?.allowLeaderReconfiguration).toBe(false);
+    expect(view.latest().orchestration.collaborations?.[0]?.displayName).toBe(originalName);
     fireEvent.keyDown(window, { key: "z", ctrlKey: true, shiftKey: true });
-    expect(view.latest().orchestration.scopedWorkflow?.groups[0]?.allowLeaderReconfiguration).toBe(true);
+    expect(view.latest().orchestration.collaborations?.[0]?.displayName).toBe("Updated research group");
     expect(view.latest().agents.idea.instructions).toBe("保留共享配置");
   });
 

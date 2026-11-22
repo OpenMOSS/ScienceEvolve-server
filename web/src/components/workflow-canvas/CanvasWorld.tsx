@@ -20,6 +20,7 @@ export interface CanvasWorldProps extends Omit<HTMLAttributes<HTMLDivElement>, "
   horizontalGuide?: number;
   hint?: ReactNode;
   empty?: ReactNode;
+  cornerLabel?: string;
   /** Ref for the transformed world layer, used by high-frequency viewport gestures. */
   worldRef?: Ref<HTMLDivElement>;
 }
@@ -43,6 +44,7 @@ export const CanvasWorld = forwardRef<HTMLDivElement, CanvasWorldProps>(function
     horizontalGuide,
     hint,
     empty,
+    cornerLabel = "WORKFLOW CANVAS",
     worldRef,
     className = "",
     style,
@@ -91,7 +93,7 @@ export const CanvasWorld = forwardRef<HTMLDivElement, CanvasWorldProps>(function
       )}
       {empty && <div className="canvas-empty">{empty}</div>}
       {!compact && hint && <div className="workflow-canvas-hint">{hint}</div>}
-      <div className="canvas-corner-label">WORKFLOW CANVAS</div>
+      <div className="canvas-corner-label">{cornerLabel}</div>
     </div>
   );
 });

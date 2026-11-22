@@ -16,7 +16,7 @@ projects; do not use them to migrate a running v2 project's native sessions.
 ## Supported deployment envelope
 
 - Run exactly one ScienceEvolve writer service for a data directory, on one host.
-  The collaboration authority is SQLite with a renewable service writer lease;
+  SQLite writer ownership is bound to a physical lifecycle lock and a durable epoch;
   multi-host writers and rolling active/active failover are unsupported.
 - Run the server, web application, database schema, Harness adapters, and
   resident process protocol from the same ScienceEvolve build. Mixed-version rolling
@@ -46,8 +46,8 @@ Before enabling Git-on collaboration:
    supported single host, are writable by the service account, and have enough
    free bytes and inodes for retained history.
 2. Verify that no other ScienceEvolve service owns or is trying to acquire the same
-   SQLite writer lease. A second writer must fail closed; do not work around the
-   lease by copying or editing the database.
+   SQLite writer lock. A second writer must fail closed; do not copy or edit the
+   database or its sidecar to take ownership.
 3. Open the global GitHub account library, complete OAuth login, verify the
    authenticated identity and `repo` scope, and select that account when
    creating the project. Do not put a token in a project record, command line,
@@ -241,9 +241,12 @@ overlapping on the same data directory.
 2. Let active turns reach a safe boundary. Allow projects to complete, or Pause
    them; use Cancel only when termination is intended. Wait for all requested
    cancellations and stop confirmations to settle.
-3. Stop the sole writer service cleanly. Confirm that the old service no longer
-   holds its database open and that no old-version server is being restarted by a
-   supervisor.
+3. Request shutdown of the sole writer. The Web host stops listening and waits;
+   a timeout or a repeated signal during a pending drain cannot authorize exit.
+   If shutdown reports unconfirmed cleanup, keep the service and its evidence
+   intact. After inspection, another Stop signal can recheck the drain without
+   relaunching work. Confirm the old service exited cleanly and is not being
+   restarted by a supervisor. A forced exit is not proof of native Stop.
 4. Before a writer protocol upgrade, take a storage-consistent snapshot after the
    writer is stopped. Keep the SQLite database, project state, repositories,
    linked worktrees, runtime evidence, and permissions together.

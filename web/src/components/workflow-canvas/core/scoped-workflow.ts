@@ -177,7 +177,6 @@ export function upgradeLegacyGroups(
       id: group.id,
       leaderAgentId,
       decisionBy: "main",
-      allowLeaderReconfiguration: false,
       workflow: {
         nodes,
         input: { source: "input", edges: nodes.map((ref) => ({ kind: "parallel", target: ref.nodeId })) },
@@ -229,7 +228,6 @@ export function addScopedGroup(
     ...(input.parentGroupId ? { parentGroupId: input.parentGroupId } : {}),
     leaderAgentId: input.leaderAgentId,
     decisionBy: "main",
-    allowLeaderReconfiguration: false,
     workflow: {
       nodes,
       input: { source: "input", edges: nodes.map((ref) => ({ kind: "parallel", target: ref.nodeId })) },

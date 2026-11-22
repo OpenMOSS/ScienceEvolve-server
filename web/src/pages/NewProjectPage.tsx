@@ -1,4 +1,5 @@
 import { SearchTreeEditor } from "../components/SearchTree";
+import { SearchTreeDialog } from "../components/SearchTreeDialog";
 import type { SearchTreeConfig } from "../types";
 import { FormEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
@@ -753,6 +754,7 @@ export function NewProjectPage({
   const [startRequested, setStartRequested] = useState(false);
   const [touched, setTouched] = useState(false);
   const [canvasEditorOpen, setCanvasEditorOpen] = useState(false);
+  const [searchTreeEditorOpen, setSearchTreeEditorOpen] = useState(false);
   const [gitEnabled, setGitEnabled] = useState(cachedTask?.git?.enabled ?? false);
   const [githubAccounts, setGithubAccounts] = useState<GitHubAccountRecord[]>([]);
   const [githubAccountsLoading, setGithubAccountsLoading] = useState(true);
@@ -2090,12 +2092,16 @@ export function NewProjectPage({
                     saveRevision={workflowSaveRevision}
                     onSave={() => { setCanvasEditorOpen(false); setSaveMenuOpen(true); }}
                     onClose={() => setCanvasEditorOpen(false)}
+                    onOpenSearchTree={() => setSearchTreeEditorOpen(true)}
                     saving={savingConfig || savingTask}
                   />
                 </div>
               </div>
             </div>
           )}
+
+          {canvasEditorOpen && searchTreeEditorOpen && <SearchTreeDialog value={searchTree} files={inputFiles}
+            onChange={value => { setSearchTree(value); setTouched(true); }} onClose={() => setSearchTreeEditorOpen(false)} />}
 
           <section className="form-section project-git-section">
             <div className="form-section-head">

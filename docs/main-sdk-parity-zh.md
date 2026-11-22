@@ -27,7 +27,7 @@ SDK 不包含 Web 页面，`main` 也不会接受调用方提供的任意服务�
 Main 只有两种控制模式：
 
 - `autonomous`：初始调度、确定路由、终止验收、异常恢复、用户输入、Loop 批次返回和重配置续跑。它可以选择任意已配置的普通 Agent；是否可以完成、请求用户或修改 Workflow，由本轮 capability 单独决定。
-- `weak-branch`：只处理某个来源 Agent 的多个弱边候选，只能选择本轮候选，不能请求用户或修改 Workflow。
+- `weak-branch`：只处理某个来源 Agent 的多个弱边候选，只能选择本轮候选，不能请求用户；Workflow 调整另由项目的 Main 授权决定。
 
 候选中出现 `finish` 不表示弱分支可以直接完成。选择 `finish` 只会安排新的 autonomous 终止验收；完成权限只在合法终止上下文中出现。Main 和 Control 工具使用同一份 capability 快照，Prompt、工具 schema 和服务端校验不会分别猜测权限。
 
@@ -57,11 +57,11 @@ Git-off 项目的 Agent 使用共享业务 Workspace 和 `Memory.md`；Git-on �
 
 ### 高级动态重配置
 
-`orchestration.allowMainReconfiguration` 默认 `false`，只能由用户在运行前开启。开启后，仅 autonomous Main 的本轮 capability 可以暴露 `apply_workflow`。Main 不能修改该开关。
+`orchestration.allowMainReconfiguration` 默认 `false`。开启后，实际 Main 在外层、弱边及 v3 协作组管理回合均有全局 Workflow 调整权限。关闭时 Main 仍获得全局拓扑、Agent 配置和状态引用；开启时提供绑定的 `workflow.json` 提案与 `apply_workflow`，是否调整由 Main 决定。非 Main Leader 不得调整，历史 `allowLeaderReconfiguration` 值不授予权限。Main 不能修改授权开关；本轮局部路由、skip、完成与执行权限仍独立校验。
 
 允许修改：
 
-- 普通 Agent 名单、输入目标、路由、决策计划、Loop、终止策略、结果格式和用户介入策略；
+- 普通 Agent 名单、输入目标、路由、决策计划、Loop、终止策略和结果格式；
 - Agent 的 instructions、model、harness、已配置的 gatewayId、Skills、自动 Skills、MCP、experimentMcp 和 decisionBy；
 - 新增 Project Skill 与 Project stdio MCP 定义，并调整 Agent 的资源分配。
 
