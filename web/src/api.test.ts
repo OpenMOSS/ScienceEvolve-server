@@ -53,6 +53,8 @@ import {
   refreshGatewayReasoning,
   getGitHubAccounts,
   getProject,
+  getExplainerConversationConfig,
+  getProjectExplainerConfig,
   getProjectExplainerHistory,
   getRecommendationExplainerConfig,
   getProjectEventBootstrap,
@@ -79,6 +81,7 @@ import {
   testGateway,
   testGatewayMatrix,
   updateProjectAgentConfigs,
+  updateExplainerConversationConfig,
   updateRecommendationExplainerConfig,
   updateProjectCollaborationGroup,
   updateProjectAgentModels,
@@ -214,6 +217,26 @@ describe("frontend API contract", () => {
     expect(body).not.toHaveProperty("advisor");
     fetchMock.mockImplementation(async () => jsonResponse({ selection: { ...selection, skills: [42] }, reasons: [], warnings: [] }));
     await expect(recommendAgentTools(input)).rejects.toThrow("返回格式无效");
+  });
+
+  it("preserves max reasoning effort across project and assistant Explainer config responses", async () => {
+    const config = { schemaVersion: 2, harness: "codex", nativeProtocol: "responses", gatewayProtocol: "responses",
+      model: "explainer-model", reasoningEffort: "max", revision: 3, updatedAt: "", available: true, routeMode: "direct" };
+    const projectId = `prj_${"b".repeat(32)}`;
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ config }))
+      .mockResolvedValueOnce(jsonResponse(config))
+      .mockResolvedValueOnce(jsonResponse(config));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getProjectExplainerConfig(projectId)).resolves.toEqual(config);
+    await expect(getExplainerConversationConfig(projectId)).resolves.toEqual(config);
+    const input = { harness: "codex", model: config.model, reasoningEffort: "max" as const };
+    await expect(updateExplainerConversationConfig(projectId, input)).resolves.toEqual(config);
+    expect(fetchMock.mock.calls[2]).toEqual([
+      `./api/explainer/conversations/${projectId}/config`,
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify(input) })
+    ]);
   });
 
   it("reads the shared draft/project Explainer config and preserves its recommendation fingerprint", async () => {

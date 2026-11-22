@@ -1452,6 +1452,8 @@ export interface ProjectExplainerHistory {
   active: boolean;
 }
 
+export type ProjectExplainerReasoningEffort = ReasoningEffort | "max";
+
 export interface ProjectExplainerRuntimeConfig {
   schemaVersion: 1 | 2;
   harness: AgentHarness;
@@ -1459,7 +1461,7 @@ export interface ProjectExplainerRuntimeConfig {
   nativeProtocol: AgentProtocol;
   gatewayProtocol: AgentProtocol;
   model: string;
-  reasoningEffort: ReasoningEffort;
+  reasoningEffort: ProjectExplainerReasoningEffort;
   revision: number;
   updatedAt: string;
   available: boolean;
@@ -1473,7 +1475,7 @@ export interface ProjectExplainerConfigInput {
   harness: AgentHarness;
   gatewayId?: string;
   model: string;
-  reasoningEffort?: ReasoningEffort;
+  reasoningEffort?: ProjectExplainerReasoningEffort;
   confirmHarnessSwitch?: boolean;
 }
 

@@ -33,7 +33,7 @@ async function setup() {
         text: "回答完成", data: { turnComplete: true } });
     }) };
   const app = express(); app.use(express.json());
-  registerExplainerAssistantRoutes(app, agent as unknown as ProjectExplainerPort & ProjectExplainerAssistantPort);
+  registerExplainerAssistantRoutes(app, { ...agent, assistantAgent: agent } as unknown as ProjectExplainerPort & ProjectExplainerAssistantPort);
   app.use((error: Error, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
     response.status(error instanceof ZodError ? 400 : 500).json({ error: error.message });
   });

@@ -165,6 +165,25 @@ afterEach(async () => {
 });
 
 describe("GitHubAccountStore", () => {
+  it("protects one-time web setup and reloads the saved OAuth configuration", async () => {
+    const directory = await root();
+    const store = new GitHubAccountStore(directory);
+    const key = "a".repeat(64);
+    const origin = new URL(callbackUrl).origin;
+    const config = { clientId: "fixture-client", clientSecret: "fixture-secret", callbackUrl };
+    await expect(store.configureOAuth(config, origin, key)).resolves.toBe(false);
+    await fs.writeFile(path.join(directory, "github-oauth-setup.key"), key, { mode: 0o600 });
+    await expect(store.configureOAuth(config, origin, "b".repeat(64))).resolves.toBe(false);
+    await expect(store.configureOAuth(config, "https://another.example.test", key)).rejects.toThrow("Callback URL");
+    await expect(store.configureOAuth(config, origin, key)).resolves.toBe(true);
+    await expect(store.configureOAuth(config, origin, key)).resolves.toBe(false);
+    const reloaded = new GitHubAccountStore(directory);
+    expect(reloaded.oauthConfigured()).toBe(true);
+    const authorization = new URL(reloaded.startAuthorization(origin).authorizationUrl);
+    expect(authorization.searchParams.get("redirect_uri")).toBe(callbackUrl);
+    expect(authorization.searchParams.has("client_secret")).toBe(false);
+  });
+
   it("requests deletion scope only in a separate account-bound authorization and rejects the wrong GitHub identity", async () => {
     const fake = new FakeGitHubOAuth(), store = storeAt(await root(), fake);
     fake.addAccount("initial", "initial-token", { id: 7, login: "alice" });

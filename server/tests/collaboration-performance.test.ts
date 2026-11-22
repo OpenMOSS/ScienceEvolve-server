@@ -203,6 +203,14 @@ describe("collaboration model performance", () => {
     await request.onOfficialHarnessEvent!({ ...tool, eventId: "resident-diagnostic", seq: 3, kind: "diagnostic", tool: undefined,
       diagnostic: { source: "adapter", level: "warning", message: "Public adapter detail" } });
     expect((await storage.readEvents(state.id)).at(-1)?.message).toBe("Public adapter detail");
+    const compact = await storage.readEventHistory(state.id, Number.MAX_SAFE_INTEGER, 200, true);
+    expect(compact.events).toHaveLength(2);
+    expect(compact.events[0]?.data).toMatchObject({ traceDetailDeferred: true, canonicalEvent: {
+      tool: { callId: "call", name: "read_file", status: "completed" }
+    } });
+    expect(JSON.stringify(compact)).not.toMatch(/Saved report content|Public adapter detail|report\.md/);
+    expect(await storage.readEventDetails(state.id, compact.events.map(event => event.seq)))
+      .toEqual(await storage.readEvents(state.id));
   });
 
   it("clears finished resident live output even when no model performance tracker was created", async () => {

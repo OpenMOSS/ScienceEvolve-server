@@ -8,8 +8,8 @@ import { redactTrace } from "./utils.js";
 
 export function registerExplainerAssistantRoutes(app: Express, explainer?: ProjectExplainerPort & Partial<ProjectExplainerAssistantPort>) {
   const ready = () => {
-    if (!explainer?.assistant || !explainer.createAssistantContext) throw Object.assign(new Error("Project Explainer 交互助手尚未配置。"), { status: 503 });
-    return { agent: explainer, store: explainer.assistant, create: explainer.createAssistantContext.bind(explainer) };
+    if (!explainer?.assistant || !explainer.assistantAgent || !explainer.createAssistantContext) throw Object.assign(new Error("Project Explainer 交互助手尚未配置。"), { status: 503 });
+    return { agent: explainer.assistantAgent, store: explainer.assistant, create: explainer.createAssistantContext.bind(explainer) };
   };
   const handle = (run: (request: Request, response: Response) => Promise<unknown>) => async (request: Request, response: Response, next: NextFunction) => {
     try { await run(request, response); }

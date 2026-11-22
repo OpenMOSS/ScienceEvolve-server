@@ -73,13 +73,23 @@ describe("workflow project progress", () => {
     expect(overallProgress(state({ orchestration, currentAgent: "writing" })).percent).toBe(25);
   });
 
-  it("handles cycles and scheduler loop exits without accumulating iterations", () => {
+  it("keeps the furthest completed position across loopbacks without accumulating iterations", () => {
     const orchestration = linearWorkflow();
     orchestration.routes.writing = [{ target: "execution", kind: "strong" }];
     orchestration.loops = [{ id: "experiment", from: "writing", to: "execution", maxIterations: 3, exitTo: "review" }];
     expect(overallProgress(state({ orchestration, currentAgent: "writing" })).percent).toBe(50);
-    expect(overallProgress(state({ orchestration, currentAgent: "execution", runCounts: { execution: 100, writing: 100 } })).percent).toBe(25);
+    expect(overallProgress(state({ orchestration, currentAgent: "execution", runCounts: { execution: 100, writing: 100 } })).percent).toBe(50);
     expect(overallProgress(state({ orchestration, currentAgent: "review" })).percent).toBe(75);
+  });
+
+  it("uses durable completed outer nodes from the current workflow revision", () => {
+    const orchestration = linearWorkflow();
+    const current = nodeRun("execution");
+    const review = { ...nodeRun("review"), status: "completed" as const };
+    const project = state({ orchestration, workflowRevision: 1, currentAgent: "execution",
+      activeNodeRunId: current.id, nodeRuns: [review, current] });
+    expect(overallProgress(project).percent).toBe(75);
+    expect(overallProgress({ ...project, workflowRevision: 2 }).percent).toBe(25);
   });
 
   it("does not advance for repeated calls, experiment waits, or legacy Explainer suggestions", () => {

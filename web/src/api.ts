@@ -587,7 +587,8 @@ function normalizeProjectExplainerConfig(value: unknown): ProjectExplainerRuntim
     !isAgentProtocol(record.nativeProtocol) ||
     !isAgentProtocol(record.gatewayProtocol) ||
     typeof record.model !== "string" ||
-    (record.reasoningEffort !== "low" && record.reasoningEffort !== "medium" && record.reasoningEffort !== "high" && record.reasoningEffort !== "xhigh") ||
+    (record.reasoningEffort !== "low" && record.reasoningEffort !== "medium" && record.reasoningEffort !== "high" &&
+      record.reasoningEffort !== "xhigh" && record.reasoningEffort !== "max") ||
     typeof record.revision !== "number" ||
     typeof record.updatedAt !== "string"
   ) throw new Error("服务未返回有效的 Project Explainer 配置");
@@ -859,9 +860,11 @@ export async function getWorkflowReplayEventPage(projectId: string, input: { bef
 
 export async function getProjectEventBootstrap(
   projectId: string,
-  limit = 1_000
+  limit = 1_000,
+  deferDetails = false
 ): Promise<ProjectEventBootstrap> {
   const params = new URLSearchParams({ limit: String(limit) });
+  if (deferDetails) params.set("detail", "deferred");
   const result = await request(
     `/api/projects/${encodeURIComponent(projectId)}/events/bootstrap?${params}`
   );
@@ -890,13 +893,18 @@ export async function getProjectEventHistory(
   projectId: string,
   before: number,
   limit = 1_000,
-  view?: "timeline"
+  view?: "timeline" | "messages",
+  deferDetails = false,
+  filters?: { agent?: string; keyword?: string }
 ): Promise<ProjectEventHistoryPage> {
   const params = new URLSearchParams({
     before: String(before),
     limit: String(limit)
   });
   if (view) params.set("view", view);
+  if (deferDetails) params.set("detail", "deferred");
+  if (filters?.agent) params.set("agent", filters.agent);
+  if (filters?.keyword) params.set("keyword", filters.keyword);
   const result = await request(
     `/api/projects/${encodeURIComponent(projectId)}/events/history?${params}`
   );
@@ -908,6 +916,23 @@ export async function getProjectEventHistory(
     events: normalizedEventList(record.events),
     hasMore: record.hasMore === true
   };
+}
+
+export async function getProjectEventDetails(projectId: string, sequences: number[], signal: AbortSignal): Promise<AgentEvent[]> {
+  const events: AgentEvent[] = [];
+  for (let index = 0; index < sequences.length; index += 256) {
+    const batch = sequences.slice(index, index + 256);
+    const result = await request(`/api/projects/${encodeURIComponent(projectId)}/events/details`, {
+      method: "POST",
+      body: JSON.stringify({ sequences: batch }),
+      signal
+    }) as { events?: unknown };
+    const loaded = normalizedEventList(result?.events);
+    const found = new Set(loaded.map(event => event.seq));
+    if (batch.some(seq => !found.has(seq))) throw new Error("部分轨迹详情无法读取");
+    events.push(...loaded);
+  }
+  return events;
 }
 
 export async function createProject(input: CreateProjectInput): Promise<Project> {
@@ -1707,6 +1732,12 @@ async function loadGitHubAccounts(): Promise<GitHubAccountCatalog> {
       : {}),
     oauthConfigured: record.oauthConfigured === true
   };
+}
+
+export async function setupGitHubOAuth(input: {
+  clientId: string; clientSecret: string; callbackUrl: string; setupCode: string;
+}): Promise<void> {
+  await request("/api/github/oauth/setup", { method: "POST", body: JSON.stringify(input) });
 }
 
 export async function startGitHubAuthorization(): Promise<{ authorizationUrl: string; expiresAt: string }> {

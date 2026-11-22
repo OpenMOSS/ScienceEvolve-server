@@ -359,6 +359,35 @@ export function createApp(dependencies: AppDependencies) {
     }
   });
 
+  app.post("/api/github/oauth/setup", async (request, response, next) => {
+    response.setHeader("Cache-Control", "no-store, private");
+    const origin = request.get("Origin");
+    const input = z.object({
+      clientId: z.string().trim().min(1).max(200),
+      clientSecret: z.string().trim().min(1).max(512),
+      callbackUrl: z.string().trim().max(2048).url(),
+      setupCode: z.string().trim().min(32).max(256)
+    }).strict().safeParse(request.body);
+    if (!origin || !input.success) {
+      response.status(400).json({ error: "请检查 OAuth 配置字段和部署设置码" });
+      return;
+    }
+    const { setupCode, ...config } = input.data;
+    try {
+      if (!await githubAccounts.configureOAuth(config, origin, setupCode)) {
+        response.status(403).json({ error: "部署设置码无效，或此站点已配置 GitHub OAuth" });
+        return;
+      }
+      response.status(204).end();
+    } catch (error) {
+      if (error instanceof Error && /^(Callback URL|无效的 GitHub 登录返回地址)/.test(error.message)) {
+        response.status(400).json({ error: error.message });
+      } else {
+        next(error);
+      }
+    }
+  });
+
   app.post("/api/github/auth/start", async (request, response) => {
     try {
       const headerOrigin = typeof request.headers.origin === "string"
@@ -1217,7 +1246,8 @@ export function createApp(dependencies: AppDependencies) {
         response.json(
           await storage.readEventBootstrap(
             project.id,
-            eventPageLimit(request.query.limit)
+            eventPageLimit(request.query.limit),
+            request.query.detail === "deferred"
           )
         );
       } catch (error) {
@@ -1240,8 +1270,22 @@ export function createApp(dependencies: AppDependencies) {
           response.status(400).json({ error: "before must be a positive event sequence" });
           return;
         }
+        if (request.query.view === "messages") {
+          const filters = z.object({ agent: z.string().max(256).optional(), keyword: z.string().max(300).optional() })
+            .safeParse(request.query);
+          if (!filters.success) {
+            response.status(400).json({ error: "Invalid message history filters" });
+            return;
+          }
+          response.json(await storage.readMessageHistory(project.id, beforeSeq, {
+            limit: Math.min(50, eventPageLimit(request.query.limit)),
+            agent: filters.data.agent,
+            keyword: filters.data.keyword?.trim().toLowerCase()
+          }));
+          return;
+        }
         if (request.query.view !== undefined && request.query.view !== "timeline") {
-          response.status(400).json({ error: "view must be timeline when provided" });
+          response.status(400).json({ error: "view must be timeline or messages when provided" });
           return;
         }
         const readHistory = request.query.view === "timeline"
@@ -1250,7 +1294,8 @@ export function createApp(dependencies: AppDependencies) {
           await readHistory(
             project.id,
             beforeSeq,
-            eventPageLimit(request.query.limit)
+            eventPageLimit(request.query.limit),
+            request.query.detail === "deferred"
           )
         );
       } catch (error) {
@@ -1258,6 +1303,24 @@ export function createApp(dependencies: AppDependencies) {
       }
     }
   );
+
+  app.post("/api/projects/:projectId/events/details", async (request, response, next) => {
+    try {
+      const sequences = z.array(z.number().int().positive().max(Number.MAX_SAFE_INTEGER)).min(1).max(256)
+        .safeParse(request.body?.sequences);
+      if (!sequences.success) {
+        response.status(400).json({ error: "Expected 1–256 positive event sequences" });
+        return;
+      }
+      const project = await orchestrator.getProject(request.params.projectId);
+      if (!project) {
+        response.status(404).json({ error: "Project not found" });
+        return;
+      }
+      response.setHeader("Cache-Control", "no-store, private");
+      response.json({ events: await storage.readEventDetails(project.id, sequences.data) });
+    } catch (error) { next(error); }
+  });
 
   app.get(
     "/api/projects/:projectId/events",
@@ -2157,8 +2220,15 @@ export function createApp(dependencies: AppDependencies) {
         ...(["STALE_WORKFLOW_CONFIGURATION", "WORKFLOW_ADJUSTMENT_CONFLICT"].includes(error.code) ? { details: error.details } : {}) });
       return;
     }
-    if (error instanceof ZodError) {
-      const issueSummary = [...new Set(error.issues.map((issue) => {
+    const workflowValidation = error instanceof Error && error.name === "ZodError" &&
+      /^\/api\/projects\/[^/]+\/workflow\/adjustments$/.test(_request.path)
+      ? z.array(z.object({ code: z.string(), path: z.array(z.union([z.string(), z.number()])), message: z.string() }))
+        .safeParse((error as Error & { issues?: unknown }).issues)
+      : undefined;
+    const validationIssues = error instanceof ZodError ? error.issues
+      : workflowValidation?.success ? workflowValidation.data : undefined;
+    if (validationIssues) {
+      const issueSummary = [...new Set(validationIssues.map((issue) => {
         const pathLabel = issue.path.length ? issue.path.join(".") : "request";
         return `${pathLabel}：${issue.message}`;
       }))]
@@ -2169,7 +2239,7 @@ export function createApp(dependencies: AppDependencies) {
         error: redactTrace(
           issueSummary ? `请求参数无效：${issueSummary}` : "请求参数无效"
         ),
-        issues: error.issues
+        issues: validationIssues
       });
       return;
     }

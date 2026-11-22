@@ -210,6 +210,74 @@ function isAgentTimelineEvent(event: TimelineEvent): boolean {
     typeof event.data?.sourceType === "string" && AGENT_CALL_SOURCE_TYPES.has(event.data.sourceType);
 }
 
+interface MessageHistoryQuery {
+  limit: number;
+  agent?: string;
+  keyword?: string;
+}
+
+function messageHistoryKey(event: TimelineEvent, query: MessageHistoryQuery): string | undefined {
+  const data = event.data ?? {};
+  const agent = data.agent ?? event.agentId ?? data.agentId;
+  if (query.agent && agent !== query.agent) return;
+  const raw = data.canonicalEvent ?? (data.resident === true ? data.event : undefined);
+  const canonical = raw && typeof raw === "object" ? raw as Record<string, unknown> : undefined;
+  const kind = canonical?.kind;
+  const legacy = event.type === "agent.trace" && String(data.kind).toLowerCase() === "message" &&
+    String(data.itemType).toLowerCase() === "agent_message";
+  if (kind !== "assistant.message" && kind !== "reasoning.summary" && !legacy) return;
+  let body = (typeof canonical?.message === "string" && data.resident === true ? canonical.message : event.message).trim();
+  if (query.keyword && body.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(body);
+      const summary = [parsed.summary, parsed.assessment, parsed.markdown]
+        .find(value => typeof value === "string" && value.trim());
+      if (summary) body = summary.trim();
+    } catch { /* A message beginning with a brace can be ordinary prose. */ }
+  }
+  if (!body || (query.keyword && !body.toLowerCase().includes(query.keyword))) return;
+  const item = canonical?.itemId ?? (kind === "reasoning.summary" ? canonical?.eventId : undefined);
+  return item ? JSON.stringify([agent, canonical?.invocationId, canonical?.attempt ?? 0, kind, item]) : String(event.seq);
+}
+
+export function deferTraceDetail(event: TimelineEvent): TimelineEvent {
+  if (event.type !== "agent.trace") return event;
+  const data = event.data ?? {};
+  const raw = data.canonicalEvent ?? (data.resident === true ? data.event : undefined);
+  const canonical = raw && typeof raw === "object" ? raw as Record<string, unknown> : undefined;
+  const kind = String(canonical?.kind ?? "");
+  const legacyKind = String(data.kind ?? "").toLowerCase();
+  const traceKind = String(data.traceKind ?? "").toLowerCase();
+  const itemType = String(data.itemType ?? "").toLowerCase();
+  const tool = kind.startsWith("tool.") || legacyKind === "tool";
+  const diagnostic = kind === "diagnostic" || (!kind && legacyKind !== "message" &&
+    (data.diagnostic === true || ["stderr", "diagnostic"].includes(legacyKind) || itemType === "diagnostic" ||
+      ["status", "stderr"].includes(traceKind) || ["proxy", "cli", "adapter"].includes(String(data.diagnosticSource ?? "").toLowerCase()) ||
+      /^protocol proxy\b/i.test(event.message)));
+  if (!tool && !diagnostic) return event;
+  const metadata = Object.fromEntries([
+    "agent", "agentId", "invocationId", "executionId", "taskId", "groupRunId", "cycle",
+    "eventId", "kind", "itemId", "itemType", "status", "traceKind", "sourceType",
+    "diagnosticSource", "usageScope", "ownershipEpoch", "coordinatorEpoch"
+  ].filter(key => data[key] !== undefined).map(key => [key, data[key]]));
+  const canonicalTool = canonical?.tool as Record<string, unknown> | undefined;
+  if (canonical) {
+    metadata.canonicalEvent = {
+      schemaVersion: canonical.schemaVersion, eventId: canonical.eventId, seq: canonical.seq,
+      invocationId: canonical.invocationId, harnessId: canonical.harnessId, kind: canonical.kind,
+      phase: canonical.phase, sourceType: canonical.sourceType, attempt: canonical.attempt,
+      itemId: canonical.itemId, parentItemId: canonical.parentItemId,
+      ...(canonicalTool && { tool: { callId: canonicalTool.callId, name: canonicalTool.name, status: canonicalTool.status } })
+    };
+  }
+  // Very old tools without item IDs use the command itself as their identity.
+  const legacyCommand = tool && !canonical && !data.itemId;
+  if (legacyCommand && data.command !== undefined) metadata.command = data.command;
+  return { ...event, message: legacyCommand ? event.message : "", data: {
+    ...metadata, traceDetailDeferred: true, ...(diagnostic && { diagnostic: true })
+  } };
+}
+
 function compactTimelineEvent(event: TimelineEvent): TimelineEvent {
   const source = event.data ?? {};
   const data = Object.fromEntries(
@@ -981,7 +1049,8 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
 
   async readEventBootstrap(
     projectId: string,
-    limit = 1_000
+    limit = 1_000,
+    compactTrace = false
   ): Promise<EventBootstrap> {
     const boundedLimit = Math.max(1, Math.min(5_000, Math.floor(limit)));
     const size = await this.stableEventSnapshotSize(projectId) ?? 0;
@@ -989,7 +1058,8 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
     const recent = await this.eventLogs.page(snapshot, Infinity, boundedLimit);
     const timeline = await this.eventLogs.timelinePage(snapshot, Infinity, 200);
     return {
-      events: recent.events,
+      events: compactTrace ? recent.events.map((event, i, events) =>
+        i < events.length - 40 ? deferTraceDetail(event) : event) : recent.events,
       timelineEvents: timeline.events.map(compactTimelineEvent),
       timelineHasMore: timeline.hasMore,
       totalEvents: snapshot.totalEvents,
@@ -1000,12 +1070,38 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
   async readEventHistory(
     projectId: string,
     beforeSeq: number,
-    limit = 1_000
+    limit = 1_000,
+    compactTrace = false
   ): Promise<EventHistoryPage> {
     const boundedLimit = Math.max(1, Math.min(5_000, Math.floor(limit)));
     const size = await this.stableEventSnapshotSize(projectId) ?? 0;
     const snapshot = await this.eventLogs.snapshot(path.join(this.projectDir(projectId), "events.jsonl"), size);
-    return this.eventLogs.page(snapshot, beforeSeq, boundedLimit);
+    const page = await this.eventLogs.page(snapshot, beforeSeq, boundedLimit);
+    return compactTrace ? { ...page, events: page.events.map(deferTraceDetail) } : page;
+  }
+
+  async readEventDetails(projectId: string, sequences: readonly number[]): Promise<TimelineEvent[]> {
+    const size = await this.stableEventSnapshotSize(projectId) ?? 0;
+    const snapshot = await this.eventLogs.snapshot(path.join(this.projectDir(projectId), "events.jsonl"), size);
+    return this.eventLogs.bySequence(snapshot, sequences);
+  }
+
+  async readMessageHistory(projectId: string, beforeSeq: number, query: MessageHistoryQuery): Promise<EventHistoryPage> {
+    const size = await this.stableEventSnapshotSize(projectId) ?? 0;
+    const snapshot = await this.eventLogs.snapshot(path.join(this.projectDir(projectId), "events.jsonl"), size);
+    const page = await this.eventLogs.page(snapshot, beforeSeq, 2400);
+    const matched = new Set<string>();
+    let start = 0;
+    for (let i = page.events.length - 1; i >= 0; i--) {
+      const key = messageHistoryKey(page.events[i]!, query);
+      if (!key || matched.has(key)) continue;
+      if (matched.size === query.limit) {
+        start = i + 1;
+        break;
+      }
+      matched.add(key);
+    }
+    return { events: page.events.slice(start).map(deferTraceDetail), hasMore: start > 0 || page.hasMore };
   }
 
   async readTimelineHistory(projectId: string, beforeSeq: number, limit = 200): Promise<EventHistoryPage> {

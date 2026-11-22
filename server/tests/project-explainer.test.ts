@@ -18,6 +18,8 @@ import {
   type ProjectExplainerRuntime
 } from "../src/project-explainer.js";
 import { ProjectStorage } from "../src/storage.js";
+import { SavedResearchTaskStore } from "../src/saved-research-tasks.js";
+import { SkillCatalog } from "../src/skill-catalog.js";
 import { cloneAgentOrchestrationTemplate } from "../src/agent-orchestration.js";
 import type { ProjectState } from "../src/types.js";
 import { defaultAgentConfigs } from "../src/validation.js";
@@ -223,7 +225,8 @@ function minimalState(id: string): ProjectState {
 
 async function setup(
   runExplainer?: ProjectExplainerRuntime["runExplainer"],
-  catalogDescriptors: HarnessDescriptor[] = descriptors
+  catalogDescriptors: HarnessDescriptor[] = descriptors,
+  withAssistant = false
 ) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "openfars-explainer-"));
   temporaryRoots.push(root);
@@ -314,9 +317,31 @@ async function setup(
     gateway,
     gatewayStore,
     calls,
-    explainer: new ProjectExplainerService(runtime, storage, { gatewayStore })
+    explainer: new ProjectExplainerService(runtime, storage, { gatewayStore,
+      ...(withAssistant ? { assistant: { tasks: new SavedResearchTaskStore(storage.root), skills: new SkillCatalog([]) } } : {})
+    })
   };
 }
+
+it.each([false, true])("isolates project explainer history and assistant history (bound draft: %s)", async boundDraft => {
+  const { explainer, projectId, calls } = await setup(undefined, descriptors, true);
+  summaryServices.push(explainer);
+  const context = await explainer.createAssistantContext(boundDraft ? {} : { projectId });
+  if (boundDraft) await explainer.bindAssistantProject(context.id, projectId);
+  const assistant = explainer.assistantAgent!;
+  const signal = new AbortController().signal;
+  await assistant.ask(context.id, "修改工作流草稿", () => undefined, signal);
+  expect((await explainer.history(projectId)).events).toEqual([]);
+  await explainer.ask(projectId, "解释研究结果", () => undefined, signal);
+  expect(calls).toHaveLength(2);
+  expect(calls[1].session).toBeUndefined();
+  expect(calls[1].runtimePath).not.toBe(calls[0].runtimePath);
+  expect((await explainer.history(projectId)).events.filter(event => event.kind === "user").map(event => event.text)).toEqual(["解释研究结果"]);
+  expect((await assistant.history(context.id)).events.filter(event => event.kind === "user").map(event => event.text)).toEqual(["修改工作流草稿"]);
+  await explainer.reset(projectId);
+  expect((await explainer.history(projectId)).events).toEqual([]);
+  expect((await assistant.history(context.id)).events.some(event => event.kind === "user")).toBe(true);
+});
 
 afterEach(async () => {
   await Promise.all(summaryServices.splice(0).map((service) => service.shutdown()));

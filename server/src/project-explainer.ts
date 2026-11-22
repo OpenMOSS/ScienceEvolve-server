@@ -110,6 +110,7 @@ export interface ProjectExplainerServiceOptions {
 
 export interface ProjectExplainerAssistantPort {
   assistant: ExplainerAssistantStore | undefined;
+  assistantAgent: ProjectExplainerPort | undefined;
   createAssistantContext(input: { taskId?: string; projectId?: string }): Promise<ExplainerAssistantContext>;
   bindAssistantProject(conversationId: string, projectId: string): Promise<void>;
 }
@@ -127,6 +128,7 @@ export class ProjectExplainerService implements ProjectExplainerPort, ProjectExp
   private readonly defaultReasoningEffort: string;
   private readonly gatewayStore?: GatewayStore;
   readonly assistant?: ExplainerAssistantStore;
+  readonly assistantAgent?: ProjectExplainerPort;
   private readonly core: SharedProjectExplainerService<
     ProjectExplainerRuntimeConfig,
     ProjectExplainerConfigInput,
@@ -169,12 +171,30 @@ export class ProjectExplainerService implements ProjectExplainerPort, ProjectExp
               routes: Object.fromEntries(["analyst_a", "analyst_b", "analyst_c"].map(name => [name, [{ target: "finish", kind: "strong" }]])) } }] } };
       }
     });
-    this.core = new SharedProjectExplainerService({
+    this.core = this.createCore(false);
+    const store = this.assistant;
+    if (store) {
+      const assistant = this.createCore(true);
+      this.assistantAgent = {
+        isActive: id => assistant.isActive(store.resolveKnown(id)),
+        history: async (id, limit) => assistant.history(await store.resolve(id), limit),
+        ask: async (id, question, sink, signal) => assistant.ask(await store.resolve(id), question, sink, signal),
+        cancel: async id => assistant.cancel(await store.resolve(id)),
+        reset: async id => assistant.reset(await store.resolve(id)),
+        getConfig: async id => assistant.getConfig(await store.resolve(id)),
+        updateConfig: async (id, input) => assistant.updateConfig(await store.resolve(id), input),
+        shutdown: () => assistant.shutdown()
+      };
+    }
+  }
+
+  private createCore(assistantMode: boolean): typeof this.core {
+    return new SharedProjectExplainerService({
       publishContextIndex: input => this.runtime.publishContextIndex?.(input) ?? publishAgentContextIndex(input.inboxPath, input.sources),
-      project: (projectId, options) => this.projectSnapshot(projectId, options?.includeEvidence !== false),
-      getConfig: (projectId) => this.currentConfig(projectId),
+      project: (projectId, options) => this.projectSnapshot(projectId, options?.includeEvidence !== false, assistantMode),
+      getConfig: (projectId) => this.currentConfig(projectId, assistantMode),
       proposeConfig: (projectId, current, input) => this.proposeConfig(projectId, current, input),
-      saveConfig: (projectId, config) => this.writeConfig(projectId, config),
+      saveConfig: (projectId, config) => this.writeConfig(projectId, config, assistantMode),
       configFingerprint: (config) => JSON.stringify([
         config.harness, config.gatewayId ?? null, config.gatewayProtocol,
         config.model, config.reasoningEffort
@@ -230,31 +250,31 @@ export class ProjectExplainerService implements ProjectExplainerPort, ProjectExp
         onEvent: (event) => input.onEvent(event)
       }, signal); } finally { await mcp?.close(); }
       },
-      readSession: (projectId, config) => this.readSession(projectId, config),
-      writeSession: (projectId, config, session) => this.writeSession(projectId, config, session),
-      sessionPath: (projectId) => this.sessionPath(projectId)
+      readSession: (projectId, config) => this.readSession(projectId, config, assistantMode),
+      writeSession: (projectId, config, session) => this.writeSession(projectId, config, session, assistantMode),
+      sessionPath: (projectId) => this.sessionPath(projectId, assistantMode)
     });
   }
 
-  isActive(projectId: string): boolean { return this.core.isActive(this.assistant?.resolveKnown(projectId) ?? projectId); }
-  async history(projectId: string, limit?: number): Promise<ProjectExplainerHistory> { return this.core.history(await this.assistant?.resolve(projectId) ?? projectId, limit); }
+  isActive(projectId: string): boolean { return this.core.isActive(projectId); }
+  async history(projectId: string, limit?: number): Promise<ProjectExplainerHistory> { return this.core.history(projectId, limit); }
   async ask(projectId: string, question: string, sink: ProjectExplainerSink, signal: AbortSignal): Promise<void> {
-    return this.core.ask(await this.assistant?.resolve(projectId) ?? projectId, question, sink, signal);
+    return this.core.ask(projectId, question, sink, signal);
   }
-  async cancel(projectId: string): Promise<void> { return this.core.cancel(await this.assistant?.resolve(projectId) ?? projectId); }
-  async reset(projectId: string): Promise<void> { return this.core.reset(await this.assistant?.resolve(projectId) ?? projectId); }
-  async getConfig(projectId: string): Promise<ProjectExplainerRuntimeConfig> { return this.core.getConfig(await this.assistant?.resolve(projectId) ?? projectId); }
+  async cancel(projectId: string): Promise<void> { return this.core.cancel(projectId); }
+  async reset(projectId: string): Promise<void> { return this.core.reset(projectId); }
+  async getConfig(projectId: string): Promise<ProjectExplainerRuntimeConfig> { return this.core.getConfig(projectId); }
   async updateConfig(projectId: string, input: ProjectExplainerConfigInput): Promise<ProjectExplainerRuntimeConfig> {
-    return this.core.updateConfig(await this.assistant?.resolve(projectId) ?? projectId, input);
+    return this.core.updateConfig(projectId, input);
   }
   async createAssistantContext(input: { taskId?: string; projectId?: string }) {
     if (!this.assistant) throw new Error("Project Explainer assistant is unavailable");
     const context = await this.assistant.create(input);
-    if (context.id.startsWith("exp_") && !await this.readConfig(context.id)) await this.writeConfig(context.id, await this.getDraftConfig());
+    if (context.id.startsWith("exp_") && !await this.readConfig(context.id, true)) await this.writeConfig(context.id, await this.getDraftConfig(), true);
     return context;
   }
   async bindAssistantProject(conversationId: string, projectId: string) { await this.assistant?.bindProject(conversationId, projectId); }
-  shutdown(): Promise<void> { return this.core.shutdown(); }
+  async shutdown(): Promise<void> { await Promise.all([this.core.shutdown(), this.assistantAgent?.shutdown?.()]); }
   summarizeOutput(projectId: string, output: string, signal: AbortSignal): Promise<string> {
     return this.core.summarizeOutput(projectId, output, signal);
   }
@@ -384,17 +404,18 @@ export class ProjectExplainerService implements ProjectExplainerPort, ProjectExp
     return path.join(this.storage.root, "explainer-draft-config.json");
   }
 
-  private async currentConfig(projectId: string): Promise<ProjectExplainerRuntimeConfig> {
-    await this.projectSnapshot(projectId, false);
-    const stored = await this.readConfig(projectId);
+  private async currentConfig(projectId: string, assistantMode: boolean): Promise<ProjectExplainerRuntimeConfig> {
+    await this.projectSnapshot(projectId, false, assistantMode);
+    const stored = await this.readConfig(projectId, assistantMode) ??
+      (!assistantMode && this.assistant ? await this.readConfig(await this.assistant.resolve(projectId), true) : undefined);
     if (stored) {
       const descriptor = (await this.runtime.harnessCatalog()).find((entry) => entry.id === stored.harness);
       if (descriptor?.userSelectable === false || descriptor?.selectable === false) {
         const replacement = await this.defaultExplainerHarness();
         if (replacement !== stored.harness) {
           const migrated = { ...stored, harness: replacement, revision: stored.revision + 1, updatedAt: new Date().toISOString() };
-          await this.writeConfig(projectId, migrated);
-          await fs.rm(this.sessionPath(projectId), { force: true });
+          await this.writeConfig(projectId, migrated, assistantMode);
+          await fs.rm(this.sessionPath(projectId, assistantMode), { force: true });
           return this.validateRuntimeConfig(migrated);
         }
       }
@@ -528,8 +549,8 @@ export class ProjectExplainerService implements ProjectExplainerPort, ProjectExp
     return { harness: config.harness, gateway };
   }
 
-  private async projectSnapshot(projectId: string, includeEvidence = true) {
-    if (this.assistant) {
+  private async projectSnapshot(projectId: string, includeEvidence = true, assistantMode = false) {
+    if (assistantMode && this.assistant) {
       const context = await this.assistant.get(projectId).catch(error => {
         if ((error as NodeJS.ErrnoException).code === "ENOENT" && projectId.startsWith("prj_")) return this.assistant!.create({ projectId });
         throw error;
@@ -543,6 +564,19 @@ export class ProjectExplainerService implements ProjectExplainerPort, ProjectExp
         evidence: includeEvidence ? await this.assistant.contextEvidence(projectId) : {} };
     }
     const projectPath = await fs.realpath(this.storage.projectDir(projectId));
+    if (this.assistant) {
+      const runtimePath = path.join(projectPath, "runtime", "project-explainer");
+      const workspacePath = path.join(runtimePath, "workspaces");
+      await fs.mkdir(workspacePath, { recursive: true, mode: 0o700 });
+      if (!includeEvidence) return { projectPath, workspacePath, runtimePath, stableWorkspace: true, evidence: {} };
+      const state = await this.storage.tryLoadState(projectId);
+      if (!state) throw new Error("Project not found");
+      return { projectPath, workspacePath, runtimePath, stableWorkspace: true, evidence: {
+        title: state.title, requirement: state.requirement, status: state.status, phase: state.phase,
+        currentAgent: state.currentAgent, artifacts: state.artifacts, latestHandoff: state.latestHandoff,
+        evidence: redactTrace(await this.storage.buildContextIndex(state, 0, true, true))
+      } };
+    }
     const workspacePath = await fs.realpath(path.join(projectPath, "workspaces"));
     if (!pathIsWithin(workspacePath, projectPath)) throw new Error("Project workspace resolves outside the project root");
     const runtimePath = path.join(projectPath, "runtime", "explainer");
@@ -575,8 +609,8 @@ export class ProjectExplainerService implements ProjectExplainerPort, ProjectExp
     };
   }
 
-  private async readConfig(projectId: string): Promise<ProjectExplainerRuntimeConfig | undefined> {
-    return this.readConfigFile(this.configPath(projectId));
+  private async readConfig(projectId: string, assistantMode = false): Promise<ProjectExplainerRuntimeConfig | undefined> {
+    return this.readConfigFile(this.configPath(projectId, assistantMode));
   }
 
   private async readConfigFile(filename: string): Promise<ProjectExplainerRuntimeConfig | undefined> {
@@ -605,8 +639,8 @@ export class ProjectExplainerService implements ProjectExplainerPort, ProjectExp
     }
   }
 
-  private writeConfig(projectId: string, config: ProjectExplainerRuntimeConfig): Promise<void> {
-    return this.writeConfigFile(this.configPath(projectId), config);
+  private writeConfig(projectId: string, config: ProjectExplainerRuntimeConfig, assistantMode: boolean): Promise<void> {
+    return this.writeConfigFile(this.configPath(projectId, assistantMode), config);
   }
 
   private writeConfigFile(filename: string, config: ProjectExplainerRuntimeConfig): Promise<void> {
@@ -621,9 +655,9 @@ export class ProjectExplainerService implements ProjectExplainerPort, ProjectExp
     });
   }
 
-  private async readSession(projectId: string, config: ProjectExplainerRuntimeConfig): Promise<SessionRef | undefined> {
+  private async readSession(projectId: string, config: ProjectExplainerRuntimeConfig, assistantMode: boolean): Promise<SessionRef | undefined> {
     try {
-      const value = JSON.parse(await fs.readFile(this.sessionPath(projectId), "utf8")) as Partial<PersistedExplainerSession>;
+      const value = JSON.parse(await fs.readFile(this.sessionPath(projectId, assistantMode), "utf8")) as Partial<PersistedExplainerSession>;
       if (value.schemaVersion !== 5 || !value.session || value.harness !== config.harness ||
         value.gatewayId !== config.gatewayId || value.gatewayProtocol !== config.gatewayProtocol ||
         value.model !== config.model || value.reasoningEffort !== config.reasoningEffort ||
@@ -635,8 +669,8 @@ export class ProjectExplainerService implements ProjectExplainerPort, ProjectExp
     }
   }
 
-  private writeSession(projectId: string, config: ProjectExplainerRuntimeConfig, session: SessionRef): Promise<void> {
-    return atomicJson(this.sessionPath(projectId), {
+  private writeSession(projectId: string, config: ProjectExplainerRuntimeConfig, session: SessionRef, assistantMode: boolean): Promise<void> {
+    return atomicJson(this.sessionPath(projectId, assistantMode), {
       schemaVersion: 5,
       session,
       harness: config.harness,
@@ -649,13 +683,16 @@ export class ProjectExplainerService implements ProjectExplainerPort, ProjectExp
     } satisfies PersistedExplainerSession);
   }
 
-  private sessionPath(projectId: string): string {
-    return path.join(this.scopeRoot(projectId), "runtime", "explainer", "session.json");
+  private sessionPath(projectId: string, assistantMode: boolean): string {
+    return path.join(this.runtimeDirectory(projectId, assistantMode), "session.json");
   }
-  private configPath(projectId: string): string {
-    return path.join(this.scopeRoot(projectId), "runtime", "explainer", "config.json");
+  private configPath(projectId: string, assistantMode: boolean): string {
+    return path.join(this.runtimeDirectory(projectId, assistantMode), "config.json");
   }
-  private scopeRoot(id: string) { return id.startsWith("exp_") && this.assistant ? this.assistant.directory(id) : this.storage.projectDir(id); }
+  private runtimeDirectory(id: string, assistantMode: boolean): string {
+    const root = assistantMode && id.startsWith("exp_") && this.assistant ? this.assistant.directory(id) : this.storage.projectDir(id);
+    return path.join(root, "runtime", this.assistant && !assistantMode ? "project-explainer" : "explainer");
+  }
 }
 
 async function atomicJson(destination: string, value: unknown): Promise<void> {
