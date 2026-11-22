@@ -1,173 +1,35 @@
-# Workflow 的实际前端画布
-
-[← 返回中文 README](../../../README_zh-CN.md#examples) · [English](README_en.md) | **简体中文** · [手动导入说明](../../../example/README.md#在-web-中手动查看和使用)
-
-这些截图由仓库中的 21 个 Workflow 示例 经可选导出脚本生成副本，再通过应用现有通用 JSON 导入入口打开实际前端画布。仅展示配置，未连接模型或运行科研任务。节点较多的流程在概览中会缩小；导入 JSON 后可缩放查看每个节点。
-
-## 默认科研工作流
-
-选题、执行、写作、评审，由 Main 协调。
-
-![默认科研工作流 的实际 Workflow 画布](dynamic-research-workflow.jpg)
-
-[原始 Workflow JSON](../../../example/dynamic-research-workflow/workflow.json) · [需求](../../../example/dynamic-research-workflow/requirement.txt) · [协议与资源](../../../example/dynamic-research-workflow/README.md)
-
-## AHE · 代码自进化
-
-执行、评分、改进循环，Main 按批次判断继续或交付。
-
-![AHE · 代码自进化 的实际 Workflow 画布](01-ahe-evolve.jpg)
-
-[原始 Workflow JSON](../../../example/01-ahe-evolve/workflow.json) · [需求](../../../example/01-ahe-evolve/requirement.txt) · [协议与资源](../../../example/01-ahe-evolve/README.md)
-
-## 软件开发与测试
-
-Coding 接收需求，Testing 独立测试，失败后返回修复。
-
-![软件开发与测试 的实际 Workflow 画布](02-software-development.jpg)
-
-[原始 Workflow JSON](../../../example/02-software-development/workflow.json) · [需求](../../../example/02-software-development/requirement.txt) · [协议与资源](../../../example/02-software-development/README.md)
-
-## ARIS
-
-W1 → W1.5 → W2 → 写作与跨模型评审。
-
-![ARIS 的实际 Workflow 画布](aris.jpg)
-
-[原始 Workflow JSON](../../../example/aris/workflow.json) · [需求](../../../example/aris/requirement.txt) · [协议与资源](../../../example/aris/README.md)
-
-## Meta-Harness
-
-基线、候选 Harness、全数据集评测与 Pareto 筛选。
-
-![Meta-Harness 的实际 Workflow 画布](metaharness.jpg)
-
-[原始 Workflow JSON](../../../example/metaharness/workflow.json) · [需求](../../../example/metaharness/requirement.txt) · [协议与资源](../../../example/metaharness/README.md)
-
-## autoresearch
-
-固定预算训练实验，按真实结果 keep、discard 或回退。
-
-![autoresearch 的实际 Workflow 画布](autoresearch.jpg)
-
-[原始 Workflow JSON](../../../example/autoresearch/workflow.json) · [需求](../../../example/autoresearch/requirement.txt) · [协议与资源](../../../example/autoresearch/README.md)
-
-## FunSearch
-
-多岛程序数据库、独立采样、真实评估与周期重置。
-
-![FunSearch 的实际 Workflow 画布](funsearch.jpg)
-
-[原始 Workflow JSON](../../../example/funsearch/workflow.json) · [需求](../../../example/funsearch/requirement.txt) · [协议与资源](../../../example/funsearch/README.md)
-
-## Agent Laboratory
-
-七个研究子阶段、代码与论文求解器、三位独立评审。
-
-![Agent Laboratory 的实际 Workflow 画布](agent-laboratory.jpg)
-
-[原始 Workflow JSON](../../../example/agent-laboratory/workflow.json) · [需求](../../../example/agent-laboratory/requirement.txt) · [协议与资源](../../../example/agent-laboratory/README.md)
-
-## SciAgents
-
-图推理、假设细化、科学批评和独立新颖性判断。
-
-![SciAgents 的实际 Workflow 画布](sciagents.jpg)
-
-[原始 Workflow JSON](../../../example/sciagents/workflow.json) · [需求](../../../example/sciagents/requirement.txt) · [协议与资源](../../../example/sciagents/README.md)
-
-## Robin
-
-Assay 与候选筛选、实验交接、并行分析与下一轮研究。
-
-![Robin 的实际 Workflow 画布](robin.jpg)
-
-[原始 Workflow JSON](../../../example/robin/workflow.json) · [需求](../../../example/robin/requirement.txt) · [协议与资源](../../../example/robin/README.md)
-
-## Google AI co-scientist
-
-假设生成、反思、论辩排名、进化与专家反馈。
-
-![Google AI co-scientist 的实际 Workflow 画布](co-scientist.jpg)
-
-[原始 Workflow JSON](../../../example/co-scientist/workflow.json) · [需求](../../../example/co-scientist/requirement.txt) · [协议与资源](../../../example/co-scientist/README.md)
-
-## Biomni A1 / E1
-
-资源检索、真实生物工具调用与观察反馈。
-
-![Biomni A1 / E1 的实际 Workflow 画布](biomni.jpg)
-
-[原始 Workflow JSON](../../../example/biomni/workflow.json) · [需求](../../../example/biomni/requirement.txt) · [协议与资源](../../../example/biomni/README.md)
-
-## AgentRxiv
-
-完整研究实验室加共享预印本检索、发布和累计研究。
-
-![AgentRxiv 的实际 Workflow 画布](agentrxiv.jpg)
-
-[原始 Workflow JSON](../../../example/agentrxiv/workflow.json) · [需求](../../../example/agentrxiv/requirement.txt) · [协议与资源](../../../example/agentrxiv/README.md)
-
-## RRSI
-
-Harness 诊断、候选测量、正则化选择和冻结泛化评测。
-
-![RRSI 的实际 Workflow 画布](rrsi.jpg)
-
-[原始 Workflow JSON](../../../example/rrsi/workflow.json) · [需求](../../../example/rrsi/requirement.txt) · [协议与资源](../../../example/rrsi/README.md)
-
-## DrugEvolve
-
-采样、生成、实现、训练、调试、评分与归档。
-
-![DrugEvolve 的实际 Workflow 画布](drugevolve.jpg)
-
-[原始 Workflow JSON](../../../example/drugevolve/workflow.json) · [需求](../../../example/drugevolve/requirement.txt) · [协议与资源](../../../example/drugevolve/README.md)
-
-## ScientistTwo
-
-想法进化、子集与全量实验、消融、论文写作和审稿。
-
-![ScientistTwo 的实际 Workflow 画布](scientist-two.jpg)
-
-[原始 Workflow JSON](../../../example/scientist-two/workflow.json) · [需求](../../../example/scientist-two/requirement.txt) · [协议与资源](../../../example/scientist-two/README.md)
-
-## AI Scientist v2
-
-构思、实验管理、研究分支与写作评审节点。
-
-![AI Scientist v2 的实际 Workflow 画布](ai-scientist-v2.jpg)
-
-[原始 Workflow JSON](../../../example/ai-scientist-v2/workflow.json) · [需求](../../../example/ai-scientist-v2/requirement.txt) · [协议与资源](../../../example/ai-scientist-v2/README.md)
-
-## InternAgent 1.5
-
-研究规划、生成、验证与演化。
-
-![InternAgent 1.5 的实际 Workflow 画布](internagent-1-5.jpg)
-
-[原始 Workflow JSON](../../../example/internagent-1-5/workflow.json) · [需求](../../../example/internagent-1-5/requirement.txt) · [协议与资源](../../../example/internagent-1-5/README.md)
-
-## Biomni-R0
-
-数据整理、轨迹、奖励、训练、部署与评测节点。
-
-![Biomni-R0 的实际 Workflow 画布](biomni-r0.jpg)
-
-[原始 Workflow JSON](../../../example/biomni-r0/workflow.json) · [需求](../../../example/biomni-r0/requirement.txt) · [协议与资源](../../../example/biomni-r0/README.md)
-
-## 化学 Coscientist
-
-Planner 调度搜索、文档、代码与实验节点。
-
-![化学 Coscientist 的实际 Workflow 画布](chemical-coscientist.jpg)
-
-[原始 Workflow JSON](../../../example/chemical-coscientist/workflow.json) · [需求](../../../example/chemical-coscientist/requirement.txt) · [协议与资源](../../../example/chemical-coscientist/README.md)
-
-## Raven Host
-
-双 specialist 槽位与批次裁决。
-
-![Raven Host 的实际 Workflow 画布](raven.jpg)
-
-[原始 Workflow JSON](../../../example/raven/workflow.json) · [需求](../../../example/raven/requirement.txt) · [协议与资源](../../../example/raven/README.md)
+# ScienceEvolve Workflow 图册
+
+[← README](../../../README_zh-CN.md#examples) · [English](README_en.md) · [方法映射](../../../example/METHODS.md)
+
+21 个示例，21 张总览 + 34 张阶段／组内细节。**大流程先读细节，不把全图缩到节点不可读。** ScientistTwo 提供 9 张阶段图；协作组有独立的组内并行图。
+
+截图使用真实前端 CanvasWorld / CanvasNodes / CanvasEdges 与语义适配器、路由器；经导出及通用导入解析器检查。文档页面单独排版：画布缩放固定为 100%，节点标题 16 CSS px，长名称换行，设备像素比 1.5。它们不是完整应用窗口截图。正文方法导读不参与执行，也不伪造角色间直接路由。
+
+Main 星形图是宿主调度关系，不能单凭它判断论文方法是否完整。每页分别说明方法顺序、反馈、外部工具／人类实验和适配限制。**没有连接模型、训练、湿实验或科研端到端执行；配置和截图验证不等于论文结果复现。**
+
+| 示例 | 方法定位 | 图与配置 |
+| --- | --- | --- |
+| [通用科研 / General research](dynamic-research-workflow.md) | 入门分工模板，不对应某篇论文。Main 协调选题、执行、写作与评审。 | [总览](dynamic-research-workflow.jpg) · [细节与说明](dynamic-research-workflow.md) · [JSON](../../../example/dynamic-research-workflow/workflow.json) |
+| [AHE · 代码自进化 / Code evolution](01-ahe-evolve.md) | 入门代码改进示例；不认证为 AHE 论文完整系统。 | [总览](01-ahe-evolve.jpg) · [细节与说明](01-ahe-evolve.md) · [JSON](../../../example/01-ahe-evolve/workflow.json) |
+| [软件开发 / Software development](02-software-development.md) | 入门开发与独立测试模板，不是论文复现。 | [总览](02-software-development.jpg) · [细节与说明](02-software-development.md) · [JSON](../../../example/02-software-development/workflow.json) |
+| [ARIS](aris.md) | 官方协议适配；作者侧 Pi，跨模型评审。星形路由表示调度，不是阶段顺序。 | [总览](aris.jpg) · [细节与说明](aris.md) · [JSON](../../../example/aris/workflow.json) |
+| [Meta-Harness](metaharness.md) | 文本分类参考任务；提案 Agent 外围的执行与分析角色是宿主分工。 | [总览](metaharness.jpg) · [细节与说明](metaharness.md) · [JSON](../../../example/metaharness/workflow.json) |
+| [autoresearch](autoresearch.md) | 官方 Git keep/discard 循环的角色拆分适配。 | [总览](autoresearch.jpg) · [细节与说明](autoresearch.md) · [JSON](../../../example/autoresearch/workflow.json) |
+| [FunSearch · 串行参考适配 / Serial reference](funsearch.md) | 对齐官方单线程参考实现，不是论文分布式异步系统。程序数据库是工具状态，不是缺失的 Agent。 | [总览](funsearch.jpg) · [细节与说明](funsearch.md) · [JSON](../../../example/funsearch/workflow.json) |
+| [Agent Laboratory](agent-laboratory.md) | 七阶段由 Main/Skill 管理；角色会跨阶段复用。MLE-solver 按固定公开源码串行尝试。 | [总览](agent-laboratory.jpg) · [细节与说明](agent-laboratory.md) · [JSON](../../../example/agent-laboratory/workflow.json) |
+| [SciAgents](sciagents.md) | 同时支持 fixed 与自动 speaker；不能把所有科学角色强制画成并行。 | [总览](sciagents.jpg) · [细节与说明](sciagents.md) · [JSON](../../../example/sciagents/workflow.json) |
+| [Robin · 公开代码适配 / Public-code adaptation](robin.md) | 真实实验由外部研究人员完成并上传数据；公开代码为 5 条分析轨迹，论文描述 10 条。 | [总览](robin.jpg) · [细节与说明](robin.md) · [JSON](../../../example/robin/workflow.json) |
+| [Google AI co-scientist · 同步适配 / Synchronous](co-scientist.md) | 六个核心科学角色；Main 同步调度代替论文异步队列。wetlab 是外部验证扩展，不是第七个原生核心角色。 | [总览](co-scientist.jpg) · [细节与说明](co-scientist.md) · [JSON](../../../example/co-scientist/workflow.json) |
+| [Biomni A1 / E1](biomni.md) | 论文是单个 generalist A1 使用 E1 环境；下方多角色拆分 A1 内部步骤，不代表论文原生多科学家团队。 | [总览](biomni.jpg) · [细节与说明](biomni.md) · [JSON](../../../example/biomni/workflow.json) |
+| [AgentRxiv · 单实验室模板 / Single lab](agentrxiv.md) | 一个 workflow 实例代表一个 lab。多 lab 必须独立启动并共享 archive；archive 角色是客户端。 | [总览](agentrxiv.jpg) · [细节与说明](agentrxiv.md) · [JSON](../../../example/agentrxiv/workflow.json) |
+| [RRSI](rrsi.md) | 控制器维护编辑预算、正则化与固定划分；不是简单选最高分。 | [总览](rrsi.jpg) · [细节与说明](rrsi.md) · [JSON](../../../example/rrsi/workflow.json) |
+| [DrugEvolve](drugevolve.md) | Researcher / Engineer / Analyst 三域；控制器内保存生成-检查与训练-调试循环。 | [总览](drugevolve.jpg) · [细节与说明](drugevolve.md) · [JSON](../../../example/drugevolve/workflow.json) |
+| [ScientistTwo](scientist-two.md) | 49 个角色是注册表，不是 49 个线性阶段。protocol.py 管理条件分支、实验状态与评审接续。 | [总览](scientist-two.jpg) · [细节与说明](scientist-two.md) · [JSON](../../../example/scientist-two/workflow.json) |
+| [AI Scientist v2](ai-scientist-v2.md) | 缩小任务适配；四个实验阶段和 checkpoint / replication / aggregation 保存在 manager 与 tree tools。 | [总览](ai-scientist-v2.jpg) · [细节与说明](ai-scientist-v2.md) · [JSON](../../../example/ai-scientist-v2/workflow.json) |
+| [InternAgent 1.5](internagent-1-5.md) | Generation 含知识流与假设；Verification 管理 optimization 并复核；Evolution 更新证据和记忆。 | [总览](internagent-1-5.jpg) · [细节与说明](internagent-1-5.md) · [JSON](../../../example/internagent-1-5/workflow.json) |
+| [Biomni-R0 · 待核验 / Unverified design](biomni-r0.md) | 原训练 / reward recipe 尚不足以核验；官方报告在 2026-11-12 审计时返回 404。缺 recipe 必须阻断。 | [总览](biomni-r0.jpg) · [细节与说明](biomni-r0.md) · [JSON](../../../example/biomni-r0/workflow.json) |
+| [化学 Coscientist / Chemical Coscientist](chemical-coscientist.md) | Planner 按需调用工具，各结果和错误直接返回 Planner。optimization 是可选分析扩展，不是必经阶段。 | [总览](chemical-coscientist.jpg) · [细节与说明](chemical-coscientist.md) · [JSON](../../../example/chemical-coscientist/workflow.json) |
+| [Raven · 受限双槽 / Limited batch](raven.md) | strict-host 保持阻断；仅明确 limited-batch 可验证双槽子项，不接受为完整 Raven。 | [总览](raven.jpg) · [细节与说明](raven.md) · [JSON](../../../example/raven/workflow.json) |
+
+[Manifest](manifest.json) 记录源配置与每张图片的 SHA-256、尺寸、字号、实际节点和前端文件哈希。[重新截图说明](../../../scripts/workflow-gallery/README.md)。

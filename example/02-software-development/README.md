@@ -2,7 +2,7 @@
 
 [← 返回中文 README](../../README_zh-CN.md#examples) · [Back to English README](../../README.md#examples) · [示例目录](../README.md)
 
-本目录仅提供静态流程文件与资源。Web 用户按[手动使用说明](../README.md#在-web-中手动查看和使用)导出副本，再通过主页通用 JSON 导入入口查看和使用；补全需求与真实网关后自行启动。SDK 运行见 [SDK 分支指南](/../feat/sdk-only-v0.1.1/sdk/README_zh-CN.md)。
+本目录仅提供静态流程文件与资源。Web 用户按[手动使用说明](../README.md#在-web-中手动查看和使用)导出副本，再通过主页通用 JSON 导入入口查看和使用；补全需求与真实网关后自行启动。SDK 运行见 [SDK 使用指南](https://github.com/OpenMOSS/ScienceEvolve/blob/main/sdk/README_zh-CN.md)。
 
 通过自然语言需求启动的通用软件开发 workflow。需求直接输入 `coding`，所有 Agent 使用同一个 workspace，可开发新软件，也可修改已有项目。
 
@@ -38,11 +38,13 @@
 
 所有启动步骤和模板使用示例统一见 [example/README.md](../README.md)。
 
-SDK 命令行运行请切换到 [SDK 分支指南](/../feat/sdk-only-v0.1.1/sdk/README_zh-CN.md)。当前 main 从网页载入示例并管理工作区。
+SDK 命令行运行见 [SDK 使用指南](https://github.com/OpenMOSS/ScienceEvolve/blob/main/sdk/README_zh-CN.md)。当前 main 从网页载入示例并管理工作区。
 
 ## Workflow 画布
 
-通过主页通用 JSON 导入入口查看的实际前端截图；仅展示配置，未连接模型或执行研究。节点较多时，请导入 JSON 后缩放阅读。
+真实前端组件的独立文档展示，不是完整应用窗口。画布保持 100% 缩放、标题 16 CSS px；仅展示配置，未连接模型或执行研究。
+
+[方法导读与原图](../../docs/readme/workflows/02-software-development.md) · [方法映射](../METHODS.md#02-software-development)。
 
 ![软件开发与测试 的实际 Workflow 画布](../../docs/readme/workflows/02-software-development.jpg)
 

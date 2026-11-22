@@ -8,7 +8,7 @@
 
 ## 网页使用
 
-本目录仅提供静态流程文件与资源。Web 用户按[手动使用说明](../README.md#在-web-中手动查看和使用)导出副本，再通过主页通用 JSON 导入入口查看和使用；补全需求与真实网关后自行启动。SDK 运行见 [SDK 分支指南](/../feat/sdk-only-v0.1.1/sdk/README_zh-CN.md)。
+本目录仅提供静态流程文件与资源。Web 用户按[手动使用说明](../README.md#在-web-中手动查看和使用)导出副本，再通过主页通用 JSON 导入入口查看和使用；补全需求与真实网关后自行启动。SDK 运行见 [SDK 使用指南](https://github.com/OpenMOSS/ScienceEvolve/blob/main/sdk/README_zh-CN.md)。
 
 ## 必需环境与等价替换
 
@@ -20,7 +20,7 @@ ARIS 需要作者和 reviewer 使用已知不同模型家族。网页中逐一�
 
 Anthropic 作者与 OpenAI reviewer 的真实可用模型及对应 Harness/profile；文献工具、Task 代码/数据/算力；启用 W3 时提供 venue、LaTeX、绘图/视觉检查工具。默认 claude-opus-5 / gpt-6-astra，可换为已知不同家族模型。深审保留 ultra 与上游允许的能力错误 fallback；完整性审计另需固定 Anti-Autoresearch pin（已随 Skill 下载）、可用只读 Codex CLI 及该 pin 指定的 gpt-5.6-sol/xhigh。详见 Skill 的深审协议。
 
-上游全部主线 Skills、shared references、tools、templates 均随 Skill 固定版本分发。跨模型调用映射为 SCIENCEEVOLVE reviewer 交接；无宿主 spawn 时使用原 Tier 3 lens 分支，实验并发仍真实执行。
+上游全部主线 Skills、shared references、tools、templates 均随 Skill 固定版本分发。跨模型调用映射为 ScienceEvolve reviewer 交接；无宿主 spawn 时使用原 Tier 3 lens 分支，实验并发仍真实执行。
 
 模型/Harness 可按实际网关调整；ARIS 须保持作者与 reviewer 不同已知家族。缺必需能力时停在对应阶段并报告阻断，不能减少候选、跳过实验、改评分/停止规则后宣称完整执行。原上游明确可配置或可选的分支按用户配置执行；记录实际参数，不能把未运行分支写成已完成。
 
@@ -28,12 +28,12 @@ Task 是被研究或优化的对象及其反馈环境；research workflow 负责
 
 ## 核对与验证边界
 
-[核对记录](/../feat/sdk-only-v0.1.1/docs/sdk/science-rsi-feasibility.md)逐项说明保留能力、执行提供者与验证方式。离线验证包含配置、上游文件哈希和关键算法/交接协议；未调用真实科研模型、GPU 实验、付费远程服务或湿实验。因此本例交付的是完整流程配置与执行协议，**尚无真实端到端科研运行验收记录**，不能据此声称论文结果已复现。运行后须保存全部实际证据，再验收这一次研究任务。
+[核对记录](https://github.com/OpenMOSS/ScienceEvolve/blob/main/docs/sdk/science-rsi-feasibility.md)逐项说明保留能力、执行提供者与验证方式。离线验证包含配置、上游文件哈希和关键算法/交接协议；未调用真实科研模型、GPU 实验、付费远程服务或湿实验。因此本例交付的是完整流程配置与执行协议，**尚无真实端到端科研运行验收记录**，不能据此声称论文结果已复现。运行后须保存全部实际证据，再验收这一次研究任务。
 
 ## Workflow 画布
 
-通过主页通用 JSON 导入入口查看的实际前端截图；仅展示配置，未连接模型或执行研究。节点较多时，请导入 JSON 后缩放阅读。
+真实前端组件的独立文档展示，不是完整应用窗口。方法顺序为 W1 → W1.5 → W2 → summary → 条件 W3；评审后返回原阶段续跑，不能用星形调度图代替阶段图。作者侧 Pi 配置已体现在截图中。
 
-![ARIS 的实际 Workflow 画布](../../docs/readme/workflows/aris.jpg)
+**[查看 3 张可读阶段图与总览](../../docs/readme/workflows/aris.md)** · [方法映射](../METHODS.md#aris)。静态配置，未运行科研任务。
 
 [原始 JSON](workflow.json) · [手动导入](../README.md#在-web-中手动查看和使用)

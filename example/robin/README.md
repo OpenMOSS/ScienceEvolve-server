@@ -8,7 +8,7 @@ assay 的五阶段选择 → 候选五阶段生成/调查/两两比较排名 →
 
 ## 网页使用
 
-本目录仅提供静态流程文件与资源。Web 用户按[手动使用说明](../README.md#在-web-中手动查看和使用)导出副本，再通过主页通用 JSON 导入入口查看和使用；补全需求与真实网关后自行启动。SDK 运行见 [SDK 分支指南](/../feat/sdk-only-v0.1.1/sdk/README_zh-CN.md)。
+本目录仅提供静态流程文件与资源。Web 用户按[手动使用说明](../README.md#在-web-中手动查看和使用)导出副本，再通过主页通用 JSON 导入入口查看和使用；补全需求与真实网关后自行启动。SDK 运行见 [SDK 使用指南](https://github.com/OpenMOSS/ScienceEvolve/blob/main/sdk/README_zh-CN.md)。
 
 ## 必需环境与等价替换
 
@@ -18,7 +18,7 @@ assay 的五阶段选择 → 候选五阶段生成/调查/两两比较排名 →
 
 Python>=3.12 及上游依赖；Edison CROW/FALCON/data-analysis API 能力、真实疾病目标、实验执行方和真实 flow_cytometry/RNA_seq 数据。明确研究轮数/停止条件。
 
-SCIENCEEVOLVE 编排各阶段，原检索/排名工具与远程分析执行器提供实际能力。湿实验如上游一样由外部人员执行，request_user/respond 等待回传；不会生成假数据。修正反馈轮排名读取旧报告目录的上游 bug。
+ScienceEvolve 编排各阶段，原检索/排名工具与远程分析执行器提供实际能力。湿实验如上游一样由外部人员执行，request_user/respond 等待回传；不会生成假数据。修正反馈轮排名读取旧报告目录的上游 bug。
 
 模型/Harness 可按实际网关调整；ARIS 须保持作者与 reviewer 不同已知家族。缺必需能力时停在对应阶段并报告阻断，不能减少候选、跳过实验、改评分/停止规则后宣称完整执行。原上游明确可配置或可选的分支按用户配置执行；记录实际参数，不能把未运行分支写成已完成。
 
@@ -26,12 +26,12 @@ Task 是被研究或优化的对象及其反馈环境；research workflow 负责
 
 ## 核对与验证边界
 
-[核对记录](/../feat/sdk-only-v0.1.1/docs/sdk/science-rsi-feasibility.md)逐项说明保留能力、执行提供者与验证方式。离线验证包含配置、上游文件哈希和关键算法/交接协议；未调用真实科研模型、GPU 实验、付费远程服务或湿实验。因此本例交付的是完整流程配置与执行协议，**尚无真实端到端科研运行验收记录**，不能据此声称论文结果已复现。运行后须保存全部实际证据，再验收这一次研究任务。
+[核对记录](https://github.com/OpenMOSS/ScienceEvolve/blob/main/docs/sdk/science-rsi-feasibility.md)逐项说明保留能力、执行提供者与验证方式。离线验证包含配置、上游文件哈希和关键算法/交接协议；未调用真实科研模型、GPU 实验、付费远程服务或湿实验。因此本例交付的是完整流程配置与执行协议，**尚无真实端到端科研运行验收记录**，不能据此声称论文结果已复现。运行后须保存全部实际证据，再验收这一次研究任务。
 
 ## Workflow 画布
 
-通过主页通用 JSON 导入入口查看的实际前端截图；仅展示配置，未连接模型或执行研究。节点较多时，请导入 JSON 后缩放阅读。
+真实前端组件的独立文档展示，不是完整应用窗口。方法图明确外部人类实验与数据回传；公开代码为 5 条并行分析，论文描述 10 条，不能混为同一规模。
 
-![Robin 的实际 Workflow 画布](../../docs/readme/workflows/robin.jpg)
+**[查看 3 张可读阶段图与总览](../../docs/readme/workflows/robin.md)** · [方法映射](../METHODS.md#robin)。静态配置，未运行科研任务。
 
 [原始 JSON](workflow.json) · [手动导入](../README.md#在-web-中手动查看和使用)

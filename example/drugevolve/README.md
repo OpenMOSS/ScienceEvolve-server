@@ -2,13 +2,13 @@
 
 [← 返回中文 README](../../README_zh-CN.md#examples) · [Back to English README](../../README.md#examples) · [示例目录](../README.md)
 
-本例将 [GAIR-NLP/DrugEvolve](https://github.com/GAIR-NLP/DrugEvolve/tree/e26347c4a3dfbd639702b68b2f19d1420d78199b) 的公开 compatibility Creation 流程拆成 SCIENCEEVOLVE 的 Main、Generator、Inspector、Implementer、Trainer、Debugger、Judger、Analyzer 和 Summarizer。Task 是被优化的药物研发算法及固定评测环境，不需要 Evolver 或 workflow 自修改。
+本例将 [GAIR-NLP/DrugEvolve](https://github.com/GAIR-NLP/DrugEvolve/tree/e26347c4a3dfbd639702b68b2f19d1420d78199b) 的公开 compatibility Creation 流程拆成 ScienceEvolve 的 Main、Generator、Inspector、Implementer、Trainer、Debugger、Judger、Analyzer 和 Summarizer。Task 是被优化的药物研发算法及固定评测环境，不需要 Evolver 或 workflow 自修改。
 
 原采样器、上下文/提示/schema、训练器、熵监控、客观评分、实验存储与 cognition 随 Skill 下载并固定版本。`scripts/steps.py` 执行确定性操作、输出原角色请求并核验响应；它不运行上游完整自治管线，也不调用模型。完整能力与替换见 [核对表](skills/scienceevolve-drugevolve/references/mapping.md) 和 [CAPABILITIES.json](CAPABILITIES.json)。
 
 ## 网页使用
 
-本目录仅提供静态流程文件与资源。Web 用户按[手动使用说明](../README.md#在-web-中手动查看和使用)导出副本，再通过主页通用 JSON 导入入口查看和使用；补全需求与真实网关后自行启动。SDK 运行见 [SDK 分支指南](/../feat/sdk-only-v0.1.1/sdk/README_zh-CN.md)。
+本目录仅提供静态流程文件与资源。Web 用户按[手动使用说明](../README.md#在-web-中手动查看和使用)导出副本，再通过主页通用 JSON 导入入口查看和使用；补全需求与真实网关后自行启动。SDK 运行见 [SDK 使用指南](https://github.com/OpenMOSS/ScienceEvolve/blob/main/sdk/README_zh-CN.md)。
 
 ## 状态与验证
 
@@ -24,8 +24,8 @@
 
 ## Workflow 画布
 
-通过主页通用 JSON 导入入口查看的实际前端截图；仅展示配置，未连接模型或执行研究。节点较多时，请导入 JSON 后缩放阅读。
+真实前端组件的独立文档展示，不是完整应用窗口。方法导读区分 Researcher / Engineer / Analyst，以及工具内 Generator⇄Inspector、Trainer⇄Debugger 和两类记忆反馈。
 
-![DrugEvolve 的实际 Workflow 画布](../../docs/readme/workflows/drugevolve.jpg)
+**[查看 2 张可读阶段图与总览](../../docs/readme/workflows/drugevolve.md)** · [方法映射](../METHODS.md#drugevolve)。静态配置，未运行科研任务。
 
 [原始 JSON](workflow.json) · [手动导入](../README.md#在-web-中手动查看和使用)

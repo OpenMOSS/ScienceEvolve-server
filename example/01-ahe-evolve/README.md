@@ -4,7 +4,7 @@
 
 原始工作：[Agentic Harness Engineering: Observability-Driven Automatic Evolution of Coding-Agent Harnesses](https://arxiv.org/abs/2604.25850) · [官方代码](https://github.com/china-qijizhifeng/agentic-harness-engineering)。本例提供工作流结构与编排的适配，具体范围见下文“与原框架的范围差异”。
 
-本目录仅提供静态流程文件与资源。Web 用户按[手动使用说明](../README.md#在-web-中手动查看和使用)导出副本，再通过主页通用 JSON 导入入口查看和使用；补全需求与真实网关后自行启动。SDK 运行见 [SDK 分支指南](/../feat/sdk-only-v0.1.1/sdk/README_zh-CN.md)。
+本目录仅提供静态流程文件与资源。Web 用户按[手动使用说明](../README.md#在-web-中手动查看和使用)导出副本，再通过主页通用 JSON 导入入口查看和使用；补全需求与真实网关后自行启动。SDK 运行见 [SDK 使用指南](https://github.com/OpenMOSS/ScienceEvolve/blob/main/sdk/README_zh-CN.md)。
 
 通过自然语言需求启动 四 Agent workflow，路由与循环由 `workflow.json` 配置：
 
@@ -88,13 +88,15 @@ task/
 
 运行时确定性执行路由、计数、提交恢复；评分、源文件快照、接受/回退策略是 Agent 的 workflow 指令，并非新的受信任实验控制器。所有 Agent 共用文件且有执行权限，用户声明的修改范围和初始副本用于审查约定，不能提供防恶意篡改的隔离保证。
 
-SDK 命令行运行请切换到 [SDK 分支指南](/../feat/sdk-only-v0.1.1/sdk/README_zh-CN.md)。当前 main 从网页载入示例并管理工作区。
+SDK 命令行运行见 [SDK 使用指南](https://github.com/OpenMOSS/ScienceEvolve/blob/main/sdk/README_zh-CN.md)。当前 main 从网页载入示例并管理工作区。
 
 本例保留 `allowMainReconfiguration: true`。Main 使用服务端注入的实际提案路径；按允许范围提交 `workflow.json` 并调用 `apply_workflow`，校验成功后应用。网页工作区由 Server 管理，不使用 SDK 的外部 workspace 启动参数。
 
 ## Workflow 画布
 
-通过主页通用 JSON 导入入口查看的实际前端截图；仅展示配置，未连接模型或执行研究。节点较多时，请导入 JSON 后缩放阅读。
+真实前端组件的独立文档展示，不是完整应用窗口。画布保持 100% 缩放、标题 16 CSS px；仅展示配置，未连接模型或执行研究。
+
+[方法导读与原图](../../docs/readme/workflows/01-ahe-evolve.md) · [方法映射](../METHODS.md#01-ahe-evolve)。
 
 ![AHE · 代码自进化 的实际 Workflow 画布](../../docs/readme/workflows/01-ahe-evolve.jpg)
 

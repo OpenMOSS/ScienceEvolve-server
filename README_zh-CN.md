@@ -42,6 +42,16 @@ ScienceEvolve 是论文 [Rethinking Scientific Discovery in the Agentic Era](htt
 
 [![ScienceEvolve SDK / CLI](docs/readme/badges/sdk-cli.svg)](https://github.com/OpenMOSS/ScienceEvolve) — **SDK / CLI 仓库**。通过 TypeScript 或命令行运行工作流，将研究流程接入自己的代码与服务。参见 [SDK 示例](https://github.com/OpenMOSS/ScienceEvolve/blob/main/example/README.md)与 [Web / SDK 功能边界](docs/main-sdk-parity-zh.md)。
 
+## 近期更新
+
+### 2026-11-23
+
+- 在工作区与 Main 对话，查看项目进度。
+- 用搜索树规划方向，用 Workflow Gate 按检查结果选择路径。
+- 修复旧版网关的推理能力自动检测。
+
+> **升级提示**　已有科研数据库的用户请先停服务并备份，再按[离线升级指南](docs/sqlite-writer-lifecycle.md)迁移到 SQLite schema 31。
+
 ## 组建自己的科研 Agent 团队
 
 > “这里有一个泊松方程求解器。请探索两种改进方案，验证收敛性，比较误差，并整理成报告。”
@@ -226,10 +236,8 @@ Main 获得工作流动态调整权限后，也可以随研究进展调整 Skill
 
 ### 1. 安装并启动
 
-从仓库页面的 **Code → HTTPS** 复制克隆地址，替换下面的 `REPOSITORY_URL`：
-
 ```bash
-git clone REPOSITORY_URL ScienceEvolve
+git clone https://github.com/OpenMOSS/ScienceEvolve-server.git ScienceEvolve
 cd ScienceEvolve
 npm ci
 npm ci --prefix harness/codex
@@ -279,11 +287,11 @@ node example/export-web-workflow.mjs \
 
 ### 在画布中检查路径与模型
 
-下图是通过通用导入入口打开的实际只读画布，尚未连接模型或启动研究。关闭预览并在快速发起中选择导入项后，点击 **“打开 Workflow 画布编辑器”** 编辑副本。
+下图是同一配置在真实前端画布组件中的独立文档展示，并非完整应用窗口；尚未连接模型或启动研究。在应用中关闭只读预览并于快速发起选择导入项后，点击 **“打开 Workflow 画布编辑器”** 编辑副本。
 
 <div align="center">
 
-![真实 Workflow 编辑器：软件开发与测试、左侧 Agent 模板、中间强弱边、右侧流程设置](docs/readme/workflows/02-software-development.jpg)
+![真实前端画布组件的文档展示：软件开发、独立测试与修复路由](docs/readme/workflows/02-software-development.jpg)
 
 </div>
 
@@ -385,25 +393,25 @@ Main：协调异常恢复与用户补充输入
 <thead>
 <tr><th align="left">方法</th><th align="left">原始论文</th><th align="left">官方代码 / 项目</th><th align="left">本项目 Workflow</th></tr>
 </thead>
-<tbody><tr><td align="left"><a href="example/01-ahe-evolve/README.md">AHE · 代码自进化</a></td><td align="left"><a href="https://arxiv.org/abs/2604.25850" title="Agentic Harness Engineering: Observability-Driven Automatic Evolution of Coding-Agent Harnesses">arXiv:2604.25850</a></td><td align="left"><a href="https://github.com/china-qijizhifeng/agentic-harness-engineering">agentic-harness-engineering</a></td><td align="left"><a href="example/01-ahe-evolve/workflow.json">JSON</a> · <a href="docs/readme/workflows/01-ahe-evolve.jpg">画布</a></td></tr>
-<tr><td align="left"><a href="example/aris/README.md">ARIS</a></td><td align="left"><a href="https://arxiv.org/abs/2605.03042" title="ARIS: Autonomous Research via Adversarial Multi-Agent Collaboration">arXiv:2605.03042</a></td><td align="left"><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep" title="wanshuiyin/Auto-claude-code-research-in-sleep">ARIS</a></td><td align="left"><a href="example/aris/workflow.json">JSON</a> · <a href="docs/readme/workflows/aris.jpg">画布</a></td></tr>
-<tr><td align="left"><a href="example/metaharness/README.md">Meta-Harness</a></td><td align="left"><a href="https://arxiv.org/abs/2603.28052" title="Meta-Harness: End-to-End Optimization of Model Harnesses">arXiv:2603.28052</a></td><td align="left"><a href="https://github.com/stanford-iris-lab/meta-harness">meta-harness</a></td><td align="left"><a href="example/metaharness/workflow.json">JSON</a> · <a href="docs/readme/workflows/metaharness.jpg">画布</a></td></tr>
-<tr><td align="left"><a href="example/autoresearch/README.md">autoresearch</a></td><td align="left">—（以项目为来源）</td><td align="left"><a href="https://github.com/karpathy/autoresearch">autoresearch</a></td><td align="left"><a href="example/autoresearch/workflow.json">JSON</a> · <a href="docs/readme/workflows/autoresearch.jpg">画布</a></td></tr>
-<tr><td align="left"><a href="example/funsearch/README.md">FunSearch</a></td><td align="left"><a href="https://www.nature.com/articles/s41586-023-06924-6" title="Mathematical discoveries from program search with large language models">Nature 2023</a></td><td align="left"><a href="https://github.com/google-deepmind/funsearch">funsearch</a></td><td align="left"><a href="example/funsearch/workflow.json">JSON</a> · <a href="docs/readme/workflows/funsearch.jpg">画布</a></td></tr>
-<tr><td align="left"><a href="example/agent-laboratory/README.md">Agent Laboratory</a></td><td align="left"><a href="https://arxiv.org/abs/2501.04227" title="Agent Laboratory: Using LLM Agents as Research Assistants">arXiv:2501.04227</a></td><td align="left"><a href="https://github.com/SamuelSchmidgall/AgentLaboratory">AgentLaboratory</a></td><td align="left"><a href="example/agent-laboratory/workflow.json">JSON</a> · <a href="docs/readme/workflows/agent-laboratory.jpg">画布</a></td></tr>
-<tr><td align="left"><a href="example/sciagents/README.md">SciAgents</a></td><td align="left"><a href="https://arxiv.org/abs/2409.05556" title="SciAgents: Automating scientific discovery through multi-agent intelligent graph reasoning">arXiv:2409.05556</a></td><td align="left"><a href="https://github.com/lamm-mit/SciAgentsDiscovery">SciAgentsDiscovery</a></td><td align="left"><a href="example/sciagents/workflow.json">JSON</a> · <a href="docs/readme/workflows/sciagents.jpg">画布</a></td></tr>
-<tr><td align="left"><a href="example/robin/README.md">Robin</a></td><td align="left"><a href="https://arxiv.org/abs/2505.13400v1" title="Robin: A multi-agent system for automating scientific discovery">arXiv:2505.13400</a></td><td align="left"><a href="https://github.com/Future-House/robin">robin</a></td><td align="left"><a href="example/robin/workflow.json">JSON</a> · <a href="docs/readme/workflows/robin.jpg">画布</a></td></tr>
-<tr><td align="left"><a href="example/co-scientist/README.md">Google AI co-scientist</a></td><td align="left"><a href="https://arxiv.org/abs/2502.18864v1" title="Towards an AI co-scientist">arXiv:2502.18864</a></td><td align="left">— †</td><td align="left"><a href="example/co-scientist/workflow.json">JSON</a> · <a href="docs/readme/workflows/co-scientist.jpg">画布</a></td></tr>
-<tr><td align="left"><a href="example/biomni/README.md">Biomni A1 / E1</a></td><td align="left"><a href="https://www.biorxiv.org/content/10.1101/2025.05.30.656746v1" title="Biomni: A General-Purpose Biomedical AI Agent">bioRxiv 2025</a></td><td align="left"><a href="https://github.com/snap-stanford/Biomni">Biomni</a></td><td align="left"><a href="example/biomni/workflow.json">JSON</a> · <a href="docs/readme/workflows/biomni.jpg">画布</a></td></tr>
-<tr><td align="left"><a href="example/agentrxiv/README.md">AgentRxiv</a></td><td align="left"><a href="https://arxiv.org/abs/2503.18102" title="AgentRxiv: Towards Collaborative Autonomous Research">arXiv:2503.18102</a></td><td align="left"><a href="https://github.com/SamuelSchmidgall/AgentLaboratory">AgentLaboratory</a></td><td align="left"><a href="example/agentrxiv/workflow.json">JSON</a> · <a href="docs/readme/workflows/agentrxiv.jpg">画布</a></td></tr>
-<tr><td align="left"><a href="example/rrsi/README.md">RRSI</a></td><td align="left"><a href="https://arxiv.org/abs/2609.24972" title="RRSI: Regularized Recursive Self-Improvement of Agent Harnesses">arXiv:2609.24972</a></td><td align="left"><a href="https://github.com/google-research/rrsi">rrsi</a></td><td align="left"><a href="example/rrsi/workflow.json">JSON</a> · <a href="docs/readme/workflows/rrsi.jpg">画布</a></td></tr>
-<tr><td align="left"><a href="example/drugevolve/README.md">DrugEvolve</a></td><td align="left"><a href="https://www.biorxiv.org/content/10.64898/2026.08.16.745117v1" title="An AI System for Autonomous Algorithm Evolution in Drug Development">bioRxiv 2026</a></td><td align="left"><a href="https://github.com/GAIR-NLP/DrugEvolve">DrugEvolve</a></td><td align="left"><a href="example/drugevolve/workflow.json">JSON</a> · <a href="docs/readme/workflows/drugevolve.jpg">画布</a></td></tr>
-<tr><td align="left"><a href="example/scientist-two/README.md">ScientistTwo</a></td><td align="left"><a href="https://arxiv.org/abs/2609.19644v1" title="ScientistTwo: Pioneering the Human Knowledge Frontier with Autonomous AI">arXiv:2609.19644</a></td><td align="left">— †</td><td align="left"><a href="example/scientist-two/workflow.json">JSON</a> · <a href="docs/readme/workflows/scientist-two.jpg">画布</a></td></tr>
-<tr><td align="left"><a href="example/ai-scientist-v2/README.md">AI Scientist v2</a></td><td align="left"><a href="https://arxiv.org/abs/2504.08066" title="The AI Scientist-v2: Workshop-Level Automated Scientific Discovery via Agentic Tree Search">arXiv:2504.08066</a></td><td align="left"><a href="https://github.com/SakanaAI/AI-Scientist-v2">AI-Scientist-v2</a></td><td align="left"><a href="example/ai-scientist-v2/workflow.json">JSON</a> · <a href="docs/readme/workflows/ai-scientist-v2.jpg">画布</a></td></tr>
-<tr><td align="left"><a href="example/internagent-1-5/README.md">InternAgent 1.5</a></td><td align="left"><a href="https://arxiv.org/abs/2602.08990" title="InternAgent-1.5: A Unified Agentic Framework for Long-Horizon Autonomous Scientific Discovery">arXiv:2602.08990</a></td><td align="left"><a href="https://github.com/InternScience/InternAgent">InternAgent</a></td><td align="left"><a href="example/internagent-1-5/workflow.json">JSON</a> · <a href="docs/readme/workflows/internagent-1-5.jpg">画布</a></td></tr>
-<tr><td align="left"><a href="example/biomni-r0/README.md">Biomni-R0</a></td><td align="left"><a href="https://biomni.stanford.edu/blog/biomni-r0-technical-report" title="Biomni-R0 technical report">技术报告</a></td><td align="left"><a href="https://github.com/snap-stanford/Biomni">Biomni</a></td><td align="left"><a href="example/biomni-r0/workflow.json">JSON</a> · <a href="docs/readme/workflows/biomni-r0.jpg">画布</a></td></tr>
-<tr><td align="left"><a href="example/chemical-coscientist/README.md">化学 Coscientist</a></td><td align="left"><a href="https://www.nature.com/articles/s41586-023-06792-0" title="Autonomous chemical research with large language models">Nature 2023</a></td><td align="left"><a href="https://github.com/gomesgroup/coscientist">coscientist</a></td><td align="left"><a href="example/chemical-coscientist/workflow.json">JSON</a> · <a href="docs/readme/workflows/chemical-coscientist.jpg">画布</a></td></tr>
-<tr><td align="left"><a href="example/raven/README.md">Raven Host</a></td><td align="left"><a href="https://arxiv.org/abs/2609.33439" title="Raven: The Harness of Harnesses for Composable Agentic Intelligence">arXiv:2609.33439</a></td><td align="left"><a href="https://github.com/EverMind-AI/Raven">Raven</a></td><td align="left"><a href="example/raven/workflow.json">JSON</a> · <a href="docs/readme/workflows/raven.jpg">画布</a></td></tr>
+<tbody><tr><td align="left"><a href="example/01-ahe-evolve/README.md">AHE · 代码自进化</a></td><td align="left"><a href="https://arxiv.org/abs/2604.25850" title="Agentic Harness Engineering: Observability-Driven Automatic Evolution of Coding-Agent Harnesses">arXiv:2604.25850</a></td><td align="left"><a href="https://github.com/china-qijizhifeng/agentic-harness-engineering">agentic-harness-engineering</a></td><td align="left"><a href="example/01-ahe-evolve/workflow.json">JSON</a> · <a href="docs/readme/workflows/01-ahe-evolve.md">画布</a></td></tr>
+<tr><td align="left"><a href="example/aris/README.md">ARIS</a></td><td align="left"><a href="https://arxiv.org/abs/2605.03042" title="ARIS: Autonomous Research via Adversarial Multi-Agent Collaboration">arXiv:2605.03042</a></td><td align="left"><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep" title="wanshuiyin/Auto-claude-code-research-in-sleep">ARIS</a></td><td align="left"><a href="example/aris/workflow.json">JSON</a> · <a href="docs/readme/workflows/aris.md">画布</a></td></tr>
+<tr><td align="left"><a href="example/metaharness/README.md">Meta-Harness</a></td><td align="left"><a href="https://arxiv.org/abs/2603.28052" title="Meta-Harness: End-to-End Optimization of Model Harnesses">arXiv:2603.28052</a></td><td align="left"><a href="https://github.com/stanford-iris-lab/meta-harness">meta-harness</a></td><td align="left"><a href="example/metaharness/workflow.json">JSON</a> · <a href="docs/readme/workflows/metaharness.md">画布</a></td></tr>
+<tr><td align="left"><a href="example/autoresearch/README.md">autoresearch</a></td><td align="left">—（以项目为来源）</td><td align="left"><a href="https://github.com/karpathy/autoresearch">autoresearch</a></td><td align="left"><a href="example/autoresearch/workflow.json">JSON</a> · <a href="docs/readme/workflows/autoresearch.md">画布</a></td></tr>
+<tr><td align="left"><a href="example/funsearch/README.md">FunSearch</a></td><td align="left"><a href="https://www.nature.com/articles/s41586-023-06924-6" title="Mathematical discoveries from program search with large language models">Nature 2023</a></td><td align="left"><a href="https://github.com/google-deepmind/funsearch">funsearch</a></td><td align="left"><a href="example/funsearch/workflow.json">JSON</a> · <a href="docs/readme/workflows/funsearch.md">画布</a></td></tr>
+<tr><td align="left"><a href="example/agent-laboratory/README.md">Agent Laboratory</a></td><td align="left"><a href="https://arxiv.org/abs/2501.04227" title="Agent Laboratory: Using LLM Agents as Research Assistants">arXiv:2501.04227</a></td><td align="left"><a href="https://github.com/SamuelSchmidgall/AgentLaboratory">AgentLaboratory</a></td><td align="left"><a href="example/agent-laboratory/workflow.json">JSON</a> · <a href="docs/readme/workflows/agent-laboratory.md">画布</a></td></tr>
+<tr><td align="left"><a href="example/sciagents/README.md">SciAgents</a></td><td align="left"><a href="https://arxiv.org/abs/2409.05556" title="SciAgents: Automating scientific discovery through multi-agent intelligent graph reasoning">arXiv:2409.05556</a></td><td align="left"><a href="https://github.com/lamm-mit/SciAgentsDiscovery">SciAgentsDiscovery</a></td><td align="left"><a href="example/sciagents/workflow.json">JSON</a> · <a href="docs/readme/workflows/sciagents.md">画布</a></td></tr>
+<tr><td align="left"><a href="example/robin/README.md">Robin</a></td><td align="left"><a href="https://arxiv.org/abs/2505.13400v1" title="Robin: A multi-agent system for automating scientific discovery">arXiv:2505.13400</a></td><td align="left"><a href="https://github.com/Future-House/robin">robin</a></td><td align="left"><a href="example/robin/workflow.json">JSON</a> · <a href="docs/readme/workflows/robin.md">画布</a></td></tr>
+<tr><td align="left"><a href="example/co-scientist/README.md">Google AI co-scientist</a></td><td align="left"><a href="https://arxiv.org/abs/2502.18864v1" title="Towards an AI co-scientist">arXiv:2502.18864</a></td><td align="left">— †</td><td align="left"><a href="example/co-scientist/workflow.json">JSON</a> · <a href="docs/readme/workflows/co-scientist.md">画布</a></td></tr>
+<tr><td align="left"><a href="example/biomni/README.md">Biomni A1 / E1</a></td><td align="left"><a href="https://www.biorxiv.org/content/10.1101/2025.05.30.656746v1" title="Biomni: A General-Purpose Biomedical AI Agent">bioRxiv 2025</a></td><td align="left"><a href="https://github.com/snap-stanford/Biomni">Biomni</a></td><td align="left"><a href="example/biomni/workflow.json">JSON</a> · <a href="docs/readme/workflows/biomni.md">画布</a></td></tr>
+<tr><td align="left"><a href="example/agentrxiv/README.md">AgentRxiv</a></td><td align="left"><a href="https://arxiv.org/abs/2503.18102" title="AgentRxiv: Towards Collaborative Autonomous Research">arXiv:2503.18102</a></td><td align="left"><a href="https://github.com/SamuelSchmidgall/AgentLaboratory">AgentLaboratory</a></td><td align="left"><a href="example/agentrxiv/workflow.json">JSON</a> · <a href="docs/readme/workflows/agentrxiv.md">画布</a></td></tr>
+<tr><td align="left"><a href="example/rrsi/README.md">RRSI</a></td><td align="left"><a href="https://arxiv.org/abs/2609.24972" title="RRSI: Regularized Recursive Self-Improvement of Agent Harnesses">arXiv:2609.24972</a></td><td align="left"><a href="https://github.com/google-research/rrsi">rrsi</a></td><td align="left"><a href="example/rrsi/workflow.json">JSON</a> · <a href="docs/readme/workflows/rrsi.md">画布</a></td></tr>
+<tr><td align="left"><a href="example/drugevolve/README.md">DrugEvolve</a></td><td align="left"><a href="https://www.biorxiv.org/content/10.64898/2026.08.16.745117v1" title="An AI System for Autonomous Algorithm Evolution in Drug Development">bioRxiv 2026</a></td><td align="left"><a href="https://github.com/GAIR-NLP/DrugEvolve">DrugEvolve</a></td><td align="left"><a href="example/drugevolve/workflow.json">JSON</a> · <a href="docs/readme/workflows/drugevolve.md">画布</a></td></tr>
+<tr><td align="left"><a href="example/scientist-two/README.md">ScientistTwo</a></td><td align="left"><a href="https://arxiv.org/abs/2609.19644v1" title="ScientistTwo: Pioneering the Human Knowledge Frontier with Autonomous AI">arXiv:2609.19644</a></td><td align="left">— †</td><td align="left"><a href="example/scientist-two/workflow.json">JSON</a> · <a href="docs/readme/workflows/scientist-two.md">画布</a></td></tr>
+<tr><td align="left"><a href="example/ai-scientist-v2/README.md">AI Scientist v2</a></td><td align="left"><a href="https://arxiv.org/abs/2504.08066" title="The AI Scientist-v2: Workshop-Level Automated Scientific Discovery via Agentic Tree Search">arXiv:2504.08066</a></td><td align="left"><a href="https://github.com/SakanaAI/AI-Scientist-v2">AI-Scientist-v2</a></td><td align="left"><a href="example/ai-scientist-v2/workflow.json">JSON</a> · <a href="docs/readme/workflows/ai-scientist-v2.md">画布</a></td></tr>
+<tr><td align="left"><a href="example/internagent-1-5/README.md">InternAgent 1.5</a></td><td align="left"><a href="https://arxiv.org/abs/2602.08990" title="InternAgent-1.5: A Unified Agentic Framework for Long-Horizon Autonomous Scientific Discovery">arXiv:2602.08990</a></td><td align="left"><a href="https://github.com/InternScience/InternAgent">InternAgent</a></td><td align="left"><a href="example/internagent-1-5/workflow.json">JSON</a> · <a href="docs/readme/workflows/internagent-1-5.md">画布</a></td></tr>
+<tr><td align="left"><a href="example/biomni-r0/README.md">Biomni-R0</a></td><td align="left"><a href="https://biomni.stanford.edu/blog/biomni-r0-technical-report" title="Biomni-R0 technical report">技术报告</a></td><td align="left"><a href="https://github.com/snap-stanford/Biomni">Biomni</a></td><td align="left"><a href="example/biomni-r0/workflow.json">JSON</a> · <a href="docs/readme/workflows/biomni-r0.md">画布</a></td></tr>
+<tr><td align="left"><a href="example/chemical-coscientist/README.md">化学 Coscientist</a></td><td align="left"><a href="https://www.nature.com/articles/s41586-023-06792-0" title="Autonomous chemical research with large language models">Nature 2023</a></td><td align="left"><a href="https://github.com/gomesgroup/coscientist">coscientist</a></td><td align="left"><a href="example/chemical-coscientist/workflow.json">JSON</a> · <a href="docs/readme/workflows/chemical-coscientist.md">画布</a></td></tr>
+<tr><td align="left"><a href="example/raven/README.md">Raven Host</a></td><td align="left"><a href="https://arxiv.org/abs/2609.33439" title="Raven: The Harness of Harnesses for Composable Agentic Intelligence">arXiv:2609.33439</a></td><td align="left"><a href="https://github.com/EverMind-AI/Raven">Raven</a></td><td align="left"><a href="example/raven/workflow.json">JSON</a> · <a href="docs/readme/workflows/raven.md">画布</a></td></tr>
 </tbody></table>
 
 † Google AI co-scientist 与 ScientistTwo 按公开论文及可用组件独立实现；固定来源未提供完整官方系统源码。autoresearch 的固定来源为官方项目；AgentRxiv 的代码包含在 Agent Laboratory 仓库中。各例说明列出具体来源版本、适配范围与工具条件。
@@ -413,7 +421,7 @@ Main：协调异常恢复与用户补充输入
 <details>
 <summary><strong>查看真实 Workflow 画布：软件开发与测试 / AHE 代码自进化</strong></summary>
 
-以下是通过现有通用 JSON 导入入口打开的实际前端截图，仅展示配置，未连接模型或运行研究。
+以下截图使用真实前端画布组件独立排版，经导出及通用 JSON 导入解析验证；不是完整应用窗口。保持可读字号，大流程另有阶段／组内细节。仅展示配置，未连接模型或运行研究。
 
 **软件开发与测试** — coding 实现，testing 独立验收，失败回修。
 
@@ -431,7 +439,7 @@ Main：协调异常恢复与用户补充输入
 
 </div>
 
-[查看 21 张 Workflow 画布截图](docs/readme/workflows/README.md) · [手动导入说明](example/README.md#在-web-中手动查看和使用)
+[查看 21 个 Workflow：21 张总览 + 34 张可读细节](docs/readme/workflows/README.md) · [手动导入说明](example/README.md#在-web-中手动查看和使用)
 
 </details>
 
@@ -485,7 +493,7 @@ CCFA 与 Nature 的内置副本未记录导入时的提交版本；上游仓库�
 <tr><td align="left">维护检查</td><td align="left"><a href="docs/maintenance.md">本地检查、CI 与规则归属</a></td></tr>
 <tr><td align="left">SDK 文档</td><td align="left"><a href="https://github.com/OpenMOSS/ScienceEvolve/blob/main/sdk/README_zh-CN.md">SDK 使用指南</a> · <a href="https://github.com/OpenMOSS/ScienceEvolve/blob/main/example/README.md">SDK 示例</a></td></tr>
 <tr><td align="left">Workflow 文件与手动导入</td><td align="left"><a href="example/README.md">示例目录与导入说明</a></td></tr>
-<tr><td align="left">Workflow 画布截图</td><td align="left"><a href="docs/readme/workflows/README.md">21 张真实 Workflow 画布</a></td></tr>
+<tr><td align="left">Workflow 画布截图</td><td align="left"><a href="docs/readme/workflows/README.md">21 个 Workflow 的总览与细节</a></td></tr>
 <tr><td align="left">Inspire CLI 安装</td><td align="left"><a href=".agents/skills/general/inspire/references/setup/install-and-config.md">安装与配置说明</a></td></tr>
 </tbody>
 </table>

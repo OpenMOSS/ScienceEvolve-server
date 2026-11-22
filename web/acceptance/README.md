@@ -29,7 +29,8 @@ commit. Unrelated, untracked environment backups are not source changes.
 The program uses real pointer/keyboard interaction to check parallel-edge
 bundle selection, Input/Finish selection, Loop and connection editing/undo,
 shared Agent edit cancellation/confirmation, child/parent navigation, layout,
-and preservation of the outer Agent's configuration. It writes three PNGs and
+preservation of the outer Agent's configuration, and wheel scrolling through a
+selected Gate's right-side form to its hard rules and validation. It writes four PNGs and
 a manifest containing the commit, tracked-tree state, image hashes, tested
 viewports and browser errors. Inspect the PNGs separately; successful assertions
 are not a substitute for visual inspection.

@@ -6,7 +6,9 @@
 
 ## Workflow 画布
 
-通过主页通用 JSON 导入入口查看的实际前端截图；仅展示配置，未连接模型或执行研究。节点较多时，请导入 JSON 后缩放阅读。
+真实前端组件的独立文档展示，不是完整应用窗口。画布保持 100% 缩放、标题 16 CSS px；仅展示配置，未连接模型或执行研究。
+
+[方法导读与原图](../../docs/readme/workflows/dynamic-research-workflow.md) · [方法映射](../METHODS.md#dynamic-research-workflow)。
 
 ![默认科研工作流 的实际 Workflow 画布](../../docs/readme/workflows/dynamic-research-workflow.jpg)
 

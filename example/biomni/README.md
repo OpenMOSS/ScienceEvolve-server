@@ -2,11 +2,11 @@
 
 [← 返回中文 README](../../README_zh-CN.md#examples) · [Back to English README](../../README.md#examples) · [示例目录](../README.md)
 
-完整公开A1推理闭环：原资源检索 → 原系统提示/工具与know-how → ReAct生成 → 实际Python/R/Bash/CLI → 观察与重规划 → 可选自批评/test-time scaling → 原报告。SCIENCEEVOLVE每次调度一个步骤，不调用整个上游自治graph。
+完整公开A1推理闭环：原资源检索 → 原系统提示/工具与know-how → ReAct生成 → 实际Python/R/Bash/CLI → 观察与重规划 → 可选自批评/test-time scaling → 原报告。ScienceEvolve 每次调度一个步骤，不调用整个上游自治graph。
 
 ## 网页使用
 
-本目录仅提供静态流程文件与资源。Web 用户按[手动使用说明](../README.md#在-web-中手动查看和使用)导出副本，再通过主页通用 JSON 导入入口查看和使用；补全需求与真实网关后自行启动。SDK 运行见 [SDK 分支指南](/../feat/sdk-only-v0.1.1/sdk/README_zh-CN.md)。
+本目录仅提供静态流程文件与资源。Web 用户按[手动使用说明](../README.md#在-web-中手动查看和使用)导出副本，再通过主页通用 JSON 导入入口查看和使用；补全需求与真实网关后自行启动。SDK 运行见 [SDK 使用指南](https://github.com/OpenMOSS/ScienceEvolve/blob/main/sdk/README_zh-CN.md)。
 
 ## 实现与外部能力
 
@@ -29,9 +29,9 @@ config.json示例（路径和任务替换为真实值）：
 
 先由Main准备并检查环境，再启动同一个bridge服务进程。`prepare-data`会真实下载默认完整数据湖/benchmark；`serve`会检查缺失文件，不能用上游expected_data_lake_files=[]偷偷绕过数据要求。商业模式按上游许可语义切换对应资源。
 
-bridge通过Unix socket逐步接收SCIENCEEVOLVE角色的真实模型响应，复用原A1单步函数和持久Python REPL。请求JSON与完整调度规则见[Skill](skills/scienceevolve-biomni/SKILL.md)。角色暂停可重连现存进程；进程死亡不能自动恢复任意Python/GPU对象，需核对实际作业后继续，不能重复湿实验提交。
+bridge通过Unix socket逐步接收 ScienceEvolve 角色的真实模型响应，复用原A1单步函数和持久Python REPL。请求JSON与完整调度规则见[Skill](skills/scienceevolve-biomni/SKILL.md)。角色暂停可重连现存进程；进程死亡不能自动恢复任意Python/GPU对象，需核对实际作业后继续，不能重复湿实验提交。
 
-湿实验使用wetlab Agent和Task已配置的真实MCP/CLI/API。上游PyLabRobot的Chatterbox只用于模拟检查；必须取回真实job、原始数据才能报告实测。领域检索/工具里的原子模型调用可以使用外部提供者，但外层科研决策由SCIENCEEVOLVE负责。
+湿实验使用wetlab Agent和Task已配置的真实MCP/CLI/API。上游PyLabRobot的Chatterbox只用于模拟检查；必须取回真实job、原始数据才能报告实测。领域检索/工具里的原子模型调用可以使用外部提供者，但外层科研决策由 ScienceEvolve 负责。
 
 ## 验证边界
 
@@ -39,7 +39,9 @@ bridge通过Unix socket逐步接收SCIENCEEVOLVE角色的真实模型响应，�
 
 ## Workflow 画布
 
-通过主页通用 JSON 导入入口查看的实际前端截图；仅展示配置，未连接模型或执行研究。节点较多时，请导入 JSON 后缩放阅读。
+真实前端组件的独立文档展示，不是完整应用窗口。论文是单个 A1 使用 E1 环境；多个角色拆分 A1 内部步骤，critic 可选、wetlab 外接，不是原论文多科学家团队。
+
+[方法导读与原图](../../docs/readme/workflows/biomni.md) · [方法映射](../METHODS.md#biomni)。静态配置，未运行科研任务。
 
 ![Biomni A1 / E1 的实际 Workflow 画布](../../docs/readme/workflows/biomni.jpg)
 

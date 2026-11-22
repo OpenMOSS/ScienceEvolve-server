@@ -2,11 +2,11 @@
 
 [← 返回中文 README](../../README_zh-CN.md#examples) · [Back to English README](../../README.md#examples) · [示例目录](../README.md)
 
-本目录仅提供静态流程文件与资源。Web 用户按[手动使用说明](../README.md#在-web-中手动查看和使用)导出副本，再通过主页通用 JSON 导入入口查看和使用；补全需求与真实网关后自行启动。SDK 运行见 [SDK 分支指南](/../feat/sdk-only-v0.1.1/sdk/README_zh-CN.md)。
+本目录仅提供静态流程文件与资源。Web 用户按[手动使用说明](../README.md#在-web-中手动查看和使用)导出副本，再通过主页通用 JSON 导入入口查看和使用；补全需求与真实网关后自行启动。SDK 运行见 [SDK 使用指南](https://github.com/OpenMOSS/ScienceEvolve/blob/main/sdk/README_zh-CN.md)。
 
-[论文](https://arxiv.org/abs/2609.24972) / [官方代码](https://github.com/google-research/rrsi)。此例用10个 SCIENCEEVOLVE 角色执行完整 RRSI harness 进化算法，Task 与评测工具允许等能力替换；研究编排固定，没有 Evolver。
+[论文](https://arxiv.org/abs/2609.24972) / [官方代码](https://github.com/google-research/rrsi)。此例用10 个 ScienceEvolve 角色执行完整 RRSI harness 进化算法，Task 与评测工具允许等能力替换；研究编排固定，没有 Evolver。
 
-SDK 命令行运行请切换到 [SDK 分支指南](/../feat/sdk-only-v0.1.1/sdk/README_zh-CN.md)。当前 main 从网页载入示例并管理工作区。
+SDK 命令行运行见 [SDK 使用指南](https://github.com/OpenMOSS/ScienceEvolve/blob/main/sdk/README_zh-CN.md)。当前 main 从网页载入示例并管理工作区。
 
 需要真实科研 Task 的 harness、数据、冻结 policy 和评测器。将具体项目与资源位置写入 requirement.txt；task_setup 会按 [Task工具合同](skills/scienceevolve-rrsi/references/environment.md) 准备并验证实际执行能力。缺少资源时阻塞，不能用模拟数据继续。网页启动为每个 Agent 显式选择全局网关，不隐式读取 SDK profile；研究角色默认 gpt-6-sol，脚本沿用宿主统一启动环境，Task policy 单独配置并冻结。
 
@@ -16,7 +16,7 @@ SDK 命令行运行请切换到 [SDK 分支指南](/../feat/sdk-only-v0.1.1/sdk/
 
 默认 eng profile 保留40轮、每任务4次、每轮2候选及官方正则化参数；coding/workspace的原profile也随附。新Task的参数/噪声校准须明确记录，不能把原论文61×4对应的权重当成普适常数。完整参数和失败分支见 [协议](skills/scienceevolve-rrsi/references/protocol.md)。
 
-这里“完整”指RRSI算法及必要能力覆盖，**不是作者三域八基准实验资产的完整复刻，也不是论文数值复现**。官方公开评测存在未补齐的包装、缺失资产和口径矛盾，具体见 [源码/论文核对](/../feat/sdk-only-v0.1.1/docs/sdk/rrsi-fidelity-audit.md)。不能将随附的原始 benchmark adapter 自动视为这些原实验已接通。
+这里“完整”指RRSI算法及必要能力覆盖，**不是作者三域八基准实验资产的完整复刻，也不是论文数值复现**。官方公开评测存在未补齐的包装、缺失资产和口径矛盾，具体见 [源码/论文核对](https://github.com/OpenMOSS/ScienceEvolve/blob/main/docs/sdk/rrsi-fidelity-audit.md)。不能将随附的原始 benchmark adapter 自动视为这些原实验已接通。
 
 推荐使用随例附带的 [scienceevolve-rrsi Skill](skills/scienceevolve-rrsi/SKILL.md)，workflow会自动暂存它及完整上游资源。所有来源与SHA256在 [UPSTREAM.json](skills/scienceevolve-rrsi/UPSTREAM.json)，许可证保留原样。
 
@@ -33,8 +33,8 @@ python -m unittest discover -s example/tests -p test_rrsi.py -v
 
 ## Workflow 画布
 
-通过主页通用 JSON 导入入口查看的实际前端截图；仅展示配置，未连接模型或执行研究。节点较多时，请导入 JSON 后缩放阅读。
+真实前端组件的独立文档展示，不是完整应用窗口。方法导读保留编辑预算、修复、真实测量、正则化选择与冻结 heldout 的边界，不简化为最高分获胜。
 
-![RRSI 的实际 Workflow 画布](../../docs/readme/workflows/rrsi.jpg)
+**[查看 2 张可读阶段图与总览](../../docs/readme/workflows/rrsi.md)** · [方法映射](../METHODS.md#rrsi)。静态配置，未运行科研任务。
 
 [原始 JSON](workflow.json) · [手动导入](../README.md#在-web-中手动查看和使用)

@@ -21,35 +21,35 @@ This directory presents 21 examples corresponding to a pinned SDK source: three 
 
 For another Server machine, re-export there or update Skill references to actual paths. Copying JSON does not install Skills, MCP, data, or experiment tools. The existing generic runtime resolves selected Skill paths; the application does not register this directory's resources automatically. Remote Web users first download the Server-host export, then select that file in the browser. UI labels above retain the current Chinese interface wording for identification.
 
-[Full Web tutorial](../README.md#tutorial) · [Detailed configuration](../docs/configuration.md#workflow) · [21 actual canvases](../docs/readme/workflows/README_en.md)
+[Full Web tutorial](../README.md#tutorial) · [Detailed configuration](../docs/configuration.md#workflow) · [21 examples: overviews and readable details](../docs/readme/workflows/README_en.md) · [Method mapping](METHODS.md)
 
 ## Workflow examples
 
 | Example | Type | Flow |
 | :--- | :--- | :--- |
-| [Default research workflow](dynamic-research-workflow/) · [JSON](dynamic-research-workflow/workflow.json) · [Canvas](../docs/readme/workflows/dynamic-research-workflow.jpg) | Starter | Ideation, execution, writing, review, and Main coordination |
-| [AHE · Code evolution](01-ahe-evolve/) · [JSON](01-ahe-evolve/workflow.json) · [Canvas](../docs/readme/workflows/01-ahe-evolve.jpg) | Starter | Execution, scoring, refinement Loop, and batch decisions |
-| [Software development and testing](02-software-development/) · [JSON](02-software-development/workflow.json) · [Canvas](../docs/readme/workflows/02-software-development.jpg) | Starter | Coding → Testing → repair or delivery |
-| [ARIS](aris/) · [JSON](aris/workflow.json) · [Canvas](../docs/readme/workflows/aris.jpg) | Method workflow | W1 → W1.5 → W2 → writing and cross-model review |
-| [Meta-Harness](metaharness/) · [JSON](metaharness/workflow.json) · [Canvas](../docs/readme/workflows/metaharness.jpg) | Method workflow | Harness candidates, full-dataset evaluation, and selection |
-| [autoresearch](autoresearch/) · [JSON](autoresearch/workflow.json) · [Canvas](../docs/readme/workflows/autoresearch.jpg) | Method workflow | Training experiments and Git keep/discard |
-| [FunSearch](funsearch/) · [JSON](funsearch/workflow.json) · [Canvas](../docs/readme/workflows/funsearch.jpg) | Method workflow | Multi-island program database, sampling, and actual evaluation |
-| [Agent Laboratory](agent-laboratory/) · [JSON](agent-laboratory/workflow.json) · [Canvas](../docs/readme/workflows/agent-laboratory.jpg) | Method workflow | Seven research substages and solver feedback |
-| [SciAgents](sciagents/) · [JSON](sciagents/workflow.json) · [Canvas](../docs/readme/workflows/sciagents.jpg) | Method workflow | Graph reasoning, hypothesis refinement, and independent review |
-| [Robin](robin/) · [JSON](robin/workflow.json) · [Canvas](../docs/readme/workflows/robin.jpg) | Method workflow | Candidate screening, live-experiment handoff, and analysis |
-| [Google AI co-scientist](co-scientist/) · [JSON](co-scientist/workflow.json) · [Canvas](../docs/readme/workflows/co-scientist.jpg) | Method workflow | Hypothesis generation, reflection, ranking, and evolution |
-| [Biomni A1 / E1](biomni/) · [JSON](biomni/workflow.json) · [Canvas](../docs/readme/workflows/biomni.jpg) | Method workflow | Resource retrieval and real biological tool feedback |
-| [AgentRxiv](agentrxiv/) · [JSON](agentrxiv/workflow.json) · [Canvas](../docs/readme/workflows/agentrxiv.jpg) | Method workflow | Laboratory research and shared-preprint accumulation |
-| [RRSI](rrsi/) · [JSON](rrsi/workflow.json) · [Canvas](../docs/readme/workflows/rrsi.jpg) | Method workflow | Harness diagnosis, measurement, and regularized selection |
-| [DrugEvolve](drugevolve/) · [JSON](drugevolve/workflow.json) · [Canvas](../docs/readme/workflows/drugevolve.jpg) | Method workflow | Generation, training, debugging, scoring, and archiving |
-| [ScientistTwo](scientist-two/) · [JSON](scientist-two/workflow.json) · [Canvas](../docs/readme/workflows/scientist-two.jpg) | Method workflow | Idea evolution, experiments, writing, and review |
-| [AI Scientist v2](ai-scientist-v2/) · [JSON](ai-scientist-v2/workflow.json) · [Canvas](../docs/readme/workflows/ai-scientist-v2.jpg) | Workflow adaptation | Ideation, experiment management, research branches, and writing/review nodes |
-| [InternAgent 1.5](internagent-1-5/) · [JSON](internagent-1-5/workflow.json) · [Canvas](../docs/readme/workflows/internagent-1-5.jpg) | Workflow adaptation | Research planning, generation, verification, and evolution |
-| [Biomni-R0](biomni-r0/) · [JSON](biomni-r0/workflow.json) · [Canvas](../docs/readme/workflows/biomni-r0.jpg) | Workflow adaptation | Data preparation, trajectories, rewards, training, deployment, and evaluation nodes |
-| [Chemical Coscientist](chemical-coscientist/) · [JSON](chemical-coscientist/workflow.json) · [Canvas](../docs/readme/workflows/chemical-coscientist.jpg) | Workflow adaptation | Planner schedules search, documentation, code, and experiment nodes |
-| [Raven Host](raven/) · [JSON](raven/workflow.json) · [Canvas](../docs/readme/workflows/raven.jpg) | Workflow adaptation | Two specialist slots and batch decisions |
+| [Default research workflow](dynamic-research-workflow/) · [JSON](dynamic-research-workflow/workflow.json) · [Canvas](../docs/readme/workflows/dynamic-research-workflow.md) | Starter | Ideation, execution, writing, review, and Main coordination |
+| [AHE · Code evolution](01-ahe-evolve/) · [JSON](01-ahe-evolve/workflow.json) · [Canvas](../docs/readme/workflows/01-ahe-evolve.md) | Starter | Execution, scoring, refinement Loop, and batch decisions |
+| [Software development and testing](02-software-development/) · [JSON](02-software-development/workflow.json) · [Canvas](../docs/readme/workflows/02-software-development.md) | Starter | Coding → Testing → repair or delivery |
+| [ARIS](aris/) · [JSON](aris/workflow.json) · [Canvas](../docs/readme/workflows/aris.md) | Method workflow | W1 → W1.5 → W2 → writing and cross-model review |
+| [Meta-Harness](metaharness/) · [JSON](metaharness/workflow.json) · [Canvas](../docs/readme/workflows/metaharness.md) | Method workflow | Harness candidates, full-dataset evaluation, and selection |
+| [autoresearch](autoresearch/) · [JSON](autoresearch/workflow.json) · [Canvas](../docs/readme/workflows/autoresearch.md) | Method workflow | Training experiments and Git keep/discard |
+| [FunSearch](funsearch/) · [JSON](funsearch/workflow.json) · [Canvas](../docs/readme/workflows/funsearch.md) | Method workflow | Multi-island program database, sampling, and actual evaluation |
+| [Agent Laboratory](agent-laboratory/) · [JSON](agent-laboratory/workflow.json) · [Canvas](../docs/readme/workflows/agent-laboratory.md) | Method workflow | Seven research substages and solver feedback |
+| [SciAgents](sciagents/) · [JSON](sciagents/workflow.json) · [Canvas](../docs/readme/workflows/sciagents.md) | Method workflow | Graph reasoning, hypothesis refinement, and independent review |
+| [Robin](robin/) · [JSON](robin/workflow.json) · [Canvas](../docs/readme/workflows/robin.md) | Method workflow | Candidate screening, live-experiment handoff, and analysis |
+| [Google AI co-scientist](co-scientist/) · [JSON](co-scientist/workflow.json) · [Canvas](../docs/readme/workflows/co-scientist.md) | Method workflow | Hypothesis generation, reflection, ranking, and evolution |
+| [Biomni A1 / E1](biomni/) · [JSON](biomni/workflow.json) · [Canvas](../docs/readme/workflows/biomni.md) | Method workflow | Resource retrieval and real biological tool feedback |
+| [AgentRxiv](agentrxiv/) · [JSON](agentrxiv/workflow.json) · [Canvas](../docs/readme/workflows/agentrxiv.md) | Method workflow | Laboratory research and shared-preprint accumulation |
+| [RRSI](rrsi/) · [JSON](rrsi/workflow.json) · [Canvas](../docs/readme/workflows/rrsi.md) | Method workflow | Harness diagnosis, measurement, and regularized selection |
+| [DrugEvolve](drugevolve/) · [JSON](drugevolve/workflow.json) · [Canvas](../docs/readme/workflows/drugevolve.md) | Method workflow | Generation, training, debugging, scoring, and archiving |
+| [ScientistTwo](scientist-two/) · [JSON](scientist-two/workflow.json) · [Canvas](../docs/readme/workflows/scientist-two.md) | Method workflow | Idea evolution, experiments, writing, and review |
+| [AI Scientist v2](ai-scientist-v2/) · [JSON](ai-scientist-v2/workflow.json) · [Canvas](../docs/readme/workflows/ai-scientist-v2.md) | Workflow adaptation | Ideation, experiment management, research branches, and writing/review nodes |
+| [InternAgent 1.5](internagent-1-5/) · [JSON](internagent-1-5/workflow.json) · [Canvas](../docs/readme/workflows/internagent-1-5.md) | Workflow adaptation | Research planning, generation, verification, and evolution |
+| [Biomni-R0](biomni-r0/) · [JSON](biomni-r0/workflow.json) · [Canvas](../docs/readme/workflows/biomni-r0.md) | Workflow adaptation | Data preparation, trajectories, rewards, training, deployment, and evaluation nodes |
+| [Chemical Coscientist](chemical-coscientist/) · [JSON](chemical-coscientist/workflow.json) · [Canvas](../docs/readme/workflows/chemical-coscientist.md) | Workflow adaptation | Planner schedules search, documentation, code, and experiment nodes |
+| [Raven Host](raven/) · [JSON](raven/workflow.json) · [Canvas](../docs/readme/workflows/raven.md) | Workflow adaptation | Two specialist slots and batch decisions |
 
-Examples are included for their workflow structure and orchestration. Individual directories record mappings and adaptation scope; their original implementation notes and requirements retain their source language.
+Examples are included for their workflow structure and orchestration. The atlas separates method guides from execution routing, with 21 overviews and 34 stage/group details. Raven remains a limited batch skeleton; Biomni-R0 requires a verified original recipe. No diagram certifies scientific reproduction. Detailed method notes retain their source language.
 
 ## Files and provenance
 

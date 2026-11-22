@@ -2,11 +2,11 @@
 
 [← 返回中文 README](../../README_zh-CN.md#examples) · [Back to English README](../../README.md#examples) · [示例目录](../README.md)
 
-完整科研流程：目标与资源分配 → 四种假设生成 → 六类反思 → 相似图 → 单轮/多轮论辩与Elo比赛 → 六种假设进化 → 元评审和研究概览 → 专家/实验反馈。同步调度和文件持久池是本例明确采用的等价替换，不要求内置共享服务。
+同步方法适配：目标与资源分配 → 四种假设生成 → 六类反思 → 相似图 → 单轮/多轮论辩与 Elo 比赛 → 六种假设进化 → 元评审和研究概览 → 专家/实验反馈。同步 Main 调度和文件持久池不等同论文异步队列；wetlab 是外部验证扩展。
 
 ## 网页使用
 
-本目录仅提供静态流程文件与资源。Web 用户按[手动使用说明](../README.md#在-web-中手动查看和使用)导出副本，再通过主页通用 JSON 导入入口查看和使用；补全需求与真实网关后自行启动。SDK 运行见 [SDK 分支指南](/../feat/sdk-only-v0.1.1/sdk/README_zh-CN.md)。
+本目录仅提供静态流程文件与资源。Web 用户按[手动使用说明](../README.md#在-web-中手动查看和使用)导出副本，再通过主页通用 JSON 导入入口查看和使用；补全需求与真实网关后自行启动。SDK 运行见 [SDK 使用指南](https://github.com/OpenMOSS/ScienceEvolve/blob/main/sdk/README_zh-CN.md)。
 
 ## 实现与外部能力
 
@@ -27,8 +27,8 @@ plan.json至少含goal、criteria、constraints、stop_condition。检索、长�
 
 ## Workflow 画布
 
-通过主页通用 JSON 导入入口查看的实际前端截图；仅展示配置，未连接模型或执行研究。节点较多时，请导入 JSON 后缩放阅读。
+真实前端组件的独立文档展示，不是完整应用窗口。方法导读包含共享假设／比赛状态、Proximity→Ranking、进化候选重评与 Meta-review 反馈；六核心角色和外部 wetlab 分开展示。
 
-![Google AI co-scientist 的实际 Workflow 画布](../../docs/readme/workflows/co-scientist.jpg)
+**[查看核心角色、外部扩展细节与总览](../../docs/readme/workflows/co-scientist.md)** · [方法映射](../METHODS.md#co-scientist)。静态配置，未运行科研任务。
 
 [原始 JSON](workflow.json) · [手动导入](../README.md#在-web-中手动查看和使用)
