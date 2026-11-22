@@ -1,4 +1,4 @@
-import { Atom, Download, Save, SlidersHorizontal, X } from "lucide-react";
+import { Atom, Download, Save, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import type {
   AgentConfig,
@@ -122,9 +122,11 @@ export interface WorkflowCanvasEditorProps {
   mode?: "full" | "compact";
   compact?: boolean;
   readOnly?: boolean;
+  persistCanvasViewport?: boolean;
   /** Share the existing right column with host-owned records. */
   inspectorTabs?: ReactNode;
   inspectorContent?: ReactNode;
+  onOpenInspectorConfig?: () => void;
   agentHarnessConstraint?: (agentId: string) => { harnessId: string; reason: string } | undefined;
   mcpDirectory?: FixedMcpDefinition[];
   mcpOptions?: AgentMcpServer[];
@@ -212,7 +214,8 @@ export function WorkflowCanvasEditor({
   mode,
   compact: compactProp = false,
   readOnly = false,
-  inspectorTabs, inspectorContent, agentHarnessConstraint,
+  persistCanvasViewport = true,
+  inspectorTabs, inspectorContent, onOpenInspectorConfig, agentHarnessConstraint,
   mcpDirectory = [],
   mcpOptions,
   gateways = [],
@@ -364,6 +367,7 @@ export function WorkflowCanvasEditor({
     setExpandedGroupIds(next);
   };
   const viewportRef = useRef<HTMLDivElement>(null);
+  const workspaceRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const agentNameInputRef = useRef<HTMLInputElement>(null);
   // React state drives the visual frame, while this ref is the authoritative
@@ -488,11 +492,12 @@ export function WorkflowCanvasEditor({
     }
     return positioned;
   }), [dragging, model.nodes, nodeSizes, pendingNodePosition]);
+  const movedDrag = dragging && (dragging.x !== dragging.originX || dragging.y !== dragging.originY) ? dragging : undefined;
   const routeNodeFrameKey = useMemo(() => canvasNodeFrameKey(displayNodes), [displayNodes]);
   const settledFrame = settledGeometryRef.current;
   const settledMatches = settledFrame?.topologyKey === routeTopologyKey && settledFrame.nodeFrameKey === routeNodeFrameKey;
   const routed = useCanvasRouting(model.edges, displayNodes, {
-    enabled: !dragging && !layoutPreview && !(settledMatches && !settledFrame.provisional)
+    enabled: !movedDrag && !layoutPreview && !(settledMatches && !settledFrame.provisional)
   });
   useEffect(() => {
     setPendingNodePosition((current) => {
@@ -510,10 +515,10 @@ export function WorkflowCanvasEditor({
     // During a drag, start from the pointer-down snapshot.  Routing the whole
     // graph here and then replacing most of it with the lock was the dominant
     // source of long tasks on every pointer sample.
-    if (dragging && lockedGeometryRef.current?.length) {
+    if (movedDrag && lockedGeometryRef.current?.length) {
       return buildLockedEdgeRoutesFromSnapshot(lockedGeometryRef.current, {
         nodes: displayNodes,
-        draggedNodeId: dragging.id
+        draggedNodeId: movedDrag.id
       });
     }
     // A layout plan already owns canonical final curves. Elastic endpoint
@@ -547,7 +552,7 @@ export function WorkflowCanvasEditor({
     const addedGeometry = needsBackgroundRouting(model.edges, displayNodes) ? undefined : routeAddedNodeFromCache(cached, model.edges, displayNodes);
     if (addedGeometry) return addedGeometry;
     return routed.geometry;
-  }, [displayNodes, dragging, layoutPreview, model.edges, routeNodeFrameKey, routeTopologyKey, routed.geometry, routed.pending]);
+  }, [displayNodes, movedDrag, layoutPreview, model.edges, routeNodeFrameKey, routeTopologyKey, routed.geometry, routed.pending]);
   const transitionGeometry = useMemo(() => {
     if (!layoutEdgeTransition) return undefined;
     return buildLockedEdgeRoutesFromSnapshot(layoutEdgeTransition.sourceRoutes, { nodes: displayNodes, smoothFallback: true });
@@ -614,17 +619,21 @@ export function WorkflowCanvasEditor({
   // Fit against the actual rendered cubic samples.  Using only router anchors
   // misses the curve between a bend and its control points and makes compact
   // previews either too loose or clipped at the ends.
-  const routePoints = useMemo(() => geometry.flatMap((item) => item.samples), [geometry]);
+  const routePoints = useMemo(() => geometry.filter(item => item.kind !== "main-dispatch").flatMap(item => item.samples), [geometry]);
   const contentBounds = useMemo(() => canvasContentBounds(displayNodes, routePoints), [displayNodes, routePoints]);
+  // Automatic framing stays stable as background routing replaces temporary paths.
+  const autoFitBounds = useMemo(() => canvasContentBounds(displayNodes), [displayNodes]);
   const normalizedViewport = model.presentationLayout.viewport;
   const persistedIsMeaningful = Boolean(orchestration.canvas && (Math.abs(normalizedViewport.x) > 0.5 || Math.abs(normalizedViewport.y) > 0.5 || Math.abs(normalizedViewport.zoom - 0.82) > 0.005));
   const fitViewport = useMemo(() => compact
     ? fitCompactCanvasViewport({ width: Math.max(1, viewportSize.width), height: Math.max(1, viewportSize.height) }, contentBounds)
     : fitCanvasViewport({ width: Math.max(1, viewportSize.width), height: Math.max(1, viewportSize.height) }, contentBounds),
   [compact, contentBounds, viewportSize.height, viewportSize.width]);
+  const autoFitViewport = useMemo(() => fitCanvasViewport(viewportSize, autoFitBounds),
+    [autoFitBounds, viewportSize]);
   const viewport = compact
     ? fitViewport
-    : viewportOverride ?? (persistedIsMeaningful ? normalizedViewport : (viewportSize.width > 0 && viewportSize.height > 0 ? fitViewport : normalizedViewport));
+    : viewportOverride ?? (persistedIsMeaningful ? normalizedViewport : (viewportSize.width > 0 && viewportSize.height > 0 ? autoFitViewport : normalizedViewport));
   const viewportKey = `${viewport.x}:${viewport.y}:${viewport.zoom}`;
   if (declarativeViewportKeyRef.current !== viewportKey) {
     declarativeViewportKeyRef.current = viewportKey;
@@ -759,12 +768,12 @@ export function WorkflowCanvasEditor({
 
   const commitViewport = useCallback((nextViewport: WorkflowCanvasLayout["viewport"]) => {
     showViewport(nextViewport);
-    if (effectiveReadOnly) return;
+    if (effectiveReadOnly || !persistCanvasViewport) return;
     const current = orchestrationRef.current;
     const currentLayout = normalizeCanvasLayout(current.canvas, current);
     onOrchestrationChange(applyCanvasLayout(current, { ...currentLayout, viewport: nextViewport }));
     setNotice("有未保存修改");
-  }, [effectiveReadOnly, onOrchestrationChange, showViewport]);
+  }, [effectiveReadOnly, onOrchestrationChange, persistCanvasViewport, showViewport]);
 
   const persistViewport = useCallback((nextViewport: WorkflowCanvasLayout["viewport"]) => {
     if (layoutBusyRef.current) return;
@@ -1092,11 +1101,8 @@ export function WorkflowCanvasEditor({
       previous: undefined
     };
     if (onGeometryObservation) geometryCaptureRef.current?.("start");
-    // The initial fit viewport is derived from live content bounds. Freeze it
-    // before the first drag render so moving a card (and its temporary detour
-    // curves) cannot continuously change zoom/pan underneath the pointer.
-    // This also keeps screen-space snapping deterministic for the gesture.
-    setViewportOverride(viewport);
+    // Freeze framing while the card moves, starting from the visible transform.
+    setViewportOverride(currentViewportRef.current ?? viewport);
     setDragging(initialDrag);
     const dragLock = captureRouteLock(geometry, displayNodes);
     lockedGeometryRef.current = dragLock;
@@ -1165,18 +1171,19 @@ export function WorkflowCanvasEditor({
       originX: active.originX,
       originY: active.originY
     };
+    const moved = result.x !== result.originX || result.y !== result.originY;
     const releaseNodes = displayNodes.map((node) => node.id === result.id
       ? { ...node, x: result.x, y: result.y }
       : node);
     const dragLock = lockedGeometryRef.current;
-    const releaseGeometry = dragLock?.length
+    const releaseGeometry = moved && dragLock?.length
       ? buildLockedEdgeRoutesFromSnapshot(dragLock, {
           nodes: releaseNodes,
           draggedNodeId: result.id
         })
       : geometry;
 
-    settledGeometryRef.current = {
+    if (moved) settledGeometryRef.current = {
       topologyKey: routeTopologyKey,
       nodeFrameKey: canvasNodeFrameKey(releaseNodes),
       routes: captureRouteLock(releaseGeometry, releaseNodes),
@@ -1191,7 +1198,6 @@ export function WorkflowCanvasEditor({
     // Keep the release frame visible until a controlled host publishes the
     // persisted position. This closes the one-render snap-back window that
     // otherwise makes a fast release appear to have failed.
-    const moved = result.x !== result.originX || result.y !== result.originY;
     setPendingNodePosition(moved ? result : undefined);
     if (onGeometryObservation) geometryCaptureRef.current?.("release");
     setDragging(undefined);
@@ -1957,7 +1963,7 @@ export function WorkflowCanvasEditor({
     );
   };
 
-  const applyLayout = async (kind: "tidy" | "layered" | "fit") => {
+  const applyLayout = async (kind: "tidy" | "fit") => {
     if (effectiveReadOnly || layoutBusyRef.current) return;
     if (kind !== "fit" && lockedGroupIds.size) {
       setNotice(collaborationLockedNotice);
@@ -1979,14 +1985,14 @@ export function WorkflowCanvasEditor({
       const currentModel = adaptWorkflowToCanvas(current, currentLayout);
       const measured = currentModel.nodes.map((node) => nodeSizes[node.id] ? { ...node, ...nodeSizes[node.id] } : node);
       const currentGeometry = geometry;
-      const bounds = canvasContentBounds(measured, currentGeometry.flatMap((item) => item.samples));
+      const bounds = canvasContentBounds(measured, currentGeometry.filter(item => item.kind !== "main-dispatch").flatMap(item => item.samples));
       const fitted = fitCanvasViewport(
         { width: Math.max(1, viewportSize.width), height: Math.max(1, viewportSize.height) },
         bounds,
         { minZoom: .08, maxZoom: 1.08 }
       );
       emit("planning", { layout: currentLayout });
-      if (sameCanvasViewport(currentLayout.viewport, fitted)) {
+      if (sameCanvasViewport(persistCanvasViewport ? currentLayout.viewport : currentViewportRef.current ?? viewport, fitted)) {
         setLayoutMessage("当前视口已经适合画布");
         setNotice("当前视口已经适合画布");
         emit("unchanged", { layout: currentLayout, finalViewport: fitted });
@@ -2108,7 +2114,7 @@ export function WorkflowCanvasEditor({
         baseLayout,
         plan.layout,
         plan.portChanges > 0,
-        kind === "tidy" ? 180 : 240,
+        180,
         sourceRoutes
       );
       if (!animated) return;
@@ -2124,6 +2130,7 @@ export function WorkflowCanvasEditor({
       });
       const next = structuredClone(base);
       next.canvas = structuredClone(plan.layout);
+      if (!persistCanvasViewport) next.canvas.viewport = { ...baseLayout.viewport };
       const finalNodes = adaptWorkflowToCanvas(next, plan.layout).nodes.map((node) => {
         const measured = nodeSizes[node.id];
         return measured ? { ...node, ...measured } : node;
@@ -2144,7 +2151,7 @@ export function WorkflowCanvasEditor({
       setLayoutPreview(undefined);
       setLayoutEdgeTransition(undefined);
       setViewportOverride(plan.finalViewport);
-      onOrchestrationChange(next);
+      if (persistCanvasViewport || !graphMatches) onOrchestrationChange(next);
       completed = true;
       const suffix = fallbackReason ? ` · ${fallbackReason}` : "";
       const summary = [
@@ -2153,10 +2160,10 @@ export function WorkflowCanvasEditor({
         plan.collisionsReduced ? `减少 ${plan.collisionsReduced} 处冲突` : ""
       ].filter(Boolean).join(" · ");
       setLayoutMessage(fallbackReason ? `布局已完成（使用回退）` : "布局已完成");
-      setNotice(`有未保存修改 · ${summary}${suffix}`);
+      setNotice(persistCanvasViewport || !graphMatches ? `有未保存修改 · ${summary}${suffix}` : "已适应当前画布");
     } catch (error) {
       if (operationId === layoutOperationRef.current) {
-        const message = `${kind === "layered" ? "分层重排" : "智能整理"}未完成：${error instanceof Error ? error.message : "请重试"}`;
+        const message = `智能整理未完成：${error instanceof Error ? error.message : "请重试"}`;
         setLayoutMessage(message);
         setNotice(message);
       }
@@ -2442,6 +2449,7 @@ export function WorkflowCanvasEditor({
   ) : null;
   const inspector = (
 <CanvasInspector
+        organizeAgentSettings={Boolean(inspectorTabs)}
         node={inspectorNode}
         harnessConstraint={activeInspectorAgentId ? agentHarnessConstraint?.(activeInspectorAgentId) : undefined}
         selectedEdge={selectedMemberDefinition ? undefined : selectedEdge}
@@ -2524,11 +2532,25 @@ export function WorkflowCanvasEditor({
         onToggleMcp={updateSelectedMcp}
       />
   );
+  const showingWorkflowSettings = selectedId === undefined && !selectedEdgeId && inspectorContent === undefined;
+  const openWorkflowSettings = () => {
+    setSelectedId(undefined);
+    setSelectedEdgeId(undefined);
+    setEditingGroupMemberId(undefined);
+    onOpenInspectorConfig?.();
+    window.requestAnimationFrame(() => {
+      const heading = workspaceRef.current?.querySelector<HTMLElement>(".workflow-settings-inspector h2");
+      if (!heading || heading.closest("[hidden]")) return;
+      const scrollPanel = heading.closest(".workflow-inspector-host") ?? heading.closest(".workflow-settings-inspector");
+      if (scrollPanel) scrollPanel.scrollTop = 0;
+      heading.focus({ preventScroll: true });
+      heading.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    });
+  };
   const canvasBody = (
-    <div className="workspace workflow-editor-workspace">
+    <div ref={workspaceRef} className="workspace workflow-editor-workspace">
       <aside className="left-panel">
-        <button type="button" className={`workflow-settings-entry${selectedId === undefined && !selectedEdgeId ? " is-active" : ""}`} onClick={() => { setSelectedId(undefined); setSelectedEdgeId(undefined); setEditingGroupMemberId(undefined); }}><SlidersHorizontal size={15} /><span><strong>流程设置</strong><small>交付、介入与 Git 机制</small></span></button>
-        <AgentLibraryPanel orchestration={orchestration} selectedId={selectedId} readOnly={effectiveReadOnly || layoutBusy} gitEnabled={gitEnabled} onSelectMain={() => { setSelectedId("main"); setSelectedEdgeId(undefined); setEditingGroupMemberId(undefined); }} onSelectCollaboration={(id) => { if (orchestration.schemaVersion === 3 && orchestration.scopedWorkflow?.groups.some((group) => group.id === id && group.parentGroupId)) setActiveScopedGroupId(id); else { setSelectedId(id); setSelectedEdgeId(undefined); setEditingGroupMemberId(undefined); } }} onAddCopy={addAgentCopy} onRemoveTemplate={removeAgentTemplate} onShowCreate={() => { setShowAddAgent(true); setNewAgentName(""); setNewAgentDescription(""); setTimeout(() => agentNameInputRef.current?.focus(), 0); }} onShowCreateCollaboration={() => { if (!gitEnabled) { setSelectedId(undefined); setSelectedEdgeId(undefined); setNotice("创建协作组需要先启用 Git 机制"); return; } setNewGroupId(""); setNewGroupDisplayName(""); setNewGroupMembers(new Set()); setNewGroupLeaderId(""); setShowAddCollaboration(true); }} />
+        <AgentLibraryPanel searchable={Boolean(inspectorTabs)} orchestration={orchestration} selectedId={selectedId} readOnly={effectiveReadOnly || layoutBusy} gitEnabled={gitEnabled} onSelectMain={() => { setSelectedId("main"); setSelectedEdgeId(undefined); setEditingGroupMemberId(undefined); }} onSelectCollaboration={(id) => { if (orchestration.schemaVersion === 3 && orchestration.scopedWorkflow?.groups.some((group) => group.id === id && group.parentGroupId)) setActiveScopedGroupId(id); else { setSelectedId(id); setSelectedEdgeId(undefined); setEditingGroupMemberId(undefined); } }} onAddCopy={addAgentCopy} onRemoveTemplate={removeAgentTemplate} onShowCreate={() => { setShowAddAgent(true); setNewAgentName(""); setNewAgentDescription(""); setTimeout(() => agentNameInputRef.current?.focus(), 0); }} onShowCreateCollaboration={() => { if (!gitEnabled) { setSelectedId(undefined); setSelectedEdgeId(undefined); setNotice("创建协作组需要先启用 Git 机制"); return; } setNewGroupId(""); setNewGroupDisplayName(""); setNewGroupMembers(new Set()); setNewGroupLeaderId(""); setShowAddCollaboration(true); }} />
         {orchestration.schemaVersion !== 3 && (orchestration.collaborations?.length ?? 0) > 0 && <button type="button" className="workflow-settings-entry" disabled={effectiveReadOnly || lockedGroupIds.size > 0} onClick={() => setShowLegacyUpgrade(true)}>升级旧协作组为组内 Workflow</button>}
         {addAgentDialog}
         {addCollaborationDialog}
@@ -2536,7 +2558,7 @@ export function WorkflowCanvasEditor({
         <section className="edge-guide" aria-label="连接类型说明"><div><span className="edge-sample strong" /><span>强边 · 必经执行</span><small>直接执行</small></div><div><span className="edge-sample weak" /><span>弱边 · 可选执行</span><small>Main 决策</small></div></section>
       </aside>
       <section className="canvas-area">
-        <CanvasToolbar edgeKind={newEdgeKind} zoom={viewport.zoom} connecting={Boolean(connectionSource)} connectStatus={notice} layoutStatus={layoutMessage} layoutPhase={layoutPhase} readOnly={effectiveReadOnly || layoutBusy} allowFitWhenReadOnly layoutBusy={layoutBusy} canUndo={history.length > 0} canRedo={redoHistory.length > 0 && lockedGroupIds.size === 0} onAddAgent={() => { setShowAddAgent(true); setNewAgentName(""); setNewAgentDescription(""); setTimeout(() => agentNameInputRef.current?.focus(), 0); }} onToggleConnect={() => setNotice("从节点端口拖动到目标端口即可连线")} onEdgeKindChange={setNewEdgeKind} onZoomOut={() => persistViewport(zoomCanvasViewportAt(viewport, { x: viewportSize.width / 2, y: viewportSize.height / 2 }, viewport.zoom - .1))} onResetZoom={() => persistViewport(fitViewport)} onZoomIn={() => persistViewport(zoomCanvasViewportAt(viewport, { x: viewportSize.width / 2, y: viewportSize.height / 2 }, viewport.zoom + .1))} onClear={clearCanvas} onUndo={undo} onRedo={redo} onTidy={() => void applyLayout("tidy")} onLayered={() => void applyLayout("layered")} onFit={effectiveReadOnly ? () => persistViewport(fitViewport) : () => void applyLayout("fit")} />
+        <CanvasToolbar onOpenWorkflowSettings={openWorkflowSettings} showingWorkflowSettings={showingWorkflowSettings} edgeKind={newEdgeKind} zoom={viewport.zoom} connecting={Boolean(connectionSource)} connectStatus={notice} layoutStatus={layoutMessage} layoutPhase={layoutPhase} readOnly={effectiveReadOnly || layoutBusy} allowFitWhenReadOnly layoutBusy={layoutBusy} canUndo={history.length > 0} canRedo={redoHistory.length > 0 && lockedGroupIds.size === 0} onAddAgent={() => { setShowAddAgent(true); setNewAgentName(""); setNewAgentDescription(""); setTimeout(() => agentNameInputRef.current?.focus(), 0); }} onToggleConnect={() => setNotice("从节点端口拖动到目标端口即可连线")} onEdgeKindChange={setNewEdgeKind} onZoomOut={() => persistViewport(zoomCanvasViewportAt(viewport, { x: viewportSize.width / 2, y: viewportSize.height / 2 }, viewport.zoom - .1))} onResetZoom={() => persistViewport(fitViewport)} onZoomIn={() => persistViewport(zoomCanvasViewportAt(viewport, { x: viewportSize.width / 2, y: viewportSize.height / 2 }, viewport.zoom + .1))} onClear={clearCanvas} onUndo={undo} onRedo={redo} onTidy={() => void applyLayout("tidy")} onFit={effectiveReadOnly ? () => persistViewport(fitViewport) : () => void applyLayout("fit")} />
         <div className="canvas-world-host">{canvasWorld}</div>
         <CanvasFooter agentCount={model.summary.agentCount} strongEdgeCount={model.summary.strongEdgeCount} weakEdgeCount={model.summary.weakEdgeCount} inputTarget={footerInputTarget} terminationTarget={footerTerminationTarget} currentTarget={footerCurrentTarget} inputConnected={model.summary.inputConnected} terminationConnected={model.summary.terminationConnected} />
       </section>
@@ -2569,7 +2591,7 @@ export function WorkflowCanvasEditor({
       </div>
     </div>
   ) : null;
-  return <section className={`workflow-canvas-editor canvas-workbench ${compact ? "compact center-preview" : ""} ${className}`} aria-label="Workflow 画布编辑器">{header}{compact ? <div className="compact-canvas-only" role="button" tabIndex={0} aria-label="打开 Workflow 画布编辑器" onClick={() => onOpenTextEditor?.()} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpenTextEditor?.(); } }}>{canvasWorld}</div> : activeScopedGroupId && orchestration.schemaVersion === 3 ? <ScopedWorkflowEditor inspectorTabs={inspectorTabs} inspectorContent={inspectorContent} agentHarnessConstraint={agentHarnessConstraint} key={activeScopedGroupId} orchestration={orchestration} agents={agents} groupId={activeScopedGroupId} readOnly={effectiveReadOnly || layoutBusy} lockedGroupIds={lockedGroupIds} skills={skills} onAddSkill={onAddSkill} mcpOptions={mcpOptions} mcpDirectory={mcpDirectory} gateways={gateways} harnesses={harnesses} isAgentLocked={agentIdentityLockedByGroup} onSharedAgentPatch={(id, patch) => updateAgentPatch(patch, id)} onSharedAgentRename={(id, value) => renameAgent(value, id)} onSharedAgentDescriptionChange={(id, value) => { if (agentIdentityLockedByGroup(id)) { setNotice(collaborationLockedNotice); return; } commit((next) => { const definition = next.agents.find((entry) => entry.name === id); if (definition) definition.description = value.slice(0, 180); }); }} onSharedAgentMcpAdd={(id, name, url) => addSelectedMcp(name, url, id)} onSharedAgentMcpToggle={(id, server, enabled) => updateSelectedMcp(server, enabled, id)} onNavigate={setActiveScopedGroupId} onChange={(value) => commit((next) => { Object.assign(next, value); })} /> : canvasBody}{repositoryDialog}{dissolutionDialog}{upgradeLegacyDialog}</section>;
+  return <section className={`workflow-canvas-editor canvas-workbench ${compact ? "compact center-preview" : ""} ${className}`} aria-label="Workflow 画布编辑器">{header}{compact ? <div className="compact-canvas-only" role="button" tabIndex={0} aria-label="打开 Workflow 画布编辑器" onClick={() => onOpenTextEditor?.()} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpenTextEditor?.(); } }}>{canvasWorld}</div> : activeScopedGroupId && orchestration.schemaVersion === 3 ? <ScopedWorkflowEditor persistCanvasViewport={persistCanvasViewport} inspectorTabs={inspectorTabs} inspectorContent={inspectorContent} agentHarnessConstraint={agentHarnessConstraint} key={activeScopedGroupId} orchestration={orchestration} agents={agents} groupId={activeScopedGroupId} readOnly={effectiveReadOnly || layoutBusy} lockedGroupIds={lockedGroupIds} skills={skills} onAddSkill={onAddSkill} mcpOptions={mcpOptions} mcpDirectory={mcpDirectory} gateways={gateways} harnesses={harnesses} isAgentLocked={agentIdentityLockedByGroup} onSharedAgentPatch={(id, patch) => updateAgentPatch(patch, id)} onSharedAgentRename={(id, value) => renameAgent(value, id)} onSharedAgentDescriptionChange={(id, value) => { if (agentIdentityLockedByGroup(id)) { setNotice(collaborationLockedNotice); return; } commit((next) => { const definition = next.agents.find((entry) => entry.name === id); if (definition) definition.description = value.slice(0, 180); }); }} onSharedAgentMcpAdd={(id, name, url) => addSelectedMcp(name, url, id)} onSharedAgentMcpToggle={(id, server, enabled) => updateSelectedMcp(server, enabled, id)} onNavigate={setActiveScopedGroupId} onChange={(value) => commit((next) => { Object.assign(next, value); })} /> : canvasBody}{repositoryDialog}{dissolutionDialog}{upgradeLegacyDialog}</section>;
 }
 
 /** Adding one card need not reroute every existing edge. */

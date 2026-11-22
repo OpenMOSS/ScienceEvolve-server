@@ -5,7 +5,6 @@ import { CanvasToolbar } from "./CanvasToolbar";
 function renderToolbar(overrides: Partial<React.ComponentProps<typeof CanvasToolbar>> = {}) {
   const callbacks = {
     onTidy: vi.fn(),
-    onLayered: vi.fn(),
     onFit: vi.fn()
   };
   render(<CanvasToolbar edgeKind="strong" zoom={1} {...callbacks} {...overrides} />);
@@ -16,10 +15,9 @@ describe("CanvasToolbar layout controls", () => {
   it("runs each directly visible layout command", () => {
     const callbacks = renderToolbar();
     fireEvent.click(screen.getByRole("button", { name: "智能整理布局" }));
-    fireEvent.click(screen.getByRole("button", { name: "依次执行分层重排、智能整理和适应画布" }));
+    expect(screen.queryByRole("button", { name: /分层重排/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "适应画布" }));
     expect(callbacks.onTidy).toHaveBeenCalledOnce();
-    expect(callbacks.onLayered).toHaveBeenCalledOnce();
     expect(callbacks.onFit).toHaveBeenCalledOnce();
   });
 
@@ -28,8 +26,9 @@ describe("CanvasToolbar layout controls", () => {
     const trigger = screen.getByRole("button", { name: "更多布局操作" });
     fireEvent.click(trigger);
     expect(trigger).toHaveAttribute("aria-expanded", "true");
-    fireEvent.click(screen.getByRole("menuitem", { name: "分层重排" }));
-    expect(callbacks.onLayered).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("menuitem", { name: "分层重排" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: "智能整理" }));
+    expect(callbacks.onTidy).toHaveBeenCalledOnce();
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
@@ -48,7 +47,6 @@ describe("CanvasToolbar layout controls", () => {
   it("disables every layout entry point while editing is unavailable", () => {
     renderToolbar({ readOnly: true });
     expect(screen.getByRole("button", { name: "智能整理布局" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "依次执行分层重排、智能整理和适应画布" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "适应画布" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "更多布局操作" })).toBeDisabled();
   });

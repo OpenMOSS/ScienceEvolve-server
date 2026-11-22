@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check, ChevronDown, Eye, FilePlus2, PencilLine, RefreshCw, Settings2, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, Eye, FilePlus2, History, Send, Settings2, X } from "lucide-react";
+import { Button } from "./Common";
 import { ApiError, getWorkflowAdjustmentDetail, submitWorkflowAdjustment, withdrawWorkflowAdjustment } from "../api";
 import type { FixedMcpDefinition, GatewayRecord, HarnessCatalogEntry, Project, SkillDefinition } from "../types";
-import type { WorkflowAdjustmentContext, WorkflowAdjustmentRecord, WorkflowAdjustmentSummary } from "../workflowAdjustments";
+import type { WorkflowAdjustmentContext, WorkflowAdjustmentRecord, WorkflowAdjustmentSnapshot, WorkflowAdjustmentSummary } from "../workflowAdjustments";
 import { loadWorkflowAdjustmentHistory, type WorkflowAdjustmentHistory, type WorkflowAdjustmentHistoryCache } from "../workflowAdjustmentHistory";
 import { canvasDraftValue, clearWorkflowAdjustmentOperation, loadWorkflowAdjustmentDraft, loadWorkflowAdjustmentOperation,
   newWorkflowAdjustmentDraft, sameWorkflowVersion, saveWorkflowAdjustmentDraft, saveWorkflowAdjustmentOperation,
@@ -10,6 +11,9 @@ import { canvasDraftValue, clearWorkflowAdjustmentOperation, loadWorkflowAdjustm
 import { ExplainerRecommendationSettings, RecommendationProvider } from "./RecommendationContext";
 import { WorkflowCanvasEditor } from "./WorkflowCanvasEditor";
 import { CanvasTextDraftContext } from "./workflow-canvas/CanvasTextDraftContext";
+import { normalizeCanvasLayout } from "./workflow-canvas/core/canvas-layout";
+import { defaultScopedCanvas } from "./workflow-canvas/core/scoped-workflow";
+import type { WorkflowCanvasLayout } from "../types";
 import { WorkflowAdjustmentRecords, adjustmentStatusLabel, type AdjustmentRecordFilters } from "./WorkflowAdjustmentRecords";
 import { useExplainerDraftBridge } from "./ProjectExplainerAssistant";
 import "./workflow-adjustment-editor.css";
@@ -28,16 +32,75 @@ function differences(before: unknown, after: unknown, path: string[] = []): Arra
   if (record(before) && record(after)) return [...new Set([...Object.keys(before), ...Object.keys(after)])].sort().flatMap(key => differences(before[key], after[key], [...path, key]));
   return [{ path, before, after }];
 }
+
+function withoutDraftViewportChanges(draft: WorkflowAdjustmentDraft): WorkflowAdjustmentDraft {
+  const base = draft.baseSnapshot.orchestration;
+  const next = structuredClone(draft.snapshot.orchestration);
+  const restoreViewport = (canvas: WorkflowCanvasLayout, original: WorkflowCanvasLayout | undefined, baseline: WorkflowCanvasLayout) => {
+    const restored = { ...canvas, viewport: original?.viewport ?? baseline.viewport };
+    return !differences(restored, baseline).length ? original : restored;
+  };
+  if (next.canvas) next.canvas = restoreViewport(next.canvas, base.canvas, normalizeCanvasLayout(base.canvas, base));
+  for (const group of next.scopedWorkflow?.groups ?? []) {
+    const original = base.scopedWorkflow?.groups.find(item => item.id === group.id)?.workflow;
+    if (!original || !group.workflow.canvas) continue;
+    const baseline = original.canvas ?? defaultScopedCanvas(original.nodes.map(node => node.nodeId), original.input.edges.map(edge => edge.target));
+    group.workflow.canvas = restoreViewport(group.workflow.canvas, original.canvas, baseline);
+  }
+  return { ...draft, snapshot: { ...draft.snapshot, orchestration: next } };
+}
+
+function mergeLatest(
+  draft: WorkflowAdjustmentDraft,
+  current: WorkflowAdjustmentContext["current"],
+  resolution?: "local" | "official"
+): WorkflowAdjustmentDraft | undefined {
+  const conflicts = new Set<string>();
+  const conflictParents = new Set<string>();
+  const equal = (left: unknown, right: unknown) => !differences(left, right).length;
+  const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
+  const merge = (base: unknown, local: unknown, latest: unknown, path: string[], applying = false): unknown => {
+    const key = JSON.stringify(path);
+    if (applying && conflicts.has(key)) return resolution === "official" ? latest : local;
+    if (!applying || !conflictParents.has(key)) {
+      if (equal(local, base)) return latest;
+      if (equal(latest, base) || equal(local, latest)) return local;
+    }
+    if (record(base) && record(local) && record(latest)) {
+      return Object.fromEntries([...new Set([...Object.keys(base), ...Object.keys(local), ...Object.keys(latest)])]
+        .flatMap(key => {
+          const value = merge(base[key], local[key], latest[key], [...path, key], applying);
+          return value === undefined ? [] : [[key, value]];
+        }));
+    }
+    if (!applying) {
+      conflicts.add(key);
+      path.forEach((_, index) => conflictParents.add(JSON.stringify(path.slice(0, index))));
+    }
+    return latest;
+  };
+  merge(draft.baseSnapshot, workflowDraftRecommendationSnapshot(draft), current.snapshot, []);
+  if (conflicts.size && !resolution) return undefined;
+  const snapshot = merge(draft.baseSnapshot, draft.snapshot, current.snapshot, [], true) as WorkflowAdjustmentSnapshot;
+  const textDrafts = resolution === "official" ? Object.fromEntries(Object.entries(draft.textDrafts).filter(([, field]) =>
+    !field.path.some((_, index) => conflicts.has(JSON.stringify(field.path.slice(0, index + 1)))))) : draft.textDrafts;
+  return { ...draft, base: structuredClone(current.version), baseSnapshot: structuredClone(current.snapshot),
+    snapshot: structuredClone(snapshot), textDrafts };
+}
 type Preview = { kind: "record"; requestId: string; record: WorkflowAdjustmentRecord; journalVersion: string; view: "base" | "proposal" }
   | { kind: "current"; current: WorkflowAdjustmentContext["current"] };
 
-export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, harnesses, skills, mcpDirectory, onAddSkill, onClose }: {
+export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, harnesses, skills, mcpDirectory, onAddSkill, onWorkflowApplied, onClose }: {
   project: Project; gateways: GatewayRecord[]; harnesses: HarnessCatalogEntry[]; skills: SkillDefinition[]; mcpDirectory: FixedMcpDefinition[];
   eventRevision?: number;
-  onAddSkill?: (title: string, content: string) => Promise<SkillDefinition>; onClose(): void;
+  onAddSkill?: (title: string, content: string) => Promise<SkillDefinition>; onWorkflowApplied?: () => void; onClose(): void;
 }) {
   const [initial] = useState(() => {
-    try { return { draft: loadWorkflowAdjustmentDraft(localStorage, project.id), operation: loadWorkflowAdjustmentOperation(localStorage, project.id), error: "" }; }
+    try {
+      const stored = loadWorkflowAdjustmentDraft(localStorage, project.id);
+      const draft = stored.kind === "found" ? { ...stored, value: withoutDraftViewportChanges(stored.value) } : stored;
+      return { draft, operation: loadWorkflowAdjustmentOperation(localStorage, project.id), error: "" };
+    }
     catch (error) { return { draft: { kind: "empty" as const }, operation: { kind: "empty" as const }, error: reasonText(error) }; }
   });
   const [draft, setDraft] = useState<WorkflowAdjustmentDraft | undefined>(initial.draft.kind === "found" ? initial.draft.value : undefined);
@@ -67,8 +130,10 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
   const [recordFilters, setRecordFilters] = useState<AdjustmentRecordFilters>({ query: "", source: "all", status: "all" });
   const [preview, setPreview] = useState<Preview>();
   const recommendationDetails = useRef<HTMLDetailsElement>(null);
+  const versionMenu = useRef<HTMLDetailsElement>(null);
   const previewRef = useRef(preview); previewRef.current = preview;
-  const [replaceId, setReplaceId] = useState<string>();
+  const [submitDialog, setSubmitDialog] = useState<{ replaceId?: string }>();
+  const submitTrigger = useRef<HTMLButtonElement>(null);
   const [withdrawId, setWithdrawId] = useState<string>();
   const [withdrawNote, setWithdrawNote] = useState("");
   const controller = useRef<AbortController>();
@@ -82,7 +147,7 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
     catch (reason) { setStorageError(`草稿保留在当前窗口，本地保存失败：${reasonText(reason)}`); }
   }, []);
   const edit = useCallback((change: (current: WorkflowAdjustmentDraft) => WorkflowAdjustmentDraft) => {
-    if (draftRef.current) persist(change(draftRef.current));
+    if (draftRef.current) persist({ ...change(draftRef.current), updatedAt: new Date().toISOString() });
   }, [persist]);
   const clearPending = useCallback((operation: WorkflowAdjustmentPendingOperation) => {
     try {
@@ -120,13 +185,20 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
       contextRef.current = next; setContext(next);
       setHistoryError("");
       if (priorPreview?.kind === "record" && priorPreview.journalVersion !== next.journalVersion) void refreshPreview(priorPreview, next.journalVersion);
-      if (!draftRef.current && !invalidDraft.current) persist(newWorkflowAdjustmentDraft(project.id, next.current));
+      const local = draftRef.current;
+      if (!local && !invalidDraft.current) {
+        persist(newWorkflowAdjustmentDraft(project.id, next.current));
+      } else if (local && !sameWorkflowVersion(local.base, next.current.version)) {
+        const updated = mergeLatest(local, next.current);
+        if (updated) persist(updated);
+      }
       const operation = pendingRef.current;
       if (operation) {
         const id = operation.kind === "submit" ? operation.input.requestId : operation.requestId;
         const found = next.operationRecord?.requestId === id ? next.operationRecord : next.records.find(record => record.requestId === id);
         if (found && (operation.kind === "submit" || !actionable(found))) {
           clearPending(operation);
+          if (found.status === "applied") onWorkflowApplied?.();
           setError("");
           setNotice(operation.kind === "withdraw" && found.status === "applied" ? `该请求已应用到 r${appliedVersion(found)?.revision ?? found.currentVersion.revision}，未撤回` : resultNotice(found));
         }
@@ -145,7 +217,7 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
     } })();
     refreshInFlight.current = read;
     return read;
-  }, [project.id, persist, clearPending, refreshPreview]);
+  }, [project.id, persist, clearPending, refreshPreview, onWorkflowApplied]);
   useEffect(() => {
     mounted.current = true; void refresh();
     const timer = window.setInterval(() => { if (document.visibilityState !== "hidden") void refresh(); }, 5_000);
@@ -165,7 +237,7 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
   const close = () => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); onClose(); };
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || event.defaultPrevented) return;
       if (recommendationDetails.current?.open) {
         recommendationDetails.current.open = false;
         recommendationDetails.current.querySelector("summary")?.focus();
@@ -179,6 +251,8 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
     const dismissRecommendation = (event: PointerEvent) => {
       const details = recommendationDetails.current;
       if (details?.open && !details.contains(event.target as Node)) details.open = false;
+      const versions = versionMenu.current;
+      if (versions?.open && !versions.contains(event.target as Node)) versions.open = false;
     };
     window.addEventListener("keydown", escape);
     document.addEventListener("pointerdown", dismissRecommendation);
@@ -196,16 +270,17 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
         : await withdrawWorkflowAdjustment(project.id, operation.requestId, operation.input);
       clearPending(operation);
       if (mounted.current) {
+        if (result.record.status === "applied") onWorkflowApplied?.();
         setNotice(operation.kind === "withdraw" && "withdrawn" in result && !result.withdrawn
           ? `未撤回：${resultNotice(result.record)}` : resultNotice(result.record));
-        setWithdrawId(undefined); setReplaceId(undefined); await refresh();
+        setWithdrawId(undefined); await refresh();
       }
     } catch (reason) {
       const rejected = reason instanceof ApiError && reason.status >= 400 && reason.status < 500 && reason.status !== 408;
       if (rejected) clearPending(operation);
       if (mounted.current) {
         setError(rejected ? reasonText(reason) : `操作结果待确认。草稿和原操作身份已保留，请查询记录或重试原操作：${reasonText(reason)}`);
-        setReplaceId(undefined); void refresh();
+        void refresh();
       }
     } finally { busyRef.current = false; if (mounted.current) setBusy(false); }
   };
@@ -213,24 +288,26 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     const currentDraft = draftRef.current, latest = contextRef.current;
     if (!currentDraft || !latest || pendingRef.current || invalidOperation || busyRef.current) return;
-    if (!sameWorkflowVersion(currentDraft.base, latest.current.version)) { setError("配置已发生修改，请基于最新版本核对后重新提交；原草稿已保留。"); return; }
+    if (!sameWorkflowVersion(currentDraft.base, latest.current.version)) { dismissSubmit(); setError("配置已发生修改，请基于最新版本核对后重新提交；原草稿已保留。"); return; }
     if (Object.values(currentDraft.textDrafts).some(field => canvasDraftValue(currentDraft.snapshot, field.path) !== field.value)) {
-      setError("请先完成当前字段或共享 Agent 的修改确认，再提交完整草稿。"); return;
+      dismissSubmit(); setError("请先完成当前字段或共享 Agent 的修改确认，再提交完整草稿。"); return;
     }
     const prior = latest.userRequest ?? undefined;
-    if (prior && confirmedReplaceId !== prior.requestId) { setReplaceId(prior.requestId); return; }
-    if (confirmedReplaceId && prior?.requestId !== confirmedReplaceId) { setReplaceId(undefined); setError("待应用记录已变化，请重新核对后提交。"); return; }
+    if (prior?.requestId !== confirmedReplaceId) { dismissSubmit(); setError("待应用记录已变化，请重新核对后提交。"); return; }
+    setSubmitDialog(undefined);
     void send({ kind: "submit", input: { requestId: crypto.randomUUID(), base: structuredClone(currentDraft.base), proposal: structuredClone(currentDraft.snapshot),
       explanation: currentDraft.explanation, ...(prior ? { replacesRequestId: prior.requestId } : {}) } });
   };
   const freshDraft = () => {
-    if (!context || !window.confirm("将使用当前正式配置新建草稿，替换本项目已有本地草稿；正式请求保持原状态。是否继续？")) return;
-    invalidDraft.current = false; persist(newWorkflowAdjustmentDraft(project.id, context.current)); leavePreview(); setError("");
+    const latest = contextRef.current;
+    if (!latest || pendingRef.current || busyRef.current ||
+      !window.confirm("恢复到当前正式版本会丢弃本地草稿中的修改。已提交的记录会保留。是否恢复？")) return;
+    invalidDraft.current = false; persist(newWorkflowAdjustmentDraft(project.id, latest.current)); leavePreview(); setPanel("config"); setError("");
   };
   const editOwn = (record: WorkflowAdjustmentRecord) => {
     if (!window.confirm("将此请求的完整提案载入本地草稿，替换当前本地编辑；原请求仍可在安全边界应用。是否继续？")) return;
-    persist({ schemaVersion: 1, projectId: project.id, base: structuredClone(record.base), baseSnapshot: structuredClone(record.baseSnapshot),
-      snapshot: structuredClone(record.proposal), explanation: record.explanation, textDrafts: {} });
+    persist(withoutDraftViewportChanges({ schemaVersion: 1, projectId: project.id, base: structuredClone(record.base), baseSnapshot: structuredClone(record.baseSnapshot),
+      snapshot: structuredClone(record.proposal), explanation: record.explanation, textDrafts: {} }));
     setPreview(undefined); setPanel("config");
   };
   const openRecord = async (requestId: string, intent: "preview" | "edit" = "preview") => {
@@ -249,10 +326,23 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
   };
   const stale = !!draft && !!context && !sameWorkflowVersion(draft.base, context.current.version);
   const terminal = ["completed", "cancelled", "archived", "archiving", "cancelling"].includes(project.status);
+  const recommendation = useMemo(() => draft ? workflowDraftRecommendationSnapshot(draft) : undefined, [draft]);
+  const draftChanged = useMemo(() => !!draft && !!differences(draft.baseSnapshot, recommendation).length, [draft, recommendation]);
+  const submitDisabled = busy || !!pending || invalidOperation || !context || terminal || !draftChanged;
+  const dismissSubmit = () => {
+    setSubmitDialog(undefined);
+    window.requestAnimationFrame(() => {
+      const trigger = submitTrigger.current;
+      if (!trigger?.disabled) trigger?.focus();
+      else trigger.closest(".workflow-canvas-dialog-head")?.querySelector<HTMLButtonElement>(".adjustment-close")?.focus();
+    });
+  };
   const selected = preview?.kind === "record" ? preview.record : undefined;
   const previewSnapshot = preview?.kind === "current" ? preview.current.snapshot : selected ? preview?.kind === "record" && preview.view === "base" ? selected.baseSnapshot : selected.proposal : undefined;
   const previewChanges = preview?.kind === "current" && draft ? differences(preview.current.snapshot, workflowDraftRecommendationSnapshot(draft)) : selected?.changes;
-  const recommendation = useMemo(() => draft ? workflowDraftRecommendationSnapshot(draft) : undefined, [draft]);
+  const formalPreview = preview?.kind === "current" ? preview.current : undefined;
+  const draftModifiedAt = draft?.updatedAt ? new Date(draft.updatedAt) : undefined;
+  const closeVersionMenu = () => { if (versionMenu.current) versionMenu.current.open = false; };
   const textPersistence = useMemo(() => ({ drafts: draft?.textDrafts ?? {},
     update: (path: string[], value: string) => edit(current => ({ ...current, textDrafts: { ...current.textDrafts, [JSON.stringify(path)]: { path, value } } })),
     remove: (key: string) => edit(current => { const textDrafts = { ...current.textDrafts }; delete textDrafts[key]; return { ...current, textDrafts }; })
@@ -270,8 +360,8 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
     }
   });
   const tabs = <div className="adjustment-panel-tabs" role="tablist" aria-label="Workflow 右侧面板">
-    <button type="button" role="tab" aria-selected={panel === "config"} onClick={() => setPanel("config")}>配置</button>
-    <button type="button" role="tab" aria-selected={panel === "records"} onClick={() => setPanel("records")}>修改记录{context ? `（${context.total}）` : ""}</button>
+    <button type="button" role="tab" aria-selected={panel === "config"} onClick={() => setPanel("config")}><Settings2 size={14} aria-hidden="true" />配置</button>
+    <button type="button" role="tab" aria-selected={panel === "records"} onClick={() => setPanel("records")}><History size={14} aria-hidden="true" />修改记录{context && <span className="adjustment-tab-count">{context.total}</span>}</button>
   </div>;
   const visibleRecords = context?.userRequest && !context.records.some(record => record.requestId === context.userRequest!.requestId)
     ? [context.userRequest, ...context.records] : context?.records ?? [];
@@ -297,30 +387,60 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
       </div>}
     </>} />;
   const sharedCanvas = { skills, onAddSkill, mcpDirectory, gateways, harnesses, gitEnabled: project.git?.enabled === true,
+    persistCanvasViewport: false,
+    onOpenInspectorConfig: () => setPanel("config"),
     workflowName: project.title, inspectorTabs: tabs, inspectorContent: panel === "records" ? records : undefined, agentHarnessConstraint: harnessConstraint };
 
   return <div className={`workflow-canvas-dialog workflow-adjustment-dialog${panel === "records" ? " showing-records" : ""}`} role="dialog" aria-modal="true" aria-label="查看与调整当前 Workflow">
     <div className="workflow-canvas-dialog-backdrop" aria-hidden="true" />
-    <div className="workflow-canvas-dialog-panel">
+    <div className="workflow-canvas-dialog-panel" {...(submitDialog || formalPreview ? { inert: "", "aria-hidden": true } : {})}>
       <div className="workflow-canvas-dialog-head">
-        <div className="adjustment-heading"><strong>查看与调整当前 Workflow</strong><small>编辑草稿后提交，等待相关任务的安全边界应用。</small></div>
+        <div className="adjustment-heading">
+          <strong title={project.title}>{project.title || "Workflow"}</strong>
+          <small className="adjustment-draft-status">
+            {draftChanged && draftModifiedAt && Number.isFinite(draftModifiedAt.getTime()) &&
+              <time dateTime={draftModifiedAt.toISOString()}>最近修改 {new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(draftModifiedAt)}</time>}
+          </small>
+        </div>
         <div className="adjustment-header-controls">
-          <div className="adjustment-versions" aria-label="Workflow 版本">
-            {draft && <span className={`adjustment-version${stale ? " is-stale" : ""}`}>草稿基础 r{draft.base.revision}</span>}
-            {context && <span className="adjustment-version is-current">当前正式 r{context.current.version.revision}</span>}
-          </div>
           <div className="adjustment-header-actions">
-            <button type="button" className="adjustment-refresh" aria-label="刷新正式配置" title="刷新正式配置" aria-busy={historyLoading} onClick={() => void refresh()}><RefreshCw size={14} className={historyLoading ? "spin" : undefined} /></button>
-            <button type="button" aria-label="查看当前正式版本" title="查看当前正式版本" disabled={!context} onClick={() => context && setPreview({ kind: "current", current: structuredClone(context.current) })}><Eye size={14} />查看正式版本</button>
-            <button type="button" className="adjustment-new-draft" aria-label="使用正式配置新建草稿" title="使用当前正式配置替换本地草稿" disabled={!context || busy} onClick={freshDraft}><FilePlus2 size={14} />新建草稿</button>
+            <button type="button" aria-label="版本历史" title="版本历史" aria-pressed={panel === "records"} onClick={() => setPanel(panel === "records" ? "config" : "records")}><History size={15} aria-hidden="true" />历史</button>
+            <details className="adjustment-version-menu" ref={versionMenu} onKeyDown={event => {
+              if (event.key !== "Escape") return;
+              event.preventDefault();
+              event.stopPropagation();
+              closeVersionMenu();
+              versionMenu.current?.querySelector("summary")?.focus();
+            }}>
+              <summary aria-label="版本操作"><span>{context ? `当前正式 r${context.current.version.revision}` : "正式版本"}</span><ChevronDown size={14} aria-hidden="true" /></summary>
+              <div className="adjustment-version-options">
+                <button type="button" aria-label="查看当前正式版本" disabled={!context} onClick={() => {
+                  if (!context) return;
+                  closeVersionMenu(); setPreview({ kind: "current", current: structuredClone(context.current) });
+                }}><Eye size={14} aria-hidden="true" />查看正式版本</button>
+                <button type="button" disabled={!context || busy || !!pending} onClick={() => { closeVersionMenu(); freshDraft(); }}><FilePlus2 size={14} aria-hidden="true" />恢复到正式版本</button>
+              </div>
+            </details>
+            {draft && !preview && <button ref={submitTrigger} type="button" className="adjustment-submit-trigger"
+              aria-haspopup="dialog" disabled={submitDisabled}
+              onClick={() => {
+                const latest = contextRef.current;
+                if (!latest) return;
+                if (draftRef.current && !sameWorkflowVersion(draftRef.current.base, latest.current.version)) {
+                  setPreview({ kind: "current", current: structuredClone(latest.current) });
+                  return;
+                }
+                setSubmitDialog({ replaceId: latest.userRequest?.requestId });
+              }}>
+              <Send size={14} aria-hidden="true" />提交修改
+            </button>}
           </div>
         </div>
         <button type="button" className="adjustment-close" aria-label="关闭 Workflow 调整" onClick={close}><X size={17} /></button>
       </div>
       <div className="adjustment-status">
-        {preview?.kind === "current" && context && !sameWorkflowVersion(preview.current.version, context.current.version) && <p role="status">正式配置已更新，当前预览仍为 r{preview.current.version.revision}。请重新查看最新正式版本后核对。</p>}
         {preview?.kind === "record" && context && preview.journalVersion !== context.journalVersion && <p role="status">修改记录已有更新，当前预览保留最近一次完整读取的内容。</p>}
-        {stale && <p role="status">正式配置已变化。原草稿及基础版本已保留，请查看当前正式版本与完整差异，核对后再提交。</p>}
+        {stale && <p role="status">部分内容与最新正式版本有冲突。提交前请选择要保留的内容。</p>}
         {terminal && <p>项目已进入结束状态，配置为只读；草稿与历史记录保留。</p>}
         {storageError && <p role="alert">{storageError}</p>}{error && <p role="alert">{error}</p>}
         {historyError && <p role="alert">{historyError}</p>}{detailError && <p role="alert">{detailError}</p>}{notice && <p role="status">{notice}</p>}
@@ -332,20 +452,15 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
         gateways={gateways} harnesses={harnesses} disabled={!!preview || terminal}>
         <div className={`adjustment-context-bar${preview ? " is-preview" : ""}`}>
           <div className="adjustment-context-main">
-            {preview ? <>
+            {preview?.kind === "record" ? <>
               <button type="button" className="adjustment-back-to-draft" onClick={leavePreview}><ArrowLeft size={14} />返回我的草稿</button>
               <span className="adjustment-preview-label"><Eye size={14} />
-                <strong>{preview.kind === "current" ? `只读正式版本 r${preview.current.version.revision}`
-                  : `只读提案 · ${sourceLabel(preview.record)} · 基础 r${preview.record.base.revision} · ${adjustmentStatusLabel[preview.record.status]}`}</strong>
+                <strong>{`只读提案 · ${sourceLabel(preview.record)} · 基础 r${preview.record.base.revision} · ${adjustmentStatusLabel[preview.record.status]}`}</strong>
               </span>
               <div className="adjustment-preview-actions">
                 {preview.kind === "record" && <button type="button" onClick={() => setPreview({ ...preview, view: preview.view === "base" ? "proposal" : "base" })}><Eye size={13} />{preview.view === "base" ? "查看修改后" : "查看原基础"}</button>}
-                {preview.kind === "current" && <button type="button" className="adjustment-review-base"
-                  disabled={!context || !sameWorkflowVersion(preview.current.version, context.current.version) || !!pending || busy}
-                  onClick={() => { if (!draftRef.current || !window.confirm("已核对正式版本及完整差异。保留当前完整草稿，以此正式版本为基础继续；不会自动合并内容。是否确认？")) return;
-                    persist({ ...draftRef.current, base: structuredClone(preview.current.version), baseSnapshot: structuredClone(preview.current.snapshot) }); leavePreview(); setError(""); }}><Check size={14} />已核对，更新草稿基础</button>}
               </div>
-            </> : <><span className="adjustment-editing-label"><PencilLine size={13} />本地草稿</span><span className="adjustment-editing-hint">完成编辑后提交修改</span></>}
+            </> : null}
           </div>
           <details ref={recommendationDetails} className="adjustment-recommendation">
             <summary><Settings2 size={14} /><span>工具推荐设置</span><ChevronDown size={13} /></summary>
@@ -365,16 +480,75 @@ export function WorkflowAdjustmentEditor({ project, eventRevision, gateways, har
                 onAgentsChange={agents => edit(current => ({ ...current, snapshot: { ...current.snapshot, agents } }))} />
             </CanvasTextDraftContext.Provider>
           </div>
-          {previewSnapshot && <div className="adjustment-canvas is-preview"><WorkflowCanvasEditor {...sharedCanvas} orchestration={previewSnapshot.orchestration}
+          {previewSnapshot && !formalPreview && <div className="adjustment-canvas is-preview"><WorkflowCanvasEditor {...sharedCanvas} orchestration={previewSnapshot.orchestration}
             agents={previewSnapshot.agents} readOnly onOrchestrationChange={() => {}} onAgentsChange={() => {}} /></div>}
         </div>
-        {!preview && <div className="adjustment-submit"><label>修改说明（公开，选填）<textarea aria-label="修改说明" maxLength={20_000} value={draft.explanation} disabled={terminal} onChange={event => edit(current => ({ ...current, explanation: event.target.value }))} /></label>
-          <button type="button" className="adjustment-submit-primary" title={stale ? "正式配置已变化，请先核对当前正式版本" : undefined}
-            disabled={busy || !!pending || invalidOperation || !context || terminal || stale} onClick={() => submit()}>提交完整修改</button>
-          {replaceId && <div className="adjustment-confirm"><p>已有一条待应用修改，本次提交将覆盖它。旧请求内容及替换历史会保留。</p><code>{replaceId}</code>
-            <button type="button" disabled={busy || !!pending} onClick={() => submit(replaceId)}>确认覆盖并提交</button><button type="button" onClick={() => setReplaceId(undefined)}>取消覆盖</button></div>}
-        </div>}
       </RecommendationProvider> : <p className="adjustment-empty">{loading ? "正在读取当前正式配置…" : "草稿尚未建立。请核对上方说明，使用当前正式配置新建草稿。"}</p>}
     </div>
+    {formalPreview && <div className="modal-backdrop adjustment-submit-backdrop">
+      <section className="adjustment-formal-dialog" role="dialog" aria-modal="true" aria-label="查看正式版本"
+        onKeyDown={event => {
+          if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); leavePreview(); }
+          if (event.key !== "Tab") return;
+          const controls = [...event.currentTarget.querySelectorAll<HTMLElement>("button, summary, select, input, textarea, [tabindex]")]
+            .filter(control => !control.matches(":disabled") && control.tabIndex >= 0 && control.getClientRects().length);
+          if (document.activeElement === (event.shiftKey ? controls[0] : controls.at(-1))) {
+            event.preventDefault();
+            (event.shiftKey ? controls.at(-1) : controls[0])?.focus();
+          }
+        }}>
+        <header>
+          <h2>只读正式版本 r{formalPreview.version.revision}</h2>
+          {stale && context && sameWorkflowVersion(formalPreview.version, context.current.version) && draftChanged &&
+            (["local", "official"] as const).map(resolution => <Button key={resolution} type="button" variant="secondary"
+              disabled={!!pending || busy} onClick={() => {
+                const latest = contextRef.current?.current;
+                if (!draftRef.current || !latest || !sameWorkflowVersion(formalPreview.version, latest.version)) return;
+                const merged = mergeLatest(draftRef.current, latest, resolution);
+                if (merged) persist(merged);
+                leavePreview(); setError("");
+              }}>{resolution === "local" ? "冲突处保留我的修改" : "冲突处采用正式版本"}</Button>)}
+          <button type="button" className="adjustment-close" aria-label="返回我的草稿" autoFocus onClick={leavePreview}><X size={17} aria-hidden="true" /></button>
+        </header>
+        {context && !sameWorkflowVersion(formalPreview.version, context.current.version) &&
+          <div className="adjustment-formal-notice" role="status">正式配置已更新，当前预览仍为 r{formalPreview.version.revision}。
+            <Button type="button" variant="secondary" onClick={() => setPreview({ kind: "current", current: structuredClone(context.current) })}>查看最新正式版本</Button>
+          </div>}
+        <div className="workflow-canvas-dialog-scroll">
+          <div className="adjustment-canvas is-preview">
+            <WorkflowCanvasEditor {...sharedCanvas} inspectorTabs={undefined} inspectorContent={stale && draftChanged ? records : undefined}
+              orchestration={formalPreview.snapshot.orchestration} agents={formalPreview.snapshot.agents} readOnly
+              onOrchestrationChange={() => {}} onAgentsChange={() => {}} />
+          </div>
+        </div>
+      </section>
+    </div>}
+    {submitDialog && draft && !preview && <div className="modal-backdrop adjustment-submit-backdrop"
+      onMouseDown={event => { if (event.target === event.currentTarget) dismissSubmit(); }}>
+      <form className="confirm-dialog adjustment-submit-dialog" role="dialog" aria-modal="true" aria-label="提交 Workflow 修改"
+        onSubmit={event => { event.preventDefault(); if (!submitDisabled) submit(submitDialog.replaceId); }}
+        onKeyDown={event => {
+          if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); dismissSubmit(); }
+          if (event.key !== "Tab") return;
+          const fields = [...event.currentTarget.querySelectorAll<HTMLElement>("textarea:not(:disabled), button:not(:disabled)")];
+          const from = event.shiftKey ? fields[0] : fields.at(-1);
+          if (document.activeElement === from) {
+            event.preventDefault();
+            (event.shiftKey ? fields.at(-1) : fields[0])?.focus();
+          }
+        }}>
+        <h2>提交 Workflow 修改</h2>
+        <label className="adjustment-explanation"><span>修改说明 <small>公开 · 选填</small></span>
+          <textarea autoFocus aria-label="修改说明" rows={4} maxLength={20_000} value={draft.explanation}
+            onChange={event => edit(current => ({ ...current, explanation: event.target.value }))} />
+        </label>
+        {submitDialog.replaceId && <p className="adjustment-replace-note" role="status">本次提交将替换待应用的修改，原记录保留在修改历史中。</p>}
+        {stale && <p role="alert">正式配置已变化，请返回草稿核对后再提交。</p>}
+        <div className="dialog-actions">
+          <Button type="button" variant="secondary" onClick={dismissSubmit}>返回草稿</Button>
+          <Button type="submit" disabled={submitDisabled}>{submitDialog.replaceId ? "确认覆盖并提交" : "提交完整修改"}</Button>
+        </div>
+      </form>
+    </div>}
   </div>;
 }

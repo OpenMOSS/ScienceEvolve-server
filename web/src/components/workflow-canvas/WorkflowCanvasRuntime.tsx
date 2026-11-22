@@ -4,10 +4,7 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState,
-  type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
-  type WheelEvent as ReactWheelEvent
+  useState
 } from "react";
 import {
   Activity,
@@ -18,16 +15,13 @@ import {
   GitPullRequest,
   History,
   Maximize,
-  Minus,
-  Plus,
   Trash2,
   X
 } from "lucide-react";
 import type { AgentEvent, HarnessCatalogEntry, Project } from "../../types";
 import { agentMeta } from "../../lib";
-import { CanvasEdges, type CanvasEdgeGeometry } from "./CanvasEdges";
-import { CanvasNodes, type CanvasNodePresentation } from "./CanvasNodes";
-import { CanvasWorld } from "./CanvasWorld";
+import { Button } from "../Common";
+import type { CanvasNodePresentation } from "./CanvasNodes";
 import {
   CollaborationActivityFeed,
   FailureAttemptHistory
@@ -36,32 +30,25 @@ import { ExecutionPreview } from "./ExecutionPreview";
 import { CopyableTechnicalValue } from "./CopyableTechnicalValue";
 import { GitTreeDialog } from "./GitTreeDialog";
 import { RuntimeAgentNodeDetail } from "./RuntimeAgentNodeDetail";
-import { WorkflowCanvasLive } from "./WorkflowCanvasLive";
+import { RuntimeCanvasSurface, type RuntimeCanvasSurfaceProps } from "./RuntimeCanvasSurface";
 import { WorkflowCanvasReplay } from "./WorkflowCanvasReplay";
 import { buildScopedRuntimeView, scopedGroupName, scopedReferenceDisplayState } from "./core/scoped-runtime-view";
 import { adaptWorkflowToCanvas } from "./core/canvas-adapter";
-import { canvasContentBounds, fitCanvasViewport, zoomCanvasViewportAt } from "./core/canvas-viewport";
 import {
   COLLABORATION_STATE_LABELS,
   collaborationExecutionState,
-  collaborationProgress,
-  type CollaborationDisplayState
+  collaborationProgress
 } from "./core/collaboration-activity";
 import {
-  CANVAS_WORLD_HEIGHT,
-  CANVAS_WORLD_WIDTH,
-  type CanvasModel,
+  CANVAS_INPUT_NODE_ID,
   type CanvasNode,
-  type CanvasPoint,
-  type CanvasSize,
-  type CanvasViewport
+  type CanvasPoint
 } from "./core/canvas-model";
 import type { EdgeGeometry } from "./core/canvas-router";
 import { useCanvasRouting } from "./useCanvasRouting";
 import {
   buildWorkflowRuntimeState,
   runtimeNodeLabel,
-  type RuntimeNodeState,
   type WorkflowRuntimeState
 } from "./core/workflow-runtime";
 import "./workflow-canvas.css";
@@ -74,401 +61,7 @@ export interface WorkflowCanvasRuntimeProps {
   runtime?: WorkflowRuntimeState;
 }
 
-export type RuntimeCanvasSurfaceMode = "preview" | "modal";
-
-/**
- * Passive renderer shared by the embedded runtime preview and the large
- * runtime dialog. It receives one model and one geometry snapshot from its
- * owner; it never creates an editor model, mutates orchestration, or exposes
- * ports/edge hit targets.
- */
-export interface RuntimeCanvasSurfaceProps {
-  model: CanvasModel;
-  geometry: readonly EdgeGeometry[];
-  runtime: WorkflowRuntimeState;
-  project: Project;
-  harnesses?: ReadonlyArray<Pick<HarnessCatalogEntry, "id" | "label">>;
-  mode?: RuntimeCanvasSurfaceMode;
-  selectedNodeId?: string;
-  onSelectNode?: (node: CanvasNode) => void;
-  onOpen?: () => void;
-  expandedGroupIds?: ReadonlySet<string>;
-  onToggleGroup?: (groupId: string) => void;
-}
-
-interface RuntimeCanvasViewportPlan {
-  viewport: CanvasViewport;
-  scrollable: boolean;
-  frameWidth: number;
-  frameHeight: number;
-}
-
-export function runtimeGroupMemberStates(project: Project): Record<string, Record<string, string>> {
-  if (project.orchestration.schemaVersion === 3) return {};
-  const result: Record<string, Record<string, string>> = {};
-  for (const group of project.orchestration.collaborations ?? []) {
-    const progress = collaborationProgress(project, group);
-    result[group.id] = Object.fromEntries(progress.members.map((member) => {
-      const leader = progress.groupRun?.leaderAgentId === member.agentId ? "leader · " : "";
-      return [member.agentId, `${leader}${member.state}`];
-    }));
-  }
-  return result;
-}
-
-function runtimeStateForCollaboration(state: CollaborationDisplayState): RuntimeNodeState {
-  return state;
-}
-
-/**
- * Keep the runtime dialog readable on narrow screens without inventing a
- * second graph.  The same world coordinates are fitted into a wider,
- * horizontally scrollable frame; the page itself remains width-locked.
- */
-export function planRuntimeCanvasViewport(
-  mode: RuntimeCanvasSurfaceMode,
-  viewportSize: { width: number; height: number },
-  contentBounds: ReturnType<typeof canvasContentBounds>
-): RuntimeCanvasViewportPlan {
-  const width = Math.max(1, viewportSize.width);
-  const height = Math.max(1, viewportSize.height);
-  const narrowModal = mode === "modal" && width < 620;
-  if (!narrowModal || !contentBounds) {
-    return {
-      viewport: fitCanvasViewport(
-        { width, height },
-        contentBounds,
-        mode === "modal"
-          ? { padding: 52, boundsPadding: 24, minZoom: 0.08, maxZoom: 1.35 }
-          : { padding: 22, boundsPadding: 14, minZoom: 0.14, maxZoom: 1.08 }
-      ),
-      scrollable: false,
-      frameWidth: width,
-      frameHeight: height
-    };
-  }
-
-  const boundsPadding = 24;
-  const padding = 22;
-  const graphWidth = Math.max(1, contentBounds.maxX - contentBounds.minX + boundsPadding * 2);
-  const graphHeight = Math.max(1, contentBounds.maxY - contentBounds.minY + boundsPadding * 2);
-  // A 0.62 zoom keeps a reference card's 12px title near 7.5px on a phone;
-  // the enlarged card typography below brings the readable text back to
-  // ordinary mobile sizing.  If the dialog is unusually short, height wins.
-  const heightFit = Math.max(0.46, (height - padding * 2) / graphHeight);
-  const zoom = Math.min(0.62, heightFit);
-  const frameWidth = Math.max(width, Math.ceil(graphWidth * zoom + padding * 2));
-  const frameHeight = Math.max(height, Math.ceil(graphHeight * zoom + padding * 2));
-  return {
-    viewport: fitCanvasViewport(
-      { width: frameWidth, height: frameHeight },
-      contentBounds,
-      { padding, boundsPadding, minZoom: zoom, maxZoom: zoom }
-    ),
-    scrollable: frameWidth > width + 1,
-    frameWidth,
-    frameHeight
-  };
-}
-
-export function RuntimeCanvasSurface({
-  model,
-  geometry,
-  runtime,
-  project,
-  mode = "preview",
-  selectedNodeId,
-  onSelectNode,
-  onOpen,
-  expandedGroupIds,
-  onToggleGroup
-}: RuntimeCanvasSurfaceProps) {
-  const hostRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
-  const [selectedLoopEdge, setSelectedLoopEdge] = useState<CanvasEdgeGeometry>();
-  const selectedEdge = model.edges.find(edge => edge.id === selectedLoopEdge?.id &&
-    edge.source === selectedLoopEdge.source && edge.target === selectedLoopEdge.target);
-  const [nodeSizes, setNodeSizes] = useState<Record<string, CanvasSize>>({});
-  const surfaceNodes = useMemo(
-    () => model.nodes.map((node) => nodeSizes[node.id] ? { ...node, ...nodeSizes[node.id] } : node),
-    [model.nodes, nodeSizes]
-  );
-  const measuredRouting = useCanvasRouting(model.edges, surfaceNodes, { enabled: Object.keys(nodeSizes).length > 0 });
-  const surfaceGeometry = Object.keys(nodeSizes).length ? measuredRouting.geometry : geometry;
-  const collaborationProgressById = useMemo(() => Object.fromEntries(
-    (project.orchestration.schemaVersion === 3 ? [] : project.orchestration.collaborations ?? []).map((group) => [
-      group.id,
-      collaborationProgress(project, group)
-    ])
-  ), [project]);
-  const reconciledNodeStates = useMemo(() => {
-    const states = { ...runtime.nodeStates };
-    for (const [groupId, progress] of Object.entries(collaborationProgressById)) {
-      states[groupId] = runtimeStateForCollaboration(progress.state);
-    }
-    if (project.orchestration.schemaVersion === 3) {
-      for (const group of project.orchestration.scopedWorkflow?.groups ?? []) {
-        states[group.id] = scopedGroupDisplayState(project, group.id);
-      }
-    }
-    return states;
-  }, [collaborationProgressById, project, runtime.nodeStates]);
-  const handleNodeResize = useCallback((nodeId: string, nextSize: CanvasSize) => {
-    setNodeSizes((current) => {
-      const previous = current[nodeId];
-      if (previous?.width === nextSize.width && previous.height === nextSize.height) return current;
-      return { ...current, [nodeId]: nextSize };
-    });
-  }, []);
-  const contentBounds = useMemo(
-    () => canvasContentBounds(surfaceNodes, surfaceGeometry.flatMap((edge) => edge.samples)),
-    [surfaceGeometry, surfaceNodes]
-  );
-  const viewportPlan = useMemo(
-    () => planRuntimeCanvasViewport(mode, size, contentBounds),
-    [contentBounds, mode, size.height, size.width]
-  );
-  const savedViewport = model.presentationLayout.viewport;
-  const defaultViewport = mode === "modal" ? savedViewport : viewportPlan.viewport;
-  const [viewport, setViewport] = useState<CanvasViewport>(defaultViewport);
-  const pointerMovedRef = useRef(false);
-  const userViewportRef = useRef(false);
-  const panRef = useRef<{
-    pointerId: number;
-    clientX: number;
-    clientY: number;
-    viewport: CanvasViewport;
-  }>();
-  const geometryValid = useMemo(() => surfaceGeometry.every((edge) => (
-    edge.samples.length > 1
-    && edge.samples.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
-  )), [surfaceGeometry]);
-
-  useEffect(() => {
-    const element = hostRef.current;
-    if (!element) return;
-    const update = () => setSize({ width: element.clientWidth, height: element.clientHeight });
-    update();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(update);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-
-  // Preview always follows content. The modal starts from the project-saved
-  // editor viewport and keeps later pan/zoom changes session-local.
-  useEffect(() => {
-    if (mode === "preview") {
-      setViewport(viewportPlan.viewport);
-    } else if (!userViewportRef.current) {
-      setViewport(savedViewport);
-    }
-  }, [mode, savedViewport.x, savedViewport.y, savedViewport.zoom, viewportPlan.viewport]);
-
-  const resolvePresentation = useCallback((node: CanvasNode): CanvasNodePresentation => {
-    if (node.kind === "input") {
-      return { title: "用户输入", description: "本次项目输入", modelLabel: "INPUT", color: "#446b9b", softColor: "#eaf0f7" };
-    }
-    if (node.kind === "finish") {
-      return { title: "结束", description: "真实终止路径", modelLabel: "END", color: "#a65365", softColor: "#f9eaed" };
-    }
-    if (node.collaboration) {
-      return { title: node.displayName ?? node.name, description: `${node.memberAgentIds?.length ?? 0} 名成员协作`, modelLabel: collaborationProgressById[node.id]?.phaseLabel ?? runtimeNodeLabel(reconciledNodeStates[node.id]), initials: "组", color: "#5c5bd6", softColor: "#eeedff" };
-    }
-    const definition = project.orchestration.agents.find((entry) => entry.name === node.name);
-    const meta = agentMeta(node.name, node.template ?? "general");
-    const isMain = node.name === "main";
-    return {
-      title: isMain ? "Main Agent" : meta.name,
-      description: definition?.description ?? meta.description,
-      modelLabel: runtimeNodeLabel(runtime.nodeStates[node.id]),
-      initials: isMain ? "MA" : meta.shortName.slice(0, 2).toUpperCase(),
-      color: isMain ? "#25714e" : "#526674",
-      softColor: isMain ? "#e7f1e9" : "#eaf0f3"
-    };
-  }, [collaborationProgressById, project.orchestration.agents, reconciledNodeStates]);
-
-  const renderedEdges: CanvasEdgeGeometry[] = useMemo(
-    () => surfaceGeometry.map((edge) => {
-      const loop = model.edges.find((item) => item.id === edge.id)?.loop;
-      const loopState = loop ? runtime.loopStates[loop.id] : undefined;
-      return {
-        ...edge,
-        loop,
-        label: loop
-          ? loop.role === "return"
-            ? `↻ ${loop.id} · B${loopState?.batch ?? 0} · ${(loopState?.iteration ?? 0)}/${loop.maxIterations} · Σ${loopState?.totalIterations ?? 0}`
-            : `批次退出 · ${loop.id}`
-          : edge.label,
-        runtimeState: runtime.edgeStates[edge.id] ?? "configured"
-      };
-    }),
-    [surfaceGeometry, model.edges, runtime.edgeStates, runtime.loopStates]
-  );
-
-  const onRuntimeWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (mode !== "modal") return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    userViewportRef.current = true;
-    setViewport((current) => zoomCanvasViewportAt(
-      current,
-      { x: event.clientX - rect.left, y: event.clientY - rect.top },
-      current.zoom * Math.exp(-Math.max(-240, Math.min(240, event.deltaY)) * .0015)
-    ));
-  }, [mode]);
-
-  const handleRuntimePointer = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.type === "pointerdown") {
-      pointerMovedRef.current = false;
-      const target = event.target as Element | null;
-      if (
-        mode === "modal"
-        && !viewportPlan.scrollable
-        && event.button === 0
-        && !target?.closest(".agent-node")
-      ) {
-        panRef.current = {
-          pointerId: event.pointerId,
-          clientX: event.clientX,
-          clientY: event.clientY,
-          viewport
-        };
-        event.currentTarget.setPointerCapture?.(event.pointerId);
-      }
-    }
-    if (event.type === "pointermove" && panRef.current?.pointerId === event.pointerId) {
-      pointerMovedRef.current = true;
-      userViewportRef.current = true;
-      const gesture = panRef.current;
-      setViewport({
-        ...gesture.viewport,
-        x: gesture.viewport.x + event.clientX - gesture.clientX,
-        y: gesture.viewport.y + event.clientY - gesture.clientY
-      });
-      event.preventDefault();
-    }
-    if ((event.type === "pointerup" || event.type === "pointercancel") && panRef.current?.pointerId === event.pointerId) {
-      panRef.current = undefined;
-      event.currentTarget.releasePointerCapture?.(event.pointerId);
-    }
-    event.stopPropagation();
-  }, [mode, viewport, viewportPlan.scrollable]);
-
-  const zoomRuntime = useCallback((delta: number) => {
-    userViewportRef.current = true;
-    setViewport((current) => zoomCanvasViewportAt(
-      current,
-      { x: size.width / 2, y: size.height / 2 },
-      current.zoom + delta
-    ));
-  }, [size.height, size.width]);
-
-  const fitRuntime = useCallback(() => {
-    // Fit is the runtime surface's only explicit viewport recomputation. Keep
-    // that result for this modal session without writing it back to the project.
-    userViewportRef.current = true;
-    setViewport(viewportPlan.viewport);
-  }, [viewportPlan.viewport]);
-
-  const handleWorldClick = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
-    if (mode !== "preview") return;
-    if (pointerMovedRef.current) {
-      pointerMovedRef.current = false;
-      return;
-    }
-    // Node clicks are handled by CanvasNodes and should invoke onOpen once;
-    // blank and passive-edge clicks open the same dialog.
-    const target = event.target as Element | null;
-    if (target?.closest(".agent-node")) return;
-    onOpen?.();
-  }, [mode, onOpen]);
-
-  const canvas = (
-    <CanvasWorld
-      viewport={viewport}
-      worldWidth={CANVAS_WORLD_WIDTH}
-      worldHeight={CANVAS_WORLD_HEIGHT}
-      className="workflow-runtime-world"
-      onWheel={onRuntimeWheel}
-      onClick={handleWorldClick}
-      data-canvas-layout-phase="idle"
-      data-canvas-geometry-valid={geometryValid ? "true" : "false"}
-      aria-label={mode === "preview" ? "运行 Workflow 缩略画布，点击打开大画布" : "运行 Workflow 大画布"}
-    >
-      <CanvasEdges
-        edges={renderedEdges}
-        nodes={surfaceNodes}
-        focusedNodeId={selectedEdge ? undefined : selectedNodeId ?? runtime.currentNodeId}
-        selectedLoopId={selectedEdge?.loop?.id}
-        selectedEdgeId={selectedEdge?.id}
-        focusMode="selected"
-        interactive={false}
-        flowFixedEdges
-        onSelectEdge={setSelectedLoopEdge}
-      />
-      <CanvasNodes
-        nodes={surfaceNodes}
-        suppressGroupMembers={mode === "preview"}
-        readOnly
-        showPorts={false}
-        selectedNodeId={selectedNodeId}
-        runtimeNodeStates={reconciledNodeStates}
-        runtimeExecutionCounts={runtime.executionCounts}
-        expandedGroupIds={expandedGroupIds}
-        onToggleGroup={onToggleGroup}
-        onNodeResize={handleNodeResize}
-        groupMemberStates={runtimeGroupMemberStates(project)}
-        resolvePresentation={resolvePresentation}
-        onSelectNode={(node) => {
-          setSelectedLoopEdge(undefined);
-          onSelectNode?.(node);
-          if (mode === "preview") onOpen?.();
-        }}
-      />
-    </CanvasWorld>
-  );
-
-  return (
-    <div className="runtime-canvas-surface-shell">
-      <div
-        ref={hostRef}
-        className={`runtime-canvas-surface runtime-canvas-surface-${mode}${viewportPlan.scrollable ? " is-runtime-scrollable" : ""}`}
-        data-runtime-surface-mode={mode}
-        data-runtime-node-count={model.nodes.length}
-        data-runtime-edge-count={model.edges.length}
-        data-runtime-scrollable={viewportPlan.scrollable ? "true" : "false"}
-        onPointerDown={handleRuntimePointer}
-        onPointerMove={handleRuntimePointer}
-        onPointerUp={handleRuntimePointer}
-        onPointerCancel={handleRuntimePointer}
-        onDragStart={(event) => event.preventDefault()}
-      >
-        {viewportPlan.scrollable ? (
-          <div
-            className="runtime-canvas-scroll-frame"
-            style={{ width: viewportPlan.frameWidth, height: viewportPlan.frameHeight }}
-            data-runtime-scroll-width={viewportPlan.frameWidth}
-          >
-            {canvas}
-          </div>
-        ) : canvas}
-      </div>
-      {mode === "modal" && (
-        <div className="runtime-canvas-controls" role="group" aria-label="运行画布视口控制">
-          <button type="button" aria-label="缩小运行画布" title="缩小" onClick={() => zoomRuntime(-.1)}><Minus size={14} /></button>
-          <span aria-label={`当前缩放 ${Math.round(viewport.zoom * 100)}%`}>{Math.round(viewport.zoom * 100)}%</span>
-          <button type="button" aria-label="放大运行画布" title="放大" onClick={() => zoomRuntime(.1)}><Plus size={14} /></button>
-          <button type="button" aria-label="适应运行画布" title="适应画布" onClick={fitRuntime}><Maximize size={14} /></button>
-        </div>
-      )}
-      {viewportPlan.scrollable && (
-        <span className="workflow-runtime-scroll-hint" aria-hidden="true">左右滑动查看完整拓扑</span>
-      )}
-    </div>
-  );
-}
+export { RuntimeCanvasSurface, planRuntimeCanvasViewport, runtimeGroupMemberStates } from "./RuntimeCanvasSurface";
 
 function RuntimeNodeDetail({
   node,
@@ -490,7 +83,7 @@ function RuntimeNodeDetail({
   if (node.collaboration) {
     return <CollaborationRuntimeDetail node={node} runtime={runtime} project={project} events={events} />;
   }
-  return <RuntimeAgentNodeDetail node={node} project={project} title={presentation.title} state={state}
+  return <RuntimeAgentNodeDetail key={node.id} node={node} project={project} title={presentation.title} state={state}
     executionCount={runtime.executionCounts[node.id] ?? 0} reason={runtime.nodeReasons[node.id]}
     invocationId={runtime.currentNodeId === node.id ? runtime.currentInvocationId : undefined} harnesses={harnesses} />;
 }
@@ -661,6 +254,7 @@ function PullRequestFacts({ pull }: { pull: NonNullable<Project["pullRequests"]>
 
 function RuntimeCanvasDialog({
   model,
+  geometry,
   runtime,
   project,
   harnesses,
@@ -679,6 +273,7 @@ function RuntimeCanvasDialog({
   const scopedView = useMemo(() => activeScopedGroupId && project.orchestration.schemaVersion === 3
     ? buildScopedRuntimeView(project, activeScopedGroupId) : undefined, [project, activeScopedGroupId]);
   const viewModel = scopedView?.model ?? model;
+  const scopedGeometry = useCanvasRouting(viewModel.edges, viewModel.nodes, { enabled: Boolean(scopedView) });
   const viewRuntime = scopedView?.runtime ?? runtime;
   const viewSelectedId = scopedView ? scopeSelections[scopedView.group.id] : selectedNodeId;
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -781,18 +376,18 @@ function RuntimeCanvasDialog({
           {scopedView.path.map((group, index) => <span key={group.id}><span aria-hidden="true">›</span><button type="button" aria-current={index === scopedView.path.length - 1 ? "page" : undefined} onClick={() => setActiveScopedGroupId(group.id)}>{scopedGroupName(project, group.id)}</button></span>)}
         </nav>}
         <div className="workflow-runtime-dialog-canvas" hidden={previewOpen || replayOpen} aria-label={scopedView ? `${scopedGroupName(project, scopedView.group.id)} 组内运行 Workflow` : "项目运行 Workflow"}>
-          <WorkflowCanvasLive
+          <RuntimeCanvasSurface
+            key={scopedView?.group.id ?? "root"}
+            mode="modal"
             model={viewModel}
+            geometry={scopedView ? scopedGeometry.geometry : geometry}
             runtime={viewRuntime}
             scopeId={scopedView?.group.id}
             project={project}
-            events={events}
             selectedNodeId={selectedNode?.id}
             onSelectNode={selectNode}
             expandedGroupIds={expandedGroupIds}
             onToggleGroup={onToggleGroup}
-            onNavigateGroup={setActiveScopedGroupId}
-            onClose={onClose}
           />
           {selectedNode && selectedScopedGroup && <ScopedCollaborationRuntimeDetail node={selectedNode} runtime={viewRuntime} project={project}
             expanded={expandedGroupIds?.has(selectedScopedGroup.id) ?? false}
@@ -876,6 +471,10 @@ export function WorkflowCanvasRuntime({ project, events, harnesses, runtime: run
     () => adaptWorkflowToCanvas(project.orchestration, project.orchestration.canvas),
     [project.orchestration]
   );
+  const horizontalExtent = model.nodes.reduce((bounds, node) => ({
+    min: Math.min(bounds.min, node.x), max: Math.max(bounds.max, node.x)
+  }), { min: Infinity, max: -Infinity });
+  const largeCanvas = model.nodes.length > 8 || horizontalExtent.max - horizontalExtent.min > 960;
   const { geometry } = useCanvasRouting(model.edges, model.nodes);
   const [modalOpen, setModalOpen] = useState(false);
   const [initialReplay, setInitialReplay] = useState(false);
@@ -899,24 +498,63 @@ export function WorkflowCanvasRuntime({ project, events, harnesses, runtime: run
     setModalOpen(false);
     setSelectedNodeId(undefined);
   }, []);
+  const activeRunNodeId = project.nodeRuns?.find((run) => run.id === project.activeNodeRunId)?.node.nodeId;
+  const runningNode = model.nodes.find((node) => ["running", "stopping"].includes(runtime.nodeStates[node.id]));
+  const canvasNodeIds = new Set(model.nodes.map((node) => node.id));
+  const focusNodeId = [
+    runtime.currentNodeId,
+    runtime.nodeStates[activeRunNodeId ?? ""] === "running" ? activeRunNodeId : undefined,
+    runningNode?.id,
+    runtime.queuedNodeId
+  ].find((id) => id && canvasNodeIds.has(id))
+    ?? [...runtime.recentInvocationPath].reverse().find((entry) => canvasNodeIds.has(entry.nodeId))?.nodeId
+    ?? (largeCanvas ? CANVAS_INPUT_NODE_ID : undefined);
 
   return (
     <>
       <section className="workflow-canvas-runtime" aria-label="运行中 Workflow 画布">
-        <div className="workflow-runtime-map-header">
-          <div>
-            <span className="panel-kicker">RUNTIME WORKFLOW</span>
-            <strong>配置拓扑 · 实际执行覆盖层</strong>
+        <div className="workflow-sidebar-card">
+          <div className="workflow-sidebar-heading">
+            <h3><GitBranch size={15} aria-hidden="true" />运行流程</h3>
+            <span>第 {project.cycle} 轮</span>
           </div>
-          <div className="workflow-runtime-map-actions"><span>
-            {runtime.currentNodeId
-              ? `${runtimeNodeLabel(runtime.nodeStates[runtime.currentNodeId])} · ${runtime.currentNodeId}`
-              : runtime.queuedNodeId
-                ? `${runtimeNodeLabel(runtime.nodeStates[runtime.queuedNodeId])} · ${runtime.queuedNodeId}`
-                : "等待运行"}
-          </span><button type="button" className="workflow-runtime-preview-toggle" onClick={() => { setInitialReplay(true); setModalOpen(true); }}>
-            <History size={14} />历史回顾
-          </button></div>
+          <div
+            role="button"
+            tabIndex={0}
+            className="workflow-runtime-preview-button"
+            aria-label="打开大型运行 Workflow 画布"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) openModal();
+            }}
+            onKeyDown={(event) => {
+              if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+                event.preventDefault();
+                openModal();
+              }
+            }}
+          >
+            <RuntimeCanvasSurface
+              model={model}
+              geometry={geometry}
+              runtime={runtime}
+              project={project}
+              mode="preview"
+              focusNodeId={focusNodeId}
+              selectedNodeId={selectedNodeId}
+              onSelectNode={(node) => {
+                setSelectedNodeId(node.id);
+                openModal();
+              }}
+              onOpen={openModal}
+              expandedGroupIds={expandedGroupIds}
+              onToggleGroup={toggleGroup}
+            />
+          </div>
+          <div className="workflow-sidebar-actions">
+            <Button type="button" variant="ghost" data-size="small" icon={<Maximize size={14} aria-hidden="true" />} onClick={openModal}>打开画布</Button>
+            <Button type="button" variant="ghost" data-size="small" icon={<History size={14} aria-hidden="true" />}
+              onClick={() => { setInitialReplay(true); setModalOpen(true); }}>历史回顾</Button>
+          </div>
         </div>
         {Object.values(runtime.loopStates).length > 0 && (
           <div className="workflow-runtime-loop-summary" aria-label="Loop 运行计数">
@@ -928,47 +566,6 @@ export function WorkflowCanvasRuntime({ project, events, harnesses, runtime: run
             ))}
           </div>
         )}
-        <div
-          role="button"
-          tabIndex={0}
-          className="workflow-runtime-preview-button"
-          aria-label="打开大型运行 Workflow 画布"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) openModal();
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              openModal();
-            }
-          }}
-        >
-          <RuntimeCanvasSurface
-            model={model}
-            geometry={geometry}
-            runtime={runtime}
-            project={project}
-            mode="preview"
-            selectedNodeId={selectedNodeId}
-            onSelectNode={(node) => {
-              setSelectedNodeId(node.id);
-              openModal();
-            }}
-            onOpen={openModal}
-            expandedGroupIds={expandedGroupIds}
-            onToggleGroup={toggleGroup}
-          />
-        </div>
-        <div className="workflow-runtime-path" aria-label="最近实际路径">
-          <span>Cycle {project.cycle}</span>
-          {runtime.recentInvocationPath.length
-            ? runtime.recentInvocationPath.slice(-8).map((entry, index) => (
-              <span key={`${entry.invocationId ?? entry.nodeId}-${index}`} className={`runtime-path-state-${entry.state}`}>
-                {index ? " → " : ""}{entry.nodeId}{entry.state === "completed" ? " ✓" : entry.state === "running" ? " ·" : ""}
-              </span>
-            ))
-            : <span>尚无实际调用</span>}
-        </div>
         <ProjectGitReadonlyFacts project={project} onOpenGitTree={() => setGitTreeOpen(true)} />
         <FailureAttemptHistory project={project} />
       </section>

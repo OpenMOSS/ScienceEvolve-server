@@ -84,6 +84,7 @@ export interface ScopedWorkflowEditorProps {
   agents: AgentsConfig;
   groupId: string;
   readOnly?: boolean;
+  persistCanvasViewport?: boolean;
   inspectorTabs?: ReactNode;
   inspectorContent?: ReactNode;
   agentHarnessConstraint?: (agentId: string) => { harnessId: string; reason: string } | undefined;
@@ -112,7 +113,7 @@ export function ScopedWorkflowEditor(props: ScopedWorkflowEditorProps) {
 }
 
 function ScopedWorkflowEditorSurface({
-  orchestration, agents, groupId, readOnly = false, inspectorTabs, inspectorContent, agentHarnessConstraint, lockedGroupIds = new Set(),
+  orchestration, agents, groupId, readOnly = false, persistCanvasViewport = true, inspectorTabs, inspectorContent, agentHarnessConstraint, lockedGroupIds = new Set(),
   skills = [], onAddSkill, mcpOptions, mcpDirectory = [], gateways = [], harnesses = [],
   isAgentLocked, onSharedAgentPatch, onSharedAgentRename, onSharedAgentDescriptionChange,
   onSharedAgentMcpAdd, onSharedAgentMcpToggle, onChange, onNavigate
@@ -372,28 +373,29 @@ function ScopedWorkflowEditorSurface({
   const routeKey = canvasRoutingKey({ edges, nodes });
   const settled = settledRoutesRef.current;
   const settledMatches = settled?.key === routeKey;
-  const routed = useCanvasRouting(edges, nodes, { enabled: !drag && !(settledMatches && !settled.provisional) });
+  const movedDrag = drag && dragPoint && (dragPoint.x !== drag.x || dragPoint.y !== drag.y) ? drag : undefined;
+  const routed = useCanvasRouting(edges, nodes, { enabled: !movedDrag && !(settledMatches && !settled.provisional) });
   const dragFrames = useCanvasPointerFrame(needsBackgroundRouting(edges, nodes));
   const displayNodes = drag && dragPoint ? nodes.map((node) => node.id === drag.id ? { ...node, ...dragPoint } : node) : nodes;
   const routeGeometry = useMemo(() => {
-    if (drag && dragRoutesRef.current) return buildLockedEdgeRoutesFromSnapshot(dragRoutesRef.current, { nodes: displayNodes, draggedNodeId: drag.id });
+    if (movedDrag && dragRoutesRef.current) return buildLockedEdgeRoutesFromSnapshot(dragRoutesRef.current, { nodes: displayNodes, draggedNodeId: movedDrag.id });
     if (settledMatches && (!settled.provisional || routed.pending)) return buildLockedEdgeRoutesFromSnapshot(settled.routes);
     return routed.geometry;
-  }, [routeKey, drag, dragPoint, routed.geometry, routed.pending, settledMatches]);
+  }, [routeKey, movedDrag, dragPoint, routed.geometry, routed.pending, settledMatches]);
   const geometry = useMemo(() => withCanvasLoopPresentation(routeGeometry, edges), [routeGeometry, workflow.loops]);
   const fittedViewport = useMemo(() => {
-    const bounds = canvasContentBounds(nodes, geometry.flatMap(item => item.samples));
+    const bounds = canvasContentBounds(nodes);
     return bounds && viewportSize.width > 0 && viewportSize.height > 0
       ? fitCanvasViewport(viewportSize, bounds, { padding: 32, boundsPadding: 18, minZoom: .2, maxZoom: 1.2 })
       : layout.viewport;
-  }, [routeKey, geometry, viewportSize.width, viewportSize.height]);
+  }, [routeKey, viewportSize.width, viewportSize.height]);
   const storedViewport = layout.viewport;
   const persistedViewport = Math.abs(storedViewport.x) > .5 || Math.abs(storedViewport.y) > .5 || Math.abs(storedViewport.zoom - .82) > .005;
   const viewport = viewViewport ?? (persistedViewport ? storedViewport : fittedViewport);
   const updateViewport = (next: CanvasViewport) => {
     if (layoutBusyRef.current) return;
     setViewViewport(next);
-    if (!locked) mutate((_draft, current) => {
+    if (!locked && persistCanvasViewport) mutate((_draft, current) => {
       current.workflow.canvas ??= defaultScopedCanvas(current.workflow.nodes.map((ref) => ref.nodeId), current.workflow.input.edges.map((edge) => edge.target));
       current.workflow.canvas.viewport = next;
     }, false);
@@ -612,16 +614,16 @@ function ScopedWorkflowEditorSurface({
         x: Math.round(active.x + (event.clientX - active.clientX) / active.zoom),
         y: Math.round(active.y + (event.clientY - active.clientY) / active.zoom)
       } : dragPointRef.current ?? { x: active.x, y: active.y };
-      const releaseNodes = nodes.map((node) => node.id === active.id ? { ...node, ...point } : node);
-      const released = buildLockedEdgeRoutesFromSnapshot(dragRoutesRef.current, { nodes: releaseNodes, draggedNodeId: active.id });
-      settledRoutesRef.current = { key: canvasRoutingKey({ edges, nodes: releaseNodes }), routes: captureRouteLock(released, releaseNodes), provisional: dragPendingRef.current };
-      dragRoutesRef.current = undefined;
       if (point.x !== active.x || point.y !== active.y) {
+        const releaseNodes = nodes.map((node) => node.id === active.id ? { ...node, ...point } : node);
+        const released = buildLockedEdgeRoutesFromSnapshot(dragRoutesRef.current, { nodes: releaseNodes, draggedNodeId: active.id });
+        settledRoutesRef.current = { key: canvasRoutingKey({ edges, nodes: releaseNodes }), routes: captureRouteLock(released, releaseNodes), provisional: dragPendingRef.current };
         mutate((_draft, current) => {
           current.workflow.canvas ??= defaultScopedCanvas(current.workflow.nodes.map((ref) => ref.nodeId), current.workflow.input.edges.map((edge) => edge.target));
           current.workflow.canvas.nodes[active.id] = point;
         });
       }
+      dragRoutesRef.current = undefined;
       setDrag(undefined);
       setDragPoint(undefined);
       dragPointRef.current = undefined;
@@ -718,7 +720,7 @@ function ScopedWorkflowEditorSurface({
     const host = canvasHostRef.current;
     updateViewport(zoomCanvasViewportAt(viewport, { x: (host?.clientWidth || 850) / 2, y: (host?.clientHeight || 560) / 2 }, viewport.zoom * scale));
   };
-  const applyLayout = async (kind: "tidy" | "layered") => {
+  const applyLayout = async () => {
     if (locked || layoutBusyRef.current) return;
     const identity = layoutIdentityRef.current;
     const operation = ++layoutOperationRef.current;
@@ -729,7 +731,7 @@ function ScopedWorkflowEditorSurface({
     setLayoutStatus("正在计算布局…");
     try {
       const plan = await buildCanvasLayoutPlan({
-        kind,
+        kind: "tidy",
         orchestration: scopedCanvasPlanningOrchestration(workflow),
         layout: { ...layout, viewport },
         viewportSize: { width: host?.clientWidth || 850, height: host?.clientHeight || 560 }
@@ -745,9 +747,11 @@ function ScopedWorkflowEditorSurface({
       }
       setLayoutPhase("applying");
       layoutBusyRef.current = false;
-      const applied = mutate((_draft, current) => { current.workflow.canvas = plan.layout; });
+      const applied = (!persistCanvasViewport && !plan.graphChanged) || mutate((_draft, current) => {
+        current.workflow.canvas = persistCanvasViewport ? plan.layout : { ...plan.layout, viewport: storedViewport };
+      }, persistCanvasViewport || plan.graphChanged);
       if (applied) {
-        setViewViewport(undefined);
+        setViewViewport(persistCanvasViewport ? undefined : plan.layout.viewport);
         setLayoutStatus(plan.usedFallback ? "布局已完成（使用确定性回退）" : "布局已完成");
       }
     } catch (error) {
@@ -788,7 +792,7 @@ function ScopedWorkflowEditorSurface({
       <span>{workflow.nodes.length} 个直接节点 · {inputCount} 条并行入口</span>
     </div>
     </header>
-    <CanvasToolbar edgeKind={newKind} zoom={viewport.zoom} connecting={Boolean(linkStart)} readOnly={locked} allowFitWhenReadOnly layoutBusy={layoutBusy} layoutStatus={layoutStatus} layoutPhase={layoutPhase} canUndo={history.length > 0 && lockedGroupIds.size === 0} canRedo={redoHistory.length > 0 && lockedGroupIds.size === 0} addAgentLabel="引用 Agent" onAddAgent={() => addAgentSelectRef.current?.focus()} onToggleConnect={toggleConnect} onEdgeKindChange={setNewKind} onZoomOut={() => zoomView(.85)} onResetZoom={fitView} onZoomIn={() => zoomView(1.15)} onUndo={undo} onRedo={redo} onTidy={() => void applyLayout("tidy")} onLayered={() => void applyLayout("layered")} onFit={fitView} />
+    <CanvasToolbar edgeKind={newKind} zoom={viewport.zoom} connecting={Boolean(linkStart)} readOnly={locked} allowFitWhenReadOnly layoutBusy={layoutBusy} layoutStatus={layoutStatus} layoutPhase={layoutPhase} canUndo={history.length > 0 && lockedGroupIds.size === 0} canRedo={redoHistory.length > 0 && lockedGroupIds.size === 0} addAgentLabel="引用 Agent" onAddAgent={() => addAgentSelectRef.current?.focus()} onToggleConnect={toggleConnect} onEdgeKindChange={setNewKind} onZoomOut={() => zoomView(.85)} onResetZoom={fitView} onZoomIn={() => zoomView(1.15)} onUndo={undo} onRedo={redo} onTidy={() => void applyLayout()} onFit={fitView} />
     <div className="scoped-body">
       <aside className="scoped-panel scoped-library" aria-label="协作组设置">
         <header className="scoped-panel-heading"><div><h3><Layers3 size={15} />组设置</h3><p>{registry?.displayName ?? group.id}</p></div></header>
@@ -902,6 +906,7 @@ function ScopedWorkflowEditorSurface({
             Object.assign(loop, patch);
           })}
         /> : selectedAgentId && selectedAgentNode && selectedAgentConfig && registry ? <CanvasInspector
+          organizeAgentSettings={Boolean(inspectorTabs)}
           key={`${selectedAgentId}-${agentInspectorEpoch}`}
           node={{ ...selectedAgentNode, name: selectedAgentId }}
           agent={selectedAgentConfig}

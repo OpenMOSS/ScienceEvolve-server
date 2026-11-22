@@ -10,7 +10,9 @@
 .canvas-prompt-actions .button { width: 100%; justify-content: center; min-height: 34px; font-size: 12px; }
 .canvas-prompt-actions .runtime-help { margin: 0; text-align: center; font-size: 11px; }
 .canvas-prompt-error { color: #a13e38; font-size: 12px; overflow-wrap: anywhere; }
-.workflow-runtime-detail:has(.canvas-prompt-panels) { width: 360px; max-width: calc(100% - 28px); max-height: min(70vh, calc(100% - 28px)); overflow: auto; overscroll-behavior: contain; }
-.workflow-runtime-detail .canvas-prompt-panels { padding: 0; margin: 8px 0 0; border: 0; }
-.workflow-runtime-detail .runtime-user-prompt { display: grid; gap: 6px; }
-.workflow-runtime-detail .runtime-user-prompt textarea { width: 100%; box-sizing: border-box; min-height: 100px; resize: vertical; font: 11px/1.5 ui-monospace, monospace; }
+.runtime-agent-rail .canvas-prompt-panels { padding: 0; margin: 0; border: 0; }
+.runtime-agent-rail .canvas-prompt-panel { padding: 8px 0; margin: 0; border: 0; border-bottom: 1px solid var(--border-weak-base); border-radius: 0; background: transparent; }
+.runtime-agent-rail .canvas-prompt-panel summary { font-weight: var(--font-weight-medium); }
+.runtime-agent-rail .canvas-prompt-actions { padding-top: 8px; }
+.runtime-user-prompt { display: grid; gap: 6px; }
+.runtime-user-prompt textarea { width: 100%; box-sizing: border-box; min-height: 100px; resize: vertical; padding: 8px; border: 1px solid var(--border-weak-base); border-radius: var(--radius-sm); background: var(--background-base); color: var(--text-strong); font: 11px/1.5 ui-monospace, monospace; }

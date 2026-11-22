@@ -5,10 +5,11 @@ import { ApiError, getRecommendationExplainerConfig, getAgentToolRecommendationC
 import { workflowAdjustmentPageFixture } from "../test/workflow-adjustment-history";
 import { DEFAULT_AGENT_ORCHESTRATION } from "../lib";
 import { runtimeProjectFixture } from "../test/runtime-project";
-import { loadWorkflowAdjustmentDraft, loadWorkflowAdjustmentOperation, saveWorkflowAdjustmentOperation } from "../workflowAdjustmentDraft";
+import { loadWorkflowAdjustmentDraft, loadWorkflowAdjustmentOperation, saveWorkflowAdjustmentDraft, saveWorkflowAdjustmentOperation } from "../workflowAdjustmentDraft";
 import type { WorkflowAdjustmentContext, WorkflowAdjustmentRecord, WorkflowAdjustmentSubmission } from "../workflowAdjustments";
 import type { HarnessCatalogEntry, Project } from "../types";
 import { WorkflowAdjustmentEditor } from "./WorkflowAdjustmentEditor";
+import { normalizeCanvasLayout } from "./workflow-canvas/core/canvas-layout";
 
 vi.mock("../api", async original => ({ ...await original<typeof import("../api")>(), getWorkflowAdjustmentPage: vi.fn(), getWorkflowAdjustmentDetail: vi.fn(), submitWorkflowAdjustment: vi.fn(),
   withdrawWorkflowAdjustment: vi.fn(), getRecommendationExplainerConfig: vi.fn(), getAgentToolRecommendationCatalog: vi.fn(), recommendAgentTools: vi.fn(), projectAction: vi.fn() }));
@@ -47,10 +48,26 @@ function setup(complex = false, gitEnabled = true) {
   const view = render(<WorkflowAdjustmentEditor {...props} />);
   return { project, record, accept, close, view, props, get context() { return context; }, set context(value) { context = value; } };
 }
-async function ready() { await screen.findByRole("button", { name: "提交完整修改" }); await screen.findByText(/^当前正式 r\d+$/); }
-function instructions() { return screen.getByRole("textbox", { name: "Agent 指令" }); }
+async function ready() { await screen.findByRole("button", { name: "提交修改" }); await screen.findByText(/^当前正式 r\d+$/); }
+async function openSubmit() {
+  await userEvent.click(screen.getByRole("button", { name: "提交修改" }));
+  return screen.getByRole("dialog", { name: "提交 Workflow 修改" });
+}
+async function submitDraft() {
+  await userEvent.click(within(await openSubmit()).getByRole("button", { name: "提交完整修改" }));
+}
+function instructions() {
+  const tools = screen.queryByRole("button", { name: "指令与工具" });
+  if (tools && tools.getAttribute("aria-pressed") === "false") fireEvent.click(tools);
+  return screen.getByRole("textbox", { name: "Agent 指令" });
+}
 function enter(value: string) { const input = instructions(); act(() => input.focus()); fireEvent.change(input, { target: { value } }); return input; }
 async function recordsTab() { await userEvent.click(screen.getByRole("tab", { name: /修改记录/ })); }
+function versionAction(name: string) {
+  const toggle = screen.getByLabelText("版本操作");
+  if (!toggle.closest("details")?.open) fireEvent.click(toggle);
+  return screen.getByRole("button", { name });
+}
 beforeEach(() => {
   vi.clearAllMocks(); localStorage.clear(); vi.spyOn(window, "confirm").mockReturnValue(true);
   vi.mocked(getRecommendationExplainerConfig).mockResolvedValue({ fingerprint: "c".repeat(64), config: { harness: "codex", model: "fixture", available: false,
@@ -60,6 +77,97 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("runtime workflow adjustment window using the existing complete canvas", () => {
+  it("opens and focuses Workflow settings from the modification records tab", async () => {
+    setup();
+    await ready();
+    await recordsTab();
+    const entry = within(screen.getByLabelText("画布工具栏")).getByRole("button", { name: "流程设置" });
+    expect(entry).not.toHaveAttribute("aria-current");
+    await userEvent.click(entry);
+    const heading = screen.getByRole("heading", { name: "流程设置" });
+    expect(screen.getByRole("tab", { name: "配置" })).toHaveAttribute("aria-selected", "true");
+    expect(entry).toHaveAttribute("aria-current", "true");
+    await waitFor(() => expect(heading).toHaveFocus());
+    expect(screen.getByRole("button", { name: "提交修改" })).toBeDisabled();
+  });
+
+  it("updates the view without changing the draft and enables submit after dragging a node", async () => {
+    const f = setup();
+    await ready();
+    const submit = screen.getByRole("button", { name: "提交修改" });
+    const zoom = screen.getByRole("button", { name: "重置缩放" });
+    const initialZoom = zoom.textContent;
+    const world = screen.getByLabelText("Agent 工作流画布");
+    const canvas = world.querySelector<HTMLElement>(".workflow-canvas-world")!;
+    fireEvent.click(screen.getByRole("button", { name: "放大画布" }));
+    expect(zoom.textContent).not.toBe(initialZoom);
+    expect(submit).toBeDisabled();
+    const before = canvas.style.transform;
+    fireEvent.pointerDown(world, { pointerId: 1, button: 0, clientX: 400, clientY: 300 });
+    fireEvent.pointerMove(world, { pointerId: 1, clientX: 460, clientY: 350 });
+    fireEvent.pointerUp(world, { pointerId: 1, clientX: 460, clientY: 350 });
+    expect(canvas.style.transform).not.toBe(before);
+    expect(submit).toBeDisabled();
+    expect(loadWorkflowAdjustmentDraft(localStorage, f.project.id)).toMatchObject({
+      value: { snapshot: f.context.current.snapshot }
+    });
+    const node = f.view.container.querySelector<HTMLElement>('[data-node-id="main"]')!;
+    fireEvent.pointerDown(node, { pointerId: 2, button: 0, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(window, { pointerId: 2, clientX: 180, clientY: 140 });
+    fireEvent.pointerUp(window, { pointerId: 2, clientX: 180, clientY: 140 });
+    expect(submit).toBeEnabled();
+  });
+
+  it("discards the viewport and default layout created by an old viewport-only draft", async () => {
+    const f = setup();
+    await ready();
+    f.view.unmount();
+    const stored = loadWorkflowAdjustmentDraft(localStorage, f.project.id);
+    if (stored.kind !== "found") throw new Error("Missing stored draft");
+    const orchestration = stored.value.snapshot.orchestration;
+    orchestration.canvas = { ...normalizeCanvasLayout(orchestration.canvas, orchestration), viewport: { x: 45, y: 65, zoom: 1.5 } };
+    saveWorkflowAdjustmentDraft(localStorage, stored.value);
+    render(<WorkflowAdjustmentEditor {...f.props} />);
+    await ready();
+    expect(screen.getByRole("button", { name: "提交修改" })).toBeDisabled();
+  });
+  it("keeps a prompt draft when switching between Agent configuration sections", async () => {
+    setup();
+    await ready();
+    const runtime = screen.getByRole("button", { name: "运行" });
+    const tools = screen.getByRole("button", { name: "指令与工具" });
+    expect(runtime).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("textbox", { name: "Agent 指令" })).not.toBeInTheDocument();
+    await userEvent.click(tools);
+    enter("切换分区时保留这段草稿");
+    await userEvent.click(runtime);
+    expect(screen.queryByRole("textbox", { name: "Agent 指令" })).not.toBeInTheDocument();
+    await userEvent.click(tools);
+    expect(screen.getByRole("textbox", { name: "Agent 指令" })).toHaveValue("切换分区时保留这段草稿");
+  });
+  it("restores the official version as the local draft without submitting a request", async () => {
+    const f = setup();
+    await ready();
+    enter("本地尚未提交的改动");
+    await userEvent.click(versionAction("恢复到正式版本"));
+    expect(instructions()).toHaveValue(f.context.current.snapshot.agents.main.instructions);
+    expect(submitWorkflowAdjustment).not.toHaveBeenCalled();
+  });
+  it("filters the template library and clears the filter without editing the draft", async () => {
+    const f = setup();
+    await ready();
+    const library = within(screen.getByLabelText("Agent 模板库"));
+    const filter = screen.getByRole("textbox", { name: "筛选 Agent 模板" });
+    await userEvent.type(filter, "main");
+    expect(library.getByRole("button", { name: /Main Agent/ })).toBeVisible();
+    expect(library.queryByRole("button", { name: /添加 .* 副本/ })).not.toBeInTheDocument();
+    fireEvent.change(filter, { target: { value: "zz-no-template" } });
+    expect(library.getByRole("status")).toHaveTextContent("没有匹配的模板");
+    await userEvent.click(screen.getByRole("button", { name: "清空筛选" }));
+    expect(filter).toHaveValue("");
+    expect(library.getAllByRole("button", { name: /添加 .* 副本/ }).length).toBeGreaterThan(0);
+    expect(f.close).not.toHaveBeenCalled();
+  });
   it("coalesces event and timer refreshes without cancelling a slow initial configuration read", async () => {
     vi.useFakeTimers();
     let resolve!: (value: ReturnType<typeof workflowAdjustmentPageFixture>) => void;
@@ -85,12 +193,12 @@ describe("runtime workflow adjustment window using the existing complete canvas"
     f.context.current.version = { revision: 8, hash: "b".repeat(64) };
     f.context.records[0].status = "applied";
     vi.mocked(getWorkflowAdjustmentDetail).mockRejectedValueOnce(new ApiError("完整提案暂时不可用", 503));
-    await userEvent.click(screen.getByRole("button", { name: "刷新正式配置" }));
+    act(() => window.dispatchEvent(new Event("focus")));
     expect(await screen.findByText("当前正式 r8")).toBeVisible();
     expect(await screen.findByText(/完整记录查询失败.*完整提案暂时不可用/)).toBeVisible();
     expect(within(screen.getByRole("region", { name: "共用修改记录" })).getByText("Main · 已应用", { exact: true })).toBeVisible();
     expect(screen.getByRole("region", { name: "完整请求记录" })).toHaveTextContent("Main · 待应用");
-    await userEvent.click(screen.getByRole("button", { name: "刷新正式配置" }));
+    act(() => window.dispatchEvent(new Event("focus")));
     await waitFor(() => expect(screen.getByRole("region", { name: "完整请求记录" })).toHaveTextContent("Main · 已应用"));
     expect(screen.queryByText(/完整记录查询失败/)).toBeNull();
   });
@@ -101,7 +209,7 @@ describe("runtime workflow adjustment window using the existing complete canvas"
     vi.mocked(getWorkflowAdjustmentPage).mockImplementation((_project, _input, signal) => new Promise((_resolve, reject) => {
       signal!.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true });
     }));
-    fireEvent.click(screen.getByRole("button", { name: "刷新正式配置" }));
+    act(() => window.dispatchEvent(new Event("focus")));
     await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
     expect(screen.getByText(/读取超时，请刷新重试/)).toBeVisible();
     expect(instructions()).toHaveValue("请求超时也保留的完整草稿");
@@ -112,7 +220,7 @@ describe("runtime workflow adjustment window using the existing complete canvas"
   it("does not let a hidden editable canvas consume undo while viewing a read-only snapshot", async () => {
     const f = setup(); await ready(); enter("保留已经提交到本地草稿的修改"); fireEvent.blur(instructions());
     const before = loadWorkflowAdjustmentDraft(localStorage, f.project.id);
-    await userEvent.click(screen.getByRole("button", { name: "查看当前正式版本" }));
+    await userEvent.click(versionAction("查看当前正式版本"));
     fireEvent.keyDown(window, { key: "z", ctrlKey: true });
     expect(loadWorkflowAdjustmentDraft(localStorage, f.project.id)).toEqual(before);
     await userEvent.click(screen.getByRole("button", { name: "返回我的草稿" }));
@@ -121,19 +229,19 @@ describe("runtime workflow adjustment window using the existing complete canvas"
   });
 
   it("keeps an older formal preview explicit when a new official version arrives", async () => {
-    const f = setup(); await ready(); await userEvent.click(screen.getByRole("button", { name: "查看当前正式版本" }));
+    const f = setup(); await ready(); await userEvent.click(versionAction("查看当前正式版本"));
     f.context.current.version = { revision: 8, hash: "b".repeat(64) };
-    await userEvent.click(screen.getByRole("button", { name: "刷新正式配置" }));
+    act(() => window.dispatchEvent(new Event("focus")));
     expect(await screen.findByText(/当前预览仍为 r7/)).toBeVisible();
-    expect(screen.getByRole("button", { name: "已核对，更新草稿基础" })).toBeDisabled();
-    await userEvent.click(screen.getByRole("button", { name: "查看当前正式版本" }));
+    expect(screen.getByRole("button", { name: "查看最新正式版本" })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "查看最新正式版本" }));
     expect(screen.getByText("只读正式版本 r8")).toBeVisible();
   });
 
   it("keeps hidden unfinished text editable when returning from a read-only preview", async () => {
     const f = setup(); await ready(); const original = enter("返回后仍可正常确认的未完成字段");
     // Open the preview without committing the focused field first.
-    fireEvent.click(screen.getByRole("button", { name: "查看当前正式版本" }));
+    fireEvent.click(versionAction("查看当前正式版本"));
     fireEvent.pointerDown(screen.getByRole("button", { name: "返回我的草稿" }));
     const stored = loadWorkflowAdjustmentDraft(localStorage, f.project.id);
     expect(stored.kind === "found" && stored.value.snapshot.agents.main.instructions).not.toBe("返回后仍可正常确认的未完成字段");
@@ -145,8 +253,10 @@ describe("runtime workflow adjustment window using the existing complete canvas"
   it.each([true, false])("edits a running locked project (Git: %s) with Main changes disabled and submits one exact complete request", async gitEnabled => {
     const f = setup(false, gitEnabled); await ready();
     expect(screen.getByRole("dialog", { name: "查看与调整当前 Workflow" })).toBeVisible();
-    enter("完整未失焦用户指令\n第二行"); fireEvent.change(screen.getByRole("textbox", { name: "修改说明" }), { target: { value: "公开说明" } });
-    await userEvent.click(screen.getByRole("button", { name: "提交完整修改" }));
+    enter("完整未失焦用户指令\n第二行");
+    const dialog = within(await openSubmit());
+    fireEvent.change(dialog.getByRole("textbox", { name: "修改说明" }), { target: { value: "公开说明" } });
+    await userEvent.click(dialog.getByRole("button", { name: "提交完整修改" }));
     await waitFor(() => expect(submitWorkflowAdjustment).toHaveBeenCalledOnce());
     const [id, input] = vi.mocked(submitWorkflowAdjustment).mock.calls[0];
     expect(id).toBe(f.project.id); expect(input.base).toEqual({ revision: 7, hash: "a".repeat(64) });
@@ -161,8 +271,8 @@ describe("runtime workflow adjustment window using the existing complete canvas"
     expect(loadWorkflowAdjustmentDraft(localStorage, f.project.id)).toMatchObject({ kind: "found", value: { base: { revision: 7 } } });
     f.view.unmount(); f.context.current.version = { revision: 8, hash: "b".repeat(64) }; f.context.current.snapshot.agents.main.instructions = "Main新正式指令";
     render(<WorkflowAdjustmentEditor {...f.props} />); await ready();
-    expect(instructions()).toHaveValue("刷新也保留尚未失焦的草稿"); expect(screen.getByText(/原草稿及基础版本已保留/)).toBeVisible();
-    await userEvent.click(screen.getByRole("button", { name: "提交完整修改" }));
+    expect(instructions()).toHaveValue("刷新也保留尚未失焦的草稿"); expect(screen.getByText(/与最新正式版本有冲突/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "提交修改" })).toBeEnabled();
     expect(submitWorkflowAdjustment).not.toHaveBeenCalled(); expect(loadWorkflowAdjustmentDraft(localStorage, f.project.id)).toMatchObject({ kind: "found", value: { base: { revision: 7 } } });
   });
 
@@ -181,7 +291,7 @@ describe("runtime workflow adjustment window using the existing complete canvas"
     expect(submitWorkflowAdjustment).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "应用工具推荐" }));
     expect(submitWorkflowAdjustment).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "提交完整修改" }));
+    await submitDraft();
     await waitFor(() => expect(submitWorkflowAdjustment).toHaveBeenCalledOnce());
     expect(vi.mocked(submitWorkflowAdjustment).mock.calls[0][1].proposal.agents.main).toMatchObject({ instructions: "供推荐读取的最新未失焦指令", skills: [], autoSkills: [], mcpServers: [], experimentMcp: true });
     expect(vi.mocked(submitWorkflowAdjustment).mock.calls[0][1].proposal.agents.idea).toEqual(before.agents.idea);
@@ -228,25 +338,39 @@ describe("runtime workflow adjustment window using the existing complete canvas"
     await recordsTab(); expect(screen.getByText("Main · 已应用")).toBeVisible(); expect(screen.getByText(/基础 r7.*应用 r8/)).toBeVisible();
   });
 
-  it("updates a stale base only after explicit version review and preserves the full user snapshot", async () => {
+  it("automatically merges an independent official edit before submission", async () => {
     const f = setup(); await ready(); enter("保留用户完整草稿"); fireEvent.blur(instructions());
     f.context.current = { version: { revision: 8, hash: "b".repeat(64) }, snapshot: structuredClone(f.context.current.snapshot) }; f.context.current.snapshot.agents.idea.instructions = "另一Agent的新正式指令";
-    await recordsTab(); await userEvent.click(screen.getByRole("button", { name: "刷新记录" })); await screen.findByText("当前正式 r8");
-    await userEvent.click(screen.getByRole("button", { name: "查看当前正式版本" }));
-    expect(screen.getByRole("region", { name: "完整修改差异" })).toBeVisible();
-    await userEvent.click(screen.getByRole("button", { name: "已核对，更新草稿基础" }));
+    act(() => window.dispatchEvent(new Event("focus"))); await screen.findByText("当前正式 r8");
     expect(loadWorkflowAdjustmentDraft(localStorage, f.project.id)).toMatchObject({ kind: "found", value: { base: { revision: 8 }, snapshot: { agents: { main: { instructions: "保留用户完整草稿" } } } } });
-    await userEvent.click(screen.getByRole("button", { name: "提交完整修改" })); await waitFor(() => expect(submitWorkflowAdjustment).toHaveBeenCalledOnce());
-    expect(vi.mocked(submitWorkflowAdjustment).mock.calls[0][1].proposal.agents.idea.instructions).not.toBe("另一Agent的新正式指令");
+    await submitDraft(); await waitFor(() => expect(submitWorkflowAdjustment).toHaveBeenCalledOnce());
+    expect(vi.mocked(submitWorkflowAdjustment).mock.calls[0][1].proposal.agents.idea.instructions).toBe("另一Agent的新正式指令");
+  });
+
+  it("keeps independent official changes when resolving a conflicting local field", async () => {
+    const f = setup(); await ready(); enter("我的新指令"); fireEvent.blur(instructions());
+    f.context.current = { version: { revision: 8, hash: "b".repeat(64) }, snapshot: structuredClone(f.context.current.snapshot) };
+    f.context.current.snapshot.agents.main.instructions = "正式指令";
+    f.context.current.snapshot.agents.idea.instructions = "另一 Agent 的新指令";
+    act(() => window.dispatchEvent(new Event("focus"))); await screen.findByText("当前正式 r8");
+    await userEvent.click(screen.getByRole("button", { name: "提交修改" }));
+    const preview = screen.getByRole("dialog", { name: "查看正式版本" });
+    await userEvent.click(within(preview).getByRole("button", { name: "冲突处保留我的修改" }));
+    await submitDraft();
+    await waitFor(() => expect(submitWorkflowAdjustment).toHaveBeenCalledOnce());
+    const { base, proposal } = vi.mocked(submitWorkflowAdjustment).mock.calls[0][1];
+    expect(base.revision).toBe(8);
+    expect(proposal.agents.main.instructions).toBe("我的新指令");
+    expect(proposal.agents.idea.instructions).toBe("另一 Agent 的新指令");
   });
 
   it("retains an unconfirmed operation across reload and retries its original body despite later local edits", async () => {
     const f = setup(); await ready(); enter("第一次完整请求"); vi.mocked(submitWorkflowAdjustment).mockRejectedValueOnce(new TypeError("断线"));
-    await userEvent.click(screen.getByRole("button", { name: "提交完整修改" })); await screen.findByRole("button", { name: "重试原操作" });
+    await submitDraft(); await screen.findByRole("button", { name: "重试原操作" });
     const original = structuredClone(vi.mocked(submitWorkflowAdjustment).mock.calls[0][1]);
     enter("之后的本地草稿"); f.view.unmount(); render(<WorkflowAdjustmentEditor {...f.props} />);
     await screen.findByRole("button", { name: "重试原操作" }); await waitFor(() => expect(instructions()).toHaveValue("之后的本地草稿"));
-    expect(submitWorkflowAdjustment).toHaveBeenCalledTimes(1); expect(screen.getByRole("button", { name: "提交完整修改" })).toBeDisabled();
+    expect(submitWorkflowAdjustment).toHaveBeenCalledTimes(1); expect(screen.getByRole("button", { name: "提交修改" })).toBeDisabled();
     await userEvent.click(screen.getByRole("button", { name: "重试原操作" })); await waitFor(() => expect(submitWorkflowAdjustment).toHaveBeenCalledTimes(2));
     expect(vi.mocked(submitWorkflowAdjustment).mock.calls[1][1]).toEqual(original);
     await waitFor(() => expect(loadWorkflowAdjustmentOperation(localStorage, f.project.id)).toEqual({ kind: "empty" }));
@@ -254,10 +378,14 @@ describe("runtime workflow adjustment window using the existing complete canvas"
   });
 
   it("requires exact replacement confirmation and preserves the old request when the new request is rejected", async () => {
-    const f = setup(); f.context.records.push(f.record("old-user", "user"), f.record("independent-main")); await ready(); enter("新完整提案");
+    const f = setup(); await ready();
+    f.context.records.push(f.record("old-user", "user"), f.record("independent-main"));
+    act(() => window.dispatchEvent(new Event("focus")));
+    await waitFor(() => expect(getWorkflowAdjustmentPage).toHaveBeenCalledTimes(2));
+    enter("新完整提案");
     vi.mocked(submitWorkflowAdjustment).mockRejectedValueOnce(new ApiError("资源校验未通过", 400));
-    await userEvent.click(screen.getByRole("button", { name: "提交完整修改" })); expect(submitWorkflowAdjustment).not.toHaveBeenCalled();
-    expect(screen.getByText(/已有一条待应用修改，本次提交将覆盖它/)).toBeVisible();
+    await openSubmit(); expect(submitWorkflowAdjustment).not.toHaveBeenCalled();
+    expect(screen.getByText(/本次提交将替换待应用的修改/)).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "确认覆盖并提交" })); await screen.findByText("资源校验未通过");
     expect(vi.mocked(submitWorkflowAdjustment).mock.calls[0][1].replacesRequestId).toBe("old-user");
     expect(f.context.records.map(record => [record.requestId, record.status])).toEqual([["old-user", "pending"], ["independent-main", "pending"]]);
@@ -266,7 +394,7 @@ describe("runtime workflow adjustment window using the existing complete canvas"
 
   it("shows an immediate applied result accurately instead of claiming a pending queue", async () => {
     const f = setup(); await ready(); vi.mocked(submitWorkflowAdjustment).mockImplementationOnce(async (_id, input) => f.accept(input, "applied"));
-    enter("已安全应用内容"); await userEvent.click(screen.getByRole("button", { name: "提交完整修改" }));
+    enter("已安全应用内容"); await submitDraft();
     expect(await screen.findByText("已应用，实际接受版本 r8")).toBeVisible(); expect(screen.queryByText("已提交，等待安全时机应用")).not.toBeInTheDocument();
   });
 
@@ -289,7 +417,7 @@ describe("runtime workflow adjustment window using the existing complete canvas"
     const f = setup(); await ready(); enter("被拒绝仍保留的草稿");
     vi.mocked(submitWorkflowAdjustment).mockImplementationOnce(async () => { f.context.current.version = { revision: 8, hash: "b".repeat(64) };
       throw new ApiError("配置已发生修改，请基于最新版本核对后重新提交", 409); });
-    await userEvent.click(screen.getByRole("button", { name: "提交完整修改" })); await screen.findByText("配置已发生修改，请基于最新版本核对后重新提交");
+    await submitDraft(); await screen.findByText("配置已发生修改，请基于最新版本核对后重新提交");
     expect(instructions()).toHaveValue("被拒绝仍保留的草稿"); expect(loadWorkflowAdjustmentDraft(localStorage, f.project.id)).toMatchObject({ kind: "found", value: { base: { revision: 7 } } });
     expect(submitWorkflowAdjustment).toHaveBeenCalledOnce();
   });

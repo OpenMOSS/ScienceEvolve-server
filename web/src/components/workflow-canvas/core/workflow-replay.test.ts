@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_AGENT_ORCHESTRATION, DEFAULT_AGENTS } from "../../../lib";
 import { runtimeProjectFixture } from "../../../test/runtime-project";
 import type { AgentEvent } from "../../../types";
+import { adaptWorkflowToCanvas } from "./canvas-adapter";
 import { buildWorkflowReplay, workflowReplayTimes, WORKFLOW_REPLAY_ROOT_SCOPE as ROOT, type WorkflowReplayConfigurationHistory } from "./workflow-replay";
 
 const ts = (second: number) => new Date(Date.UTC(2026, 9, 1, 0, 0, second)).toISOString();
@@ -32,6 +33,10 @@ describe("Workflow execution replay", () => {
   it("restores immutable historical topology and real Prompt/configuration changes", () => {
     const history = configuration(), next = structuredClone(history.revisions[0]!);
     next.revision = 2; next.ts = ts(4);
+    const beforeLayout = adaptWorkflowToCanvas(history.revisions[0]!.orchestration).presentationLayout;
+    next.orchestration.canvas = structuredClone(beforeLayout);
+    const priorIdea = beforeLayout.nodes.idea!;
+    next.orchestration.canvas.nodes.idea = { x: priorIdea.x + 120, y: priorIdea.y + 40 };
     next.orchestration.agents.push({ ...next.orchestration.agents[1]!, name: "fact-check", description: "Verify sources" });
     history.revisions.push(next);
     const agents = structuredClone(DEFAULT_AGENTS); agents.idea.instructions = "Only use verified sources";
@@ -40,9 +45,11 @@ describe("Workflow execution replay", () => {
       { ...event(4, "workflow.reconfigured", undefined, { collaborationSeq: 4, rationale: "source quality" }), workflowRevision: 2 }]);
     const before = frames[1]!, after = frames.at(-1)!;
     expect(before.revision).toBe(1);
+    expect(before.models[ROOT]!.nodes.find(node => node.id === "idea")).toMatchObject(priorIdea);
     expect(before.models[ROOT]!.nodes.some(node => node.name === "fact-check")).toBe(false);
     expect(before.agents.idea.instructions).not.toBe("Only use verified sources");
     expect(after.revision).toBe(2);
+    expect(after.models[ROOT]!.nodes.find(node => node.id === "idea")).toMatchObject(next.orchestration.canvas.nodes.idea!);
     expect(after.models[ROOT]!.nodes.some(node => node.name === "fact-check")).toBe(true);
     expect(after.change).toMatchObject({ kind: "prompt", reason: "source quality" });
     expect(after.change!.content).toContain("Only use verified sources");

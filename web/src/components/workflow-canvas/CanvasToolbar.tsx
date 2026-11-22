@@ -1,4 +1,4 @@
-import { ArrowRight, CornerUpLeft, CornerUpRight, Eye, GitBranch, Maximize, MoreHorizontal, Network, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, CornerUpLeft, CornerUpRight, Eye, Maximize, MoreHorizontal, Network, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export interface CanvasToolbarProps {
@@ -24,17 +24,19 @@ export interface CanvasToolbarProps {
   onUndo?: () => void;
   onRedo?: () => void;
   onTidy?: () => void;
-  onLayered?: () => void;
   onFit?: () => void;
+  onOpenWorkflowSettings?: () => void;
+  showingWorkflowSettings?: boolean;
 }
 
 export function CanvasToolbar({
   edgeKind, zoom, connecting = false, connectStatus, layoutStatus, layoutPhase = "idle", readOnly = false, allowFitWhenReadOnly = false, layoutBusy = false, canUndo = false, canRedo = false, addAgentLabel = "Agent 模板",
-  onAddAgent, onToggleConnect, onEdgeKindChange, onZoomOut, onResetZoom, onZoomIn, onClear, onUndo, onRedo, onTidy, onLayered, onFit
+  onAddAgent, onToggleConnect, onEdgeKindChange, onZoomOut, onResetZoom, onZoomIn, onClear, onUndo, onRedo, onTidy, onFit,
+  onOpenWorkflowSettings, showingWorkflowSettings
 }: CanvasToolbarProps) {
   const editDisabled = readOnly || layoutBusy;
   const fitDisabled = layoutBusy || (readOnly && !allowFitWhenReadOnly);
-  const layoutDisabled = (!onTidy || editDisabled) && (!onLayered || editDisabled) && (!onFit || fitDisabled);
+  const layoutDisabled = (!onTidy || editDisabled) && (!onFit || fitDisabled);
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
   const [layoutCollapsed, setLayoutCollapsed] = useState(false);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -174,10 +176,9 @@ export function CanvasToolbar({
         {onClear && <button type="button" className="icon-button toolbar-icon toolbar-edit-control" title="清空画布" aria-label="清空画布" onClick={onClear} disabled={editDisabled}><Trash2 size={15} /></button>}
         {onUndo && <><span className="toolbar-separator toolbar-edit-control" aria-hidden="true" /><button type="button" className="toolbar-button compact-command toolbar-edit-control" title="撤销最近一次操作" aria-label="撤销" onClick={onUndo} disabled={editDisabled || !canUndo}><CornerUpLeft size={15} /><span>撤销</span></button></>}
         {onRedo && <button type="button" className="icon-button toolbar-icon toolbar-edit-control" title="重做最近撤销的操作" aria-label="重做" onClick={onRedo} disabled={editDisabled || !canRedo}><CornerUpRight size={15} /></button>}
-        {(onTidy || onLayered || onFit) && <div className={`layout-control ${layoutCollapsed ? "is-collapsed" : ""}`} aria-label="布局操作" ref={layoutMenuRef}>
+        {(onTidy || onFit) && <div className={`layout-control ${layoutCollapsed ? "is-collapsed" : ""}`} aria-label="布局操作" ref={layoutMenuRef}>
           <div className="layout-direct-actions">
-            {onTidy && <button type="button" className="toolbar-button compact-command layout-action-button layout-primary toolbar-edit-control" onClick={onTidy} disabled={editDisabled} title="整理重叠、过短连线和轻微错位" aria-label="智能整理布局"><Network size={15} /><span>智能整理</span></button>}
-            {onLayered && <button type="button" className="toolbar-button compact-command layout-action-button toolbar-edit-control" onClick={onLayered} disabled={editDisabled} title="依次执行分层重排、智能整理和适应画布" aria-label="依次执行分层重排、智能整理和适应画布"><GitBranch size={15} /><span>分层重排</span></button>}
+            {onTidy && <button type="button" className="toolbar-button compact-command layout-action-button layout-primary toolbar-edit-control" onClick={onTidy} disabled={editDisabled} title="整理重叠节点、连线和错位" aria-label="智能整理布局"><Network size={15} /><span>智能整理</span></button>}
             {onFit && <button type="button" className="toolbar-button compact-command layout-action-button" onClick={onFit} disabled={fitDisabled} title="缩放并居中显示全部流程" aria-label="适应画布"><Maximize size={15} /><span>适应画布</span></button>}
           </div>
           <button
@@ -192,10 +193,15 @@ export function CanvasToolbar({
           ><MoreHorizontal size={15} /></button>
           {layoutMenuOpen && <div className="layout-menu" role="menu">
             {onTidy && <button type="button" role="menuitem" className="toolbar-edit-control" onClick={() => runLayout(onTidy)} disabled={editDisabled}><Network size={15} /><span><strong>智能整理</strong></span></button>}
-            {onLayered && <button type="button" role="menuitem" className="toolbar-edit-control" onClick={() => runLayout(onLayered)} disabled={editDisabled}><GitBranch size={15} /><span><strong>分层重排</strong></span></button>}
             {onFit && <button type="button" role="menuitem" onClick={() => runLayout(onFit)} disabled={fitDisabled}><Maximize size={15} /><span><strong>适应画布</strong></span></button>}
           </div>}
         </div>}
+        {onOpenWorkflowSettings && (
+          <button type="button" className="icon-button toolbar-icon workflow-settings-button" title="流程设置" aria-label="流程设置"
+            aria-current={showingWorkflowSettings || undefined} onClick={onOpenWorkflowSettings}>
+            <SlidersHorizontal size={16} aria-hidden="true" />
+          </button>
+        )}
       </div>
     </div>
   );

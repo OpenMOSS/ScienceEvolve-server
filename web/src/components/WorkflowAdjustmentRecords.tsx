@@ -17,7 +17,7 @@ const isActionable = (record: WorkflowAdjustmentSummary) => record.status === "p
 const timestamp = (value: string) => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
+    month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false
   }).format(date);
 };
 const displayValue = (value: unknown) => value === undefined ? "未设置" : typeof value === "string" ? value || "（空文本）"
@@ -70,6 +70,19 @@ export function WorkflowAdjustmentRecords({ records, total, loadedCount, current
     (!query || [record.requestId, `#${record.submissionSequence}`, sourceLabel(record), record.waitingReason ?? "", `r${record.base.revision}`]
       .some(value => value.toLocaleLowerCase().includes(query))));
   const filtering = !!query || filters.source !== "all" || filters.status !== "all";
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const byDay = new Map<string, { label: string; records: WorkflowAdjustmentSummary[] }>();
+  for (const record of filtered) {
+    const date = new Date(record.submittedAt);
+    const key = date.toDateString();
+    const group = byDay.get(key);
+    if (group) group.records.push(record);
+    else byDay.set(key, { label: key === today.toDateString() ? "今天" : key === yesterday.toDateString() ? "昨天"
+      : Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium" }).format(date) : "日期未知",
+    records: [record] });
+  }
   const groups = new Map<string, Change[]>();
   for (const change of changes ?? []) {
     const group = changeGroup(change.path);
@@ -82,7 +95,7 @@ export function WorkflowAdjustmentRecords({ records, total, loadedCount, current
   const replacedBy = selected && [...selected.history].reverse().find(item => item.replacedByRequestId)?.replacedByRequestId;
 
   return <section className="adjustment-records" aria-label="共用修改记录">
-    <div className="adjustment-record-heading"><div><h3 ref={recordsHeading} tabIndex={-1}><History size={16} />修改记录</h3><p>以下统计基于已载入的 {records.length} 条记录</p></div>
+    <div className="adjustment-record-heading"><div><h3 ref={recordsHeading} tabIndex={-1}><History size={16} />版本历史</h3><p>{currentRevision === undefined ? "" : `当前正式版本 r${currentRevision}`}</p></div>
       <button type="button" aria-busy={refreshing} onClick={onRefresh}><RefreshCw size={13} className={refreshing ? "spin" : undefined} />刷新记录</button></div>
     <div className="adjustment-record-overview" aria-label="已载入记录概况">
       <span><Clock3 size={14} /><strong>{pendingCount}</strong>待处理</span>
@@ -143,14 +156,15 @@ export function WorkflowAdjustmentRecords({ records, total, loadedCount, current
       </div>
       {!records.length && <div className="adjustment-record-empty"><History size={22} /><strong>{loading ? "正在读取修改记录…" : "暂无提交记录"}</strong><p>提交的修改会在这里展示，未提交内容保留在本地草稿中。</p></div>}
       {!!records.length && !filtered.length && <p className="adjustment-record-empty">已载入记录中没有符合条件的修改。可以清除筛选{hasMore ? "或加载更早记录" : ""}。</p>}
-      <div className="adjustment-record-list">{filtered.map(record => <article key={record.requestId}
+      <div className="adjustment-record-list">{[...byDay].map(([key, group]) => <section className="adjustment-record-day" key={key} aria-label={group.label}>
+        <h4>{group.label}</h4>
+        {group.records.map(record => <article key={record.requestId}
         className={`adjustment-record status-${record.status}${selected?.requestId === record.requestId ? " is-selected" : ""}`} aria-label={`${sourceLabel(record)}的修改 ${record.requestId}`}>
-        <div className="adjustment-record-title"><strong>{sourceLabel(record)} · {adjustmentStatusLabel[record.status]}</strong>{selected?.requestId === record.requestId && <span className="adjustment-record-selected">当前查看</span>}</div>
-        <div className="adjustment-record-facts"><time dateTime={record.submittedAt} title={new Date(record.submittedAt).toString()}>{timestamp(record.submittedAt)}</time><span>#{record.submissionSequence} · {record.changeCount} 项变更</span></div>
-        <p className="adjustment-record-version">基础 r{record.base.revision}{record.appliedVersion ? ` → 应用 r${record.appliedVersion.revision}` : record.status === "applied" ? " · 已应用" : " · 尚未应用"}</p>
+        <div className="adjustment-record-title"><time dateTime={record.submittedAt} title={new Date(record.submittedAt).toString()}>{timestamp(record.submittedAt)}</time>{selected?.requestId === record.requestId && <span className="adjustment-record-selected">当前查看</span>}</div>
+        <div className="adjustment-record-facts"><strong>{sourceLabel(record)} · {adjustmentStatusLabel[record.status]}</strong><span>{record.appliedVersion ? `r${record.appliedVersion.revision} · ` : ""}{record.changeCount} 项变更</span></div>
         {record.waitingReason && <p className="adjustment-record-reason">{record.waitingReason}</p>}
         <div className="adjustment-record-actions">{renderActions(record)}</div>
-      </article>)}</div>
+      </article>)}</section>)}</div>
       {loadingRequestId && <p role="status">正在读取完整记录…</p>}
       <div className="adjustment-record-pagination"><span>已载入 {loadedCount} / {total} 条记录</span>
         {hasMore && <button type="button" disabled={refreshing} onClick={onLoadMore}>{refreshing ? "正在读取历史…" : "加载更早记录"}</button>}</div>

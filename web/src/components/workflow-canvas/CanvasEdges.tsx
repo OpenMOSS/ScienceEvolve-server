@@ -39,6 +39,7 @@ export interface CanvasEdgesProps {
   mutedEdgeIds?: ReadonlySet<string>;
   focusedNodeId?: string;
   focusMode?: CanvasEdgeFocusMode;
+  showAllEdges?: boolean;
   nodes?: readonly CanvasNode[];
   pendingPath?: string;
   pendingKind?: Exclude<CanvasEdgeKind, "main-dispatch">;
@@ -61,6 +62,7 @@ export const CanvasEdges = memo(function CanvasEdges({
   mutedEdgeIds,
   focusedNodeId,
   focusMode,
+  showAllEdges = true,
   nodes = [],
   pendingPath,
   pendingKind = "strong",
@@ -98,6 +100,18 @@ export const CanvasEdges = memo(function CanvasEdges({
   const relatedToFocus = (edge: CanvasEdgeGeometry) => Boolean(focusedNodeId &&
     (relatedEdgeIds?.has(edge.id) || edge.source === focusedNodeId || edge.target === focusedNodeId ||
       edge.loop && focusedLoopIds.has(edge.loop.id)));
+  const nodesById = useMemo(() => new Map(nodes.map(node => [node.id, node])), [nodes]);
+  const isVisible = (edge: CanvasEdgeGeometry) => {
+    if (showAllEdges || selectedEdgeId === edge.id || selectedEdgeIds?.has(edge.id)) return true;
+    if (edge.kind === "main-dispatch") return true;
+    if (edge.kind !== "weak" || relatedToFocus(edge)) return true;
+    if (edge.loop?.role === "return") return selectedLoopId === edge.loop.id;
+    if (!edge.source || !edge.target) return true;
+    const source = nodesById.get(edge.source);
+    const target = nodesById.get(edge.target);
+    if (!source || !target) return true;
+    return target.y >= source.y + 64 || (Math.abs(target.y - source.y) < 64 && target.x >= source.x - 64);
+  };
   const dispatchEdges = useMemo(() => edges.filter((edge) => edge.kind === "main-dispatch" && !edge.transitionGhost), [edges]);
   const dispatchBadge = useMemo(() => {
     if (!dispatchEdges.length) return undefined;
@@ -171,6 +185,7 @@ export const CanvasEdges = memo(function CanvasEdges({
       <g className="edges">
         {orderedEdges.map((edge) => <CanvasEdgeView
           key={edge.id} edge={edge} prefix={prefix}
+          visible={isVisible(edge)}
           selected={selectedEdgeId === edge.id || Boolean(selectedEdgeIds?.has(edge.id)) || Boolean(selectedLoopId && edge.loop?.id === selectedLoopId)}
           related={relatedToFocus(edge)} muted={!relatedToFocus(edge) && (mutedEdgeIds?.has(edge.id) ?? false)}
           focusedNodeId={focusedNodeId} focusMode={focusMode} interactive={interactive || Boolean(onSelectEdge && edge.loop)} select={select}
@@ -178,7 +193,7 @@ export const CanvasEdges = memo(function CanvasEdges({
         />)}
       </g>
       <g className="flow-particle-layer" aria-hidden="true">
-        {(!moving ? edges : []).map((edge) => {
+        {(!moving ? edges.filter(isVisible) : []).map((edge) => {
           const relatedToNode = relatedToFocus(edge);
           const selectedLoopEdge = Boolean(selectedLoopId && edge.loop?.id === selectedLoopId);
           const selectedLoopExit = (selectedLoopEdge || relatedToNode) && edge.loop?.role === "exit";
@@ -202,6 +217,7 @@ type CanvasEdgeViewProps = {
   selected: boolean;
   related: boolean;
   muted: boolean;
+  visible: boolean;
   focusedNodeId?: string;
   focusMode?: CanvasEdgeFocusMode;
   interactive: boolean;
@@ -210,7 +226,7 @@ type CanvasEdgeViewProps = {
 };
 
 const CanvasEdgeView = memo(function CanvasEdgeView({
-  edge, prefix, selected, related, muted, focusedNodeId, focusMode, interactive, select, loopStyle
+  edge, prefix, selected, related, muted, visible, focusedNodeId, focusMode, interactive, select, loopStyle
 }: CanvasEdgeViewProps) {
   const pointsJson = useMemo(() => edge.points ? JSON.stringify(edge.points) : undefined, [edge.points]);
   const samplesJson = useMemo(() => edge.samples ? JSON.stringify(edge.samples) : undefined, [edge.samples]);
@@ -256,6 +272,8 @@ const CanvasEdgeView = memo(function CanvasEdgeView({
   return (
     <g
       className={classes}
+      display={visible ? undefined : "none"}
+      aria-hidden={visible ? undefined : true}
       data-edge-id={edge.id}
       data-edge-source={edge.source}
       data-edge-target={edge.target}
@@ -273,7 +291,7 @@ const CanvasEdgeView = memo(function CanvasEdgeView({
         ...(loopStyle ? { "--loop-color": loopStyle.color, "--loop-glow": loopStyle.glow } : {})
       } as CSSProperties}
       role={interactive && (!edge.fixed || edge.loop) && !edge.transitionGhost ? "button" : undefined}
-      tabIndex={interactive && (!edge.fixed || edge.loop) && !edge.transitionGhost ? 0 : undefined}
+      tabIndex={visible && interactive && (!edge.fixed || edge.loop) && !edge.transitionGhost ? 0 : undefined}
       aria-label={`${edge.loop && edge.loop.role !== "exit" ? `Loop ${edge.loop.id}：${edge.source} → ${edge.target}` : edge.label ?? edgeKindLabel(edge.kind)}${edge.loop?.role === "exit" ? "，只读批次退出边" : edge.fixed ? "，系统固定连线" : ""}`}
       onClick={(event: ReactMouseEvent<SVGGElement>) => { if (!interactive) return; event.stopPropagation(); select(edge); }}
       onKeyDown={(event) => { if (interactive && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); select(edge); } }}
@@ -290,7 +308,7 @@ const CanvasEdgeView = memo(function CanvasEdgeView({
     </g>
   );
 }, (before, after) => {
-  if (before.prefix !== after.prefix || before.selected !== after.selected || before.related !== after.related
+  if (before.prefix !== after.prefix || before.selected !== after.selected || before.related !== after.related || before.visible !== after.visible
     || before.muted !== after.muted || before.focusedNodeId !== after.focusedNodeId || before.focusMode !== after.focusMode
     || before.interactive !== after.interactive || before.select !== after.select
     || before.loopStyle?.color !== after.loopStyle?.color || before.loopStyle?.marker !== after.loopStyle?.marker) return false;

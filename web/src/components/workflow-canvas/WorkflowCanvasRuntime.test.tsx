@@ -4,6 +4,7 @@ import { ensureExecutionSummary, getGitHubRepositoryStatus, getProjectGitGraph }
 import { DEFAULT_AGENT_ORCHESTRATION, DEFAULT_AGENTS } from "../../lib";
 import type { AgentEvent, Project } from "../../types";
 import { runtimeProjectFixture } from "../../test/runtime-project";
+import { buildWorkflowRuntimeState } from "./core/workflow-runtime";
 import {
   planRuntimeCanvasViewport,
   runtimeGroupMemberStates,
@@ -353,6 +354,33 @@ function collaborationRuntimeProject(): Project {
 }
 
 describe("WorkflowCanvasRuntime fixed preview", () => {
+  it("follows the active node in a large workflow and opens the full canvas", () => {
+    const large = { ...project, orchestration: { ...project.orchestration,
+      agents: [...project.orchestration.agents, ...Array.from({ length: 8 }, (_, index) => ({
+        name: `worker_${index}`, template: "general" as const
+      }))]
+    } };
+    const view = render(<WorkflowCanvasRuntime project={large} events={events} />);
+    const preview = view.container.querySelector('[data-runtime-surface-mode="preview"]');
+    expect(preview).toHaveAttribute("data-runtime-focus-node", "writing");
+    expect(preview?.querySelector('[data-node-id="writing"] [data-runtime-state="running"]')).toBeVisible();
+    const runtime = buildWorkflowRuntimeState(large, events);
+    view.rerender(<WorkflowCanvasRuntime project={large} events={events} runtime={{ ...runtime, currentNodeId: "worker_7" }} />);
+    expect(preview).toHaveAttribute("data-runtime-focus-node", "worker_7");
+    fireEvent.click(screen.getByRole("button", { name: "打开画布" }));
+    expect(within(screen.getByRole("dialog", { name: "运行 Workflow 画布" }))
+      .getByLabelText("运行 Workflow 大画布")).toBeVisible();
+  });
+
+  it("centers the active card at readable scale in a narrow preview", () => {
+    const bounds = { minX: 0, minY: 0, maxX: 2400, maxY: 900 };
+    const focus = { minX: 1200, minY: 600, maxX: 1394, maxY: 692 };
+    const { viewport } = planRuntimeCanvasViewport("preview", { width: 280, height: 220 }, bounds, focus);
+    expect(viewport.zoom).toBeGreaterThan(0.9);
+    expect(Math.abs((1297 * viewport.zoom + viewport.x) - 140)).toBeLessThan(1);
+    expect(Math.abs((646 * viewport.zoom + viewport.y) - 110)).toBeLessThan(1);
+  });
+
   it("shows one active outer group with durable member rounds and read-only Git/PR facts", () => {
     const groupProject = collaborationRuntimeProject();
     const view = render(<WorkflowCanvasRuntime project={groupProject} events={[]} />);
@@ -514,21 +542,14 @@ describe("WorkflowCanvasRuntime fixed preview", () => {
     expect(preview.querySelector(".collaboration-expand-button")).toBeNull();
     expect(preview.querySelector(".collaboration-member-list")).toBeNull();
     fireEvent.click(preview.querySelector('[data-node-id="research_group"]')!);
-    const frame = screen.getByTitle("运行 Workflow 大画布") as HTMLIFrameElement;
-    const send = vi.spyOn(frame.contentWindow!, "postMessage");
-    fireEvent.load(frame);
-    expect(send.mock.lastCall?.[0].snapshot.workflow.nodes.find((node: { id: string }) => node.id === "research_group").expanded).toBe(false);
-    fireEvent(window, new MessageEvent("message", { origin: window.location.origin, source: frame.contentWindow,
-      data: { type: "scienceevolve.workflow.runtime.toggle-group", nodeId: "research_group" } }));
-    expect(send.mock.lastCall?.[0].snapshot.workflow.nodes.find((node: { id: string }) => node.id === "research_group").expanded).toBe(true);
-    expect(screen.getByRole("dialog").querySelector(".workflow-runtime-semantic-fallback")).toBeNull();
+    const canvas = screen.getByLabelText("运行 Workflow 大画布");
+    expect(canvas.querySelector(".collaboration-member-list")).toBeNull();
+    fireEvent.click(canvas.querySelector(".collaboration-expand-button")!);
+    expect(canvas.querySelector(".collaboration-member-list")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "关闭运行 Workflow 画布" }));
     expect(preview.querySelector(".collaboration-member-list")).toBeNull();
     fireEvent.click(preview.querySelector('[data-node-id="research_group"]')!);
-    const reopened = screen.getByTitle("运行 Workflow 大画布") as HTMLIFrameElement;
-    const resend = vi.spyOn(reopened.contentWindow!, "postMessage");
-    fireEvent.load(reopened);
-    expect(resend.mock.lastCall?.[0].snapshot.workflow.nodes.find((node: { id: string }) => node.id === "research_group").expanded).toBe(true);
+    expect(screen.getByLabelText("运行 Workflow 大画布").querySelector(".collaboration-member-list")).toBeVisible();
   });
 
   it("keeps one live canvas, shared details and controls across nested scopes", () => {
@@ -548,48 +569,37 @@ describe("WorkflowCanvasRuntime fixed preview", () => {
     scoped.agents.writing.model = "scoped-writer-model";
     const view = render(<WorkflowCanvasRuntime project={scoped} events={[]} />);
     fireEvent.click(screen.getByLabelText("运行 Workflow 缩略画布，点击打开大画布"));
-    const frame = screen.getByTitle("运行 Workflow 大画布") as HTMLIFrameElement;
-    const post = vi.spyOn(frame.contentWindow!, "postMessage");
-    const send = (action: string, nodeId: string, scopeId?: string, groupId?: string) => fireEvent(window,
-      new MessageEvent("message", { origin: window.location.origin, source: frame.contentWindow,
-        data: { type: `scienceevolve.workflow.runtime.${action}`, nodeId, scopeId, groupId } }));
-    const snapshot = () => post.mock.calls.at(-1)![0].snapshot;
-    send("select", "research");
+    const canvas = () => screen.getByLabelText("运行 Workflow 大画布");
+    const select = (id: string) => fireEvent.click(canvas().querySelector(`[data-node-id="${id}"]`)!);
+    select("research");
     expect(screen.getByLabelText("协作组运行详情")).toHaveTextContent("Research");
     fireEvent.click(screen.getByRole("button", { name: "查看子 Agent" }));
-    expect(snapshot().workflow.nodes.find((node: { id: string }) => node.id === "research").expanded).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "进入组内运行 Workflow" }));
-    expect(screen.getByTitle("运行 Workflow 大画布")).toBe(frame);
-    expect(snapshot().scopeId).toBe("research");
     expect(screen.getByLabelText("Research 组内运行 Workflow")).toBeInTheDocument();
-    send("select", "child-ref", "research");
+    select("child-ref");
     const childDetail = screen.getByLabelText("协作组运行详情");
     expect(childDetail).toHaveTextContent("Inner");
     fireEvent.click(within(childDetail).getByRole("button", { name: "查看子 Agent" }));
-    expect(snapshot().workflow.nodes.find((node: { id: string }) => node.id === "child-ref").expanded).toBe(true);
-    send("navigate-group", "child-ref", "research", "inner");
-    expect(screen.getByTitle("运行 Workflow 大画布")).toBe(frame);
+    fireEvent.click(within(childDetail).getByRole("button", { name: "进入组内运行 Workflow" }));
     expect(screen.getByLabelText("Inner 组内运行 Workflow")).toBeInTheDocument();
     expect(screen.queryByLabelText("协作组运行详情")).toBeNull();
-    send("select", "writer-ref", "research"); // A delayed action from the old scope.
-    expect(screen.queryByLabelText("运行节点详情")).toBeNull();
-    send("select", "writer-ref", "inner");
+    select("writer-ref");
     const detail = screen.getByLabelText("运行节点详情");
     expect(detail).toHaveTextContent("累计执行 1 次");
     expect(detail).toHaveTextContent("运行中");
     expect(detail).toHaveTextContent("scoped-writer-model");
     expect(detail.querySelector("[data-runtime-config-snapshot]")).toBeInTheDocument();
-    expect(snapshot().nodeStates["writer-ref"]).toBe("running");
+    expect(canvas().querySelector('[data-node-id="writer-ref"] [data-runtime-state]')).toHaveAttribute("data-runtime-state", "running");
     fireEvent.click(screen.getByRole("button", { name: "执行速览" }));
     fireEvent.click(screen.getByRole("button", { name: "返回 Workflow" }));
-    expect(screen.getByTitle("运行 Workflow 大画布")).toBe(frame);
     expect(screen.getByLabelText("运行节点详情")).toHaveTextContent("scoped-writer-model");
     fireEvent.click(screen.getByRole("button", { name: "返回父图" }));
     expect(screen.getByLabelText("协作组运行详情")).toHaveTextContent("Inner");
     fireEvent.click(screen.getByRole("button", { name: "项目" }));
-    expect(screen.getByTitle("运行 Workflow 大画布")).toBe(frame);
     expect(screen.getByLabelText("协作组运行详情")).toHaveTextContent("Research");
-    send("navigate-group", "research", undefined, "inner");
+    fireEvent.click(screen.getByRole("button", { name: "进入组内运行 Workflow" }));
+    select("child-ref");
+    fireEvent.click(screen.getByRole("button", { name: "进入组内运行 Workflow" }));
     expect(screen.getByLabelText("运行节点详情")).toHaveTextContent("scoped-writer-model");
     // Main removes the selected node, then dissolves the currently open group.
     const updated = structuredClone(scoped);
@@ -597,14 +607,12 @@ describe("WorkflowCanvasRuntime fixed preview", () => {
     updatedInner.workflow.nodes = updatedInner.workflow.nodes.filter((node) => node.nodeId !== "writer-ref");
     view.rerender(<WorkflowCanvasRuntime project={updated} events={[]} />);
     expect(screen.queryByLabelText("运行节点详情")).toBeNull();
-    expect(snapshot().workflow.nodes.some((node: { id: string }) => node.id === "writer-ref")).toBe(false);
+    expect(canvas().querySelector('[data-node-id="writer-ref"]')).toBeNull();
     const dissolved = structuredClone(updated);
     dissolved.orchestration.scopedWorkflow!.groups = [];
     dissolved.orchestration.collaborations = [];
     view.rerender(<WorkflowCanvasRuntime project={dissolved} events={[]} />);
     expect(screen.queryByLabelText("运行 Workflow 范围路径")).toBeNull();
-    expect(snapshot().scopeId).toBeNull();
-    expect(screen.getByTitle("运行 Workflow 大画布")).toBe(frame);
   });
 
   it("shows model summaries by default, retains capped original output, and updates live", async () => {
@@ -764,8 +772,8 @@ describe("WorkflowCanvasRuntime fixed preview", () => {
     expect(dialog.querySelector(".edge-hit")).toBeNull();
 
     const modalCanvas = within(dialog).getByLabelText("运行 Workflow 大画布");
-    expect(modalCanvas.tagName).toBe("IFRAME");
-    expect(modalCanvas).toHaveAttribute("src", expect.stringContaining("workflow-canvas-demo/index.html?runtime=1&project=project-runtime-canvas"));
+    expect(modalCanvas.querySelector("[data-node-id]")).toBeInTheDocument();
+    expect(dialog.querySelector("iframe")).toBeNull();
 
     fireEvent.click(within(dialog).getByRole("button", { name: "关闭运行 Workflow 画布" }));
     expect(screen.queryByRole("dialog", { name: "运行 Workflow 画布" })).toBeNull();

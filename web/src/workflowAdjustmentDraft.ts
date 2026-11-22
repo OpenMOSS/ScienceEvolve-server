@@ -10,6 +10,7 @@ export interface WorkflowAdjustmentDraft {
   snapshot: WorkflowAdjustmentSnapshot;
   explanation: string;
   textDrafts: CanvasTextDrafts;
+  updatedAt?: string;
 }
 export type WorkflowAdjustmentPendingOperation = { kind: "submit"; input: WorkflowAdjustmentSubmission }
   | { kind: "withdraw"; requestId: string; input: WorkflowAdjustmentWithdrawal };
@@ -33,7 +34,8 @@ function read<T>(raw: string | null, accepts: (value: unknown) => value is T): S
   return invalid();
 }
 const isDraft = (value: unknown, projectId: string): value is WorkflowAdjustmentDraft => object(value) && value.schemaVersion === 1 && value.projectId === projectId
-  && version(value.base) && snapshot(value.baseSnapshot) && snapshot(value.snapshot) && typeof value.explanation === "string" && textDrafts(value.textDrafts);
+  && version(value.base) && snapshot(value.baseSnapshot) && snapshot(value.snapshot) && typeof value.explanation === "string" && textDrafts(value.textDrafts)
+  && (value.updatedAt === undefined || typeof value.updatedAt === "string");
 const isOperation = (value: unknown): value is WorkflowAdjustmentPendingOperation => object(value) && object(value.input) && (
   value.kind === "submit" && typeof value.input.requestId === "string" && version(value.input.base) && snapshot(value.input.proposal)
   || value.kind === "withdraw" && typeof value.requestId === "string" && typeof value.input.operationId === "string");

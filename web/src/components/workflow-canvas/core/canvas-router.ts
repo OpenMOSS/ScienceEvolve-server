@@ -359,11 +359,23 @@ export function* routeCanvasEdgesInSteps(
   const reservationIndex = new CanvasSegmentIndex();
   const bendOverrides = stableBusinessBends(ordinary);
   const sorted = [...ordinary].sort((a, b) => a.id.localeCompare(b.id));
+  const nodesById = new Map(nodes.map(node => [node.id, node]));
+  const rowSizes = new Map<number, number>();
+  for (const node of nodes) rowSizes.set(node.y, (rowSizes.get(node.y) ?? 0) + 1);
+  const returnEdges = sorted.filter(edge => {
+    const source = nodesById.get(edge.source);
+    const target = nodesById.get(edge.target);
+    return edge.kind === "weak" && source && target && source.y > target.y + 100;
+  });
   for (const [index, edge] of sorted.entries()) {
-    const source = nodes.find((node) => node.id === edge.source);
-    const target = nodes.find((node) => node.id === edge.target);
+    const source = nodesById.get(edge.source);
+    const target = nodesById.get(edge.target);
     if (!source || !target) continue;
-    const { sourcePort, targetPort, points, rendered } = ordinaryRouteGeometry(
+    const rowRoute = !options.lockRoutes && (rowSizes.get(source.y) ?? 0) >= 3 &&
+      (rowSizes.get(target.y) ?? 0) >= 3
+      ? routeBetweenRows(edge, source, target, nodes, returnEdges.indexOf(edge))
+      : undefined;
+    const { sourcePort, targetPort, points, rendered } = rowRoute ?? ordinaryRouteGeometry(
       edge,
       source,
       target,
@@ -397,6 +409,7 @@ export function* routeCanvasEdgesInSteps(
       fixed: edge.fixed,
       label: edge.kind === "termination" ? "结束" : edge.kind === "parallel" ? "并行" : edge.kind === "strong" ? "强边" : "弱边",
       controlPoints: rendered.controlPoints,
+      curveJoins: rendered.curveJoins,
       bend: rendered.bend
     };
   }
@@ -406,8 +419,9 @@ export function* routeCanvasEdgesInSteps(
     || a.id.localeCompare(b.id)
   ));
   const dispatchSourcePort = sharedDispatchSourcePort(main, nodes);
+  const dispatchTrunk = mainDispatchTrunk(main, nodes);
   for (const [index, edge] of main.entries()) {
-    const geometry = mainDispatchGeometry(edge, nodes, index, main.length, reserved, dispatchSourcePort, reservationIndex);
+    const geometry = dispatchTrunk?.(edge) ?? mainDispatchGeometry(edge, nodes, index, main.length, reserved, dispatchSourcePort, reservationIndex);
     if (!geometry) continue;
     const plannedSegments = segments(geometry.points);
     reserved.push(...plannedSegments);
@@ -422,12 +436,15 @@ export function previewCanvasEdges(edges: readonly CanvasEdge[], nodes: readonly
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
   const dispatch = edges.filter((edge) => edge.systemRoute === "main-dispatch");
   const sharedSourcePort = sharedDispatchSourcePort(dispatch, nodes);
+  const dispatchTrunk = mainDispatchTrunk(dispatch, nodes);
   const bends = stableBusinessBends(edges.filter((edge) => edge.systemRoute !== "main-dispatch"));
   return edges.flatMap((edge) => {
     const source = nodeMap.get(edge.source);
     const target = nodeMap.get(edge.target);
     if (!source || !target) return [];
     const system = edge.systemRoute === "main-dispatch";
+    const trunkRoute = system ? dispatchTrunk?.(edge) : undefined;
+    if (trunkRoute) return [trunkRoute];
     const sourcePort = system ? sharedSourcePort ?? edge.sourcePort : edge.sourcePort;
     const targetPort = edge.targetPort;
     const start = canvasPortPoint(source, sourcePort);
@@ -485,6 +502,39 @@ interface OrdinaryRouteResult {
   targetPort: WorkflowCanvasPort;
   points: CanvasPoint[];
   rendered: RenderedRouteGeometry;
+}
+
+function routeBetweenRows(
+  edge: CanvasEdge,
+  source: CanvasNode,
+  target: CanvasNode,
+  nodes: readonly CanvasNode[],
+  returnIndex: number
+): OrdinaryRouteResult | undefined {
+  if (edge.loop || (edge.sourcePortPinned && edge.sourcePort !== "bottom") ||
+    (edge.targetPortPinned && edge.targetPort !== "top")) return undefined;
+  const sourcePort = "bottom";
+  const targetPort = "top";
+  const start = canvasPortPoint(source, sourcePort);
+  const end = canvasPortPoint(target, targetPort);
+  let points: CanvasPoint[];
+  if (returnIndex >= 0) {
+    const bounds = canvasNodesRect(nodes);
+    if (!bounds) return undefined;
+    const offset = returnIndex * 16;
+    const laneX = bounds.right + 44 + offset;
+    const departureY = start.y + 64 + offset;
+    const arrivalY = end.y - 32 - offset;
+    points = [start, { x: start.x, y: departureY }, { x: laneX, y: departureY },
+      { x: laneX, y: arrivalY }, { x: end.x, y: arrivalY }, end];
+  } else {
+    const gap = end.y - start.y;
+    if (gap < 64 || nodes.some(node => node.y > source.y && node.y < target.y)) return undefined;
+    const laneY = start.y + Math.min(42, gap / 3);
+    points = [start, { x: start.x, y: laneY }, { x: end.x, y: laneY }, end];
+  }
+  if (nodes.some(node => node.id !== source.id && node.id !== target.id && routeIntersectsNode(points, node))) return undefined;
+  return { sourcePort, targetPort, points, rendered: orthogonalCubicGeometry(start, end, points, 0) };
 }
 
 /**
@@ -718,6 +768,38 @@ function sharedDispatchSourcePort(
   return Math.abs(dx) >= Math.abs(dy)
     ? dx >= 0 ? "right" : "left"
     : dy >= 0 ? "bottom" : "top";
+}
+
+/** Share the left gutter and one branch lane per row in a row-based layout. */
+function mainDispatchTrunk(edges: readonly CanvasEdge[], nodes: readonly CanvasNode[]) {
+  if (edges.length < 4) return undefined;
+  const byId = new Map(nodes.map(node => [node.id, node]));
+  const main = byId.get("main");
+  if (!main) return undefined;
+  const targets = edges.flatMap(edge => {
+    const target = byId.get(edge.target);
+    return target ? [target] : [];
+  });
+  if (new Set(targets.map(node => node.y)).size < 2 ||
+    new Set(targets.map(node => node.y)).size > targets.length / 2) return undefined;
+  const start = canvasPortPoint(main, "right");
+  const firstColumn = Math.min(...nodes.filter(node => node.id !== "main").map(node => node.x));
+  if (firstColumn - start.x < 32) return undefined;
+  const trunkX = Math.round((start.x + firstColumn) / 2);
+  return (edge: CanvasEdge): EdgeGeometry | undefined => {
+    const target = byId.get(edge.target);
+    if (!target || (edge.targetPortPinned && edge.targetPort !== "top")) return undefined;
+    const end = canvasPortPoint(target, "top");
+    const rowY = end.y - 28;
+    const points = [start, { x: trunkX, y: start.y }, { x: trunkX, y: rowY }, { x: end.x, y: rowY }, end];
+    if (routeCrossesNonEndpointNode(points, edge, nodes)) return undefined;
+    return {
+      ...orthogonalCubicGeometry(start, end, points, 0),
+      id: edge.id, source: edge.source, target: edge.target, kind: "main-dispatch",
+      points, sourcePort: "right", targetPort: "top", sourcePortPinned: false, targetPortPinned: false,
+      fixed: true, label: "Main 固定调度"
+    };
+  };
 }
 
 /** Canonical Main fan-out geometry used by modern and compatibility APIs. */

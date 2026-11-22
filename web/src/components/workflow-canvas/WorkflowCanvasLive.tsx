@@ -181,7 +181,7 @@ export function WorkflowCanvasLive(props: WorkflowCanvasLiveProps & {
     className="workflow-runtime-live-frame"
     title={props.title ?? "运行 Workflow 大画布"}
     aria-label={props.title ?? "运行 Workflow 大画布"}
-    src={`${import.meta.env.BASE_URL}workflow-canvas-demo/index.html?runtime=1&project=${encodeURIComponent(props.project.id)}`}
+    src={`${import.meta.env.BASE_URL}workflow-canvas-demo/index.html?runtime=1&project=${encodeURIComponent(props.project.id)}&v=4`}
     onLoad={sendSnapshot}
   />;
 }

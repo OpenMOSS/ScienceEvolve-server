@@ -2631,7 +2631,7 @@
     if (runtimeExitEdges) runtimeExitEdges.setAttribute("transform", "translate(" + viewport.x + " " + viewport.y + ") scale(" + viewport.k + ")");
     if (flowParticleLayer) flowParticleLayer.setAttribute("transform", "translate(" + viewport.x + " " + viewport.y + ") scale(" + viewport.k + ")");
     pendingLayer.setAttribute("transform", "translate(" + viewport.x + " " + viewport.y + ") scale(" + viewport.k + ")");
-    var gridSize = 18 * viewport.k;
+    var gridSize = RUNTIME_MODE ? Math.max(10, 18 * viewport.k) : 18 * viewport.k;
     canvas.style.backgroundSize = gridSize + "px " + gridSize + "px";
     canvas.style.backgroundPosition = (viewport.x - 4 * viewport.k) + "px " + (viewport.y - 4 * viewport.k) + "px";
     updateZoomControls();
@@ -7520,7 +7520,7 @@
   // Preserve curated/manual node positions and only center the complete graph.
   // This is used when switching showcase templates so their composition is not
   // replaced by the automatic arranger.
-  function fitViewportOnly(silent) {
+  function fitViewportOnly(silent, preferCurrent) {
     if (!workflow.nodes.length) return;
     cancelConnection();
     clearRouteLock();
@@ -7588,12 +7588,27 @@
     var availableWidth = Math.max(1, width - padding * 2);
     var availableHeight = Math.max(1, height - padding * 2);
     var fitZoom = Math.min(1.08, availableWidth / graphWidth, availableHeight / graphHeight);
+    if (preferCurrent && fitZoom < 0.65 && focusRuntimeNode(true)) return;
     viewport.k = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, fitZoom));
     viewport.x = Math.round((width - graphWidth * viewport.k) / 2 - minX * viewport.k);
     viewport.y = Math.round((height - graphHeight * viewport.k) / 2 - minY * viewport.k);
     applyViewport();
     drawEdges();
     if (silent !== true) showToast("已适配当前展示视图");
+  }
+
+  function focusRuntimeNode(useFallback) {
+    var node = getNode(demoRun.currentAgentId) || getNode(demoRun.runningAgentIds[0]);
+    if (!node && useFallback) node = getNode(workflow.inputTarget) || workflow.nodes[0];
+    if (!node || !canvas.clientWidth || !canvas.clientHeight) return false;
+    var size = nodeDimensions(nodeElement(node.id));
+    viewport.k = Math.max(MIN_ZOOM, Math.min(1, (canvas.clientWidth - Math.min(36, canvas.clientWidth / 4)) / size.width,
+      (canvas.clientHeight - Math.min(36, canvas.clientHeight / 4)) / size.height));
+    viewport.x = Math.round(canvas.clientWidth / 2 - (node.x + size.width / 2) * viewport.k);
+    viewport.y = Math.round(canvas.clientHeight / 2 - (node.y + size.height / 2) * viewport.k);
+    applyViewport();
+    drawEdges();
+    return true;
   }
 
   // The regular fit routine includes Main's long dispatch rails. In the
@@ -10372,6 +10387,8 @@
   document.getElementById("fit-button").addEventListener("click", function () { if (!blockDemoEdit()) tidyCanvas(false); });
   document.getElementById("layered-layout-button").addEventListener("click", function () { if (!blockDemoEdit()) arrangeCanvas(false); });
   document.getElementById("fit-viewport-button").addEventListener("click", function () { if (RUNTIME_MODE || !blockDemoEdit()) fitViewportOnly(false); });
+  var runtimeFocusButton = document.getElementById("runtime-focus-button");
+  if (runtimeFocusButton) runtimeFocusButton.addEventListener("click", function () { focusRuntimeNode(false); });
   if (layoutMenuButton && layoutMenu) {
     layoutMenuButton.addEventListener("click", function (event) {
       event.stopPropagation();
@@ -10767,6 +10784,7 @@
         demoRun.nodeResults = clone(snapshot.nodeResults);
         demoRun.currentAgentId = snapshot.currentNodeId;
         demoRun.runningAgentIds = Object.keys(snapshot.nodeStates).filter(function (id) { return snapshot.nodeStates[id] === "running" || snapshot.nodeStates[id] === "retrying"; });
+        if (runtimeFocusButton) runtimeFocusButton.disabled = !getNode(demoRun.currentAgentId) && !getNode(demoRun.runningAgentIds[0]);
         demoRun.addedAgentIds = knownScope && !scopeChanged && !seeking ? workflow.nodes.filter(function (node) { return previousIds.indexOf(node.id) < 0 || demoRun.addedAgentIds.indexOf(node.id) >= 0; }).map(function (node) { return node.id; }) : [];
         demoRun.addedEdgeIds = knownScope && !scopeChanged && !seeking ? workflow.edges.filter(function (edge) { return previousEdgeIds.indexOf(edge.id) < 0 || demoRun.addedEdgeIds.indexOf(edge.id) >= 0; }).map(function (edge) { return edge.id; }) : [];
         demoRun.updatedEdgeIds = !scopeChanged && !seeking ? workflow.edges.filter(function (edge) { var previous = previousEdges.find(function (entry) { return entry.id === edge.id; }); return previous && previous.kind !== edge.kind || demoRun.updatedEdgeIds.indexOf(edge.id) >= 0; }).map(function (edge) { return edge.id; }) : [];
@@ -10789,7 +10807,7 @@
         });
         applyViewport();
         if (Object.keys(runtimeMoves).length && !runtimeMotionFrame && !runtimeMotionPausedAt) runtimeMotionFrame = requestAnimationFrame(animateRuntimeMoves);
-        if (!knownScope) requestAnimationFrame(function () { if (runtimeScopeKey === nextScopeKey) fitViewportOnly(true); });
+        if (!knownScope) requestAnimationFrame(function () { if (runtimeScopeKey === nextScopeKey) fitViewportOnly(true, !snapshot.playback); });
         else if (!scopeChanged) workflow.nodes.filter(function (node) {
           return node.type === "collaboration" && node.expanded && expandedGroups.indexOf(node.id) < 0;
         }).forEach(function (node) { requestAnimationFrame(function () { revealRuntimeGroup(node.id); }); });

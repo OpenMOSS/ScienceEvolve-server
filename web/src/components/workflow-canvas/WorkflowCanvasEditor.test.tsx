@@ -18,6 +18,7 @@ import type {
 import { canvasEdgeId, loopExitCanvasEdgeId, normalizeCanvasLayout } from "./core/canvas-layout";
 import { addScopedGroup, upgradeLegacyGroups } from "./core/scoped-workflow";
 import * as canvasRouter from "./core/canvas-router";
+import * as canvasLayout from "./core/canvas-layout-plan";
 import { WorkflowCanvasEditor, type CanvasLayoutOperationSnapshot } from "./WorkflowCanvasEditor";
 import eightAgentR7Fixture from "../../../../docs/scienceevolve-collaboration/research/fixtures/eight-agent-v2.json";
 
@@ -25,6 +26,17 @@ type HarnessState = {
   orchestration: AgentOrchestrationTemplate;
   agents: AgentsConfig;
 };
+
+function deferCanvasLayout() {
+  const build = canvasLayout.buildCanvasLayoutPlan;
+  let release!: () => void;
+  const barrier = new Promise<void>(resolve => { release = resolve; });
+  const plan = vi.spyOn(canvasLayout, "buildCanvasLayoutPlan").mockImplementation(async options => {
+    await barrier;
+    return build(options);
+  });
+  return { plan, release };
+}
 
 function renderEditor(
   initialOrchestration: AgentOrchestrationTemplate = structuredClone(DEFAULT_AGENT_ORCHESTRATION),
@@ -302,7 +314,7 @@ describe("WorkflowCanvasEditor interactions", () => {
     expect(view.container.querySelector('[data-node-id="idea"]')).not.toBeNull();
   });
 
-  it("uses root canvas tidy and layered planning inside a group with scoped undo", async () => {
+  it("uses smart tidy inside a group with scoped undo", async () => {
     const orchestration = structuredClone(DEFAULT_AGENT_ORCHESTRATION);
     upgradeLegacyGroups(orchestration);
     addScopedGroup(orchestration, {
@@ -334,30 +346,6 @@ describe("WorkflowCanvasEditor interactions", () => {
     fireEvent.click(within(scoped).getByRole("button", { name: "重做" }));
     expect(view.latest().orchestration.scopedWorkflow!.groups[0]!.workflow.canvas).toEqual(tidied);
     expect(view.latest().orchestration.canvas).toEqual(rootCanvas);
-    fireEvent.click(within(scoped).getByRole("button", { name: "撤销" }));
-
-    class ImmediateElk {
-      async layout() {
-        return { children: Object.entries(before!.nodes).map(([id, point], index) => ({
-          id, x: point.x + index * 50, y: point.y + index * 28
-        })) };
-      }
-    }
-    window.ELK = ImmediateElk;
-    window.__openfarsElkPromise = undefined;
-    try {
-      fireEvent.click(within(scoped).getByRole("button", { name: "依次执行分层重排、智能整理和适应画布" }));
-      await waitFor(() => expect(view.latest().orchestration.scopedWorkflow!.groups[0]!.workflow.canvas?.layoutMode)
-        .toBe("layered"), { timeout: 8_000 });
-      expect(view.latest().orchestration.scopedWorkflow!.groups[0]!.workflow.routes).toEqual(routes);
-      expect(view.latest().orchestration.scopedWorkflow!.groups[0]!.workflow.input).toEqual(input);
-      expect(view.latest().orchestration.canvas).toEqual(rootCanvas);
-      fireEvent.click(within(scoped).getByRole("button", { name: "撤销" }));
-      expect(view.latest().orchestration.scopedWorkflow!.groups[0]!.workflow.canvas).toEqual(before);
-    } finally {
-      delete window.ELK;
-      window.__openfarsElkPromise = undefined;
-    }
   });
 
   it("does not publish a scoped layout that finishes after leaving the group", async () => {
@@ -367,27 +355,19 @@ describe("WorkflowCanvasEditor interactions", () => {
       id: "research", displayName: "Research", leaderAgentId: "main", memberAgentIds: ["idea", "execution"]
     });
     const before = structuredClone(orchestration.scopedWorkflow!.groups[0]!.workflow.canvas);
-    let resolveLayout: ((value: { children: Array<{ id: string; x: number; y: number }> }) => void) | undefined;
-    class DeferredElk {
-      layout() {
-        return new Promise<{ children: Array<{ id: string; x: number; y: number }> }>((resolve) => { resolveLayout = resolve; });
-      }
-    }
-    window.ELK = DeferredElk;
-    window.__openfarsElkPromise = undefined;
+    const layout = deferCanvasLayout();
     try {
       const view = renderEditor(orchestration, cloneAgentsConfig(DEFAULT_AGENTS), { gitEnabled: true });
       fireEvent.click(view.container.querySelector('[data-node-id="research"]')!);
       fireEvent.click(screen.getByRole("button", { name: "进入组内 Workflow" }));
       const scoped = screen.getByLabelText("Research 组内 Workflow 编辑器");
-      fireEvent.click(within(scoped).getByRole("button", { name: "依次执行分层重排、智能整理和适应画布" }));
-      await waitFor(() => expect(resolveLayout).toBeDefined());
+      fireEvent.click(within(scoped).getByRole("button", { name: "智能整理布局" }));
+      await waitFor(() => expect(layout.plan).toHaveBeenCalledOnce());
       fireEvent.click(within(scoped).getByRole("button", { name: "返回父图" }));
-      await act(async () => { resolveLayout!({ children: Object.entries(before!.nodes).map(([id, point]) => ({ id, x: point.x + 120, y: point.y + 60 })) }); });
+      await act(async () => { layout.release(); });
       expect(view.latest().orchestration.scopedWorkflow!.groups[0]!.workflow.canvas).toEqual(before);
     } finally {
-      delete window.ELK;
-      window.__openfarsElkPromise = undefined;
+      layout.plan.mockRestore();
     }
   });
 
@@ -998,9 +978,9 @@ describe("WorkflowCanvasEditor interactions", () => {
     fireEvent.change(harnessSelect, { target: { value: "fixture-anthropic" } });
     fireEvent.change(screen.getByLabelText("idea全局网关"), { target: { value: gatewayId } });
 
-    expect(screen.getByLabelText("idea model")).toHaveValue("");
+    expect(screen.getByLabelText("idea 模型")).toHaveValue("");
     expect(screen.getByText("切换网关后需要重新选择 model")).toHaveAttribute("role", "alert");
-    fireEvent.change(screen.getByLabelText("idea model"), { target: { value: "route-model" } });
+    fireEvent.change(screen.getByLabelText("idea 模型"), { target: { value: "route-model" } });
 
     expect(view.latest().agents.idea).toMatchObject({
       harness: "fixture-anthropic",
@@ -1014,6 +994,20 @@ describe("WorkflowCanvasEditor interactions", () => {
     });
     expect(screen.getByText("已启用自动路由：Anthropic Messages → OpenAI Chat Completions")).toBeVisible();
     expect(view.agentChanges).toHaveBeenCalled();
+  });
+
+  it("keeps an unrelated backward weak edge visible when a node is selected", () => {
+    const initial = structuredClone(DEFAULT_AGENT_ORCHESTRATION);
+    initial.routes.execution = [{ target: "idea", kind: "weak" }];
+    initial.canvas = normalizeCanvasLayout(undefined, initial);
+    initial.canvas.nodes.idea = { x: 400, y: 100 };
+    initial.canvas.nodes.execution = { x: 400, y: 350 };
+    const view = renderEditor(initial);
+
+    const backwardEdge = edge(view.container, canvasEdgeId("execution", "idea"));
+    expect(backwardEdge).not.toHaveAttribute("display", "none");
+    fireEvent.click(view.container.querySelector('[data-node-id="review"]')!);
+    expect(backwardEdge).not.toHaveAttribute("display", "none");
   });
 
   it("supports keyboard focus and Enter/Space selection for canvas nodes", () => {
@@ -1031,6 +1025,28 @@ describe("WorkflowCanvasEditor interactions", () => {
     fireEvent.keyDown(execution, { key: " " });
     expect(execution).toHaveClass("is-selected");
     expect(idea).not.toHaveClass("is-selected");
+  });
+
+  it("preserves route paths and the viewport when switching selected nodes", () => {
+    const view = renderEditor();
+    const world = screen.getByLabelText("Agent 工作流画布");
+    const transform = world.querySelector<HTMLElement>(".workflow-canvas-world")!;
+    const paths = () => Object.fromEntries([...world.querySelectorAll<SVGGElement>("[data-edge-id]")].map(group =>
+      [group.dataset.edgeId, group.querySelector(".workflow-edge")?.getAttribute("d")]));
+    const originalPaths = paths();
+    const originalTransform = transform.style.transform;
+    for (const [index, id] of ["idea", "review"].entries()) {
+      const node = world.querySelector<HTMLElement>(`[data-node-id="${id}"]`)!;
+      const pointer = { pointerId: index + 1, button: 0, clientX: 100, clientY: 100 };
+      fireEvent.pointerDown(node, pointer);
+      expect(paths()).toEqual(originalPaths);
+      fireEvent.pointerUp(node, pointer);
+      fireEvent.click(node);
+      expect(node).toHaveClass("is-selected");
+      expect(paths()).toEqual(originalPaths);
+      expect(transform.style.transform).toBe(originalTransform);
+    }
+    expect(view.orchestrationChanges).not.toHaveBeenCalled();
   });
 
   it("adds a fluorescent highlight to every edge connected to the selected Agent", () => {
@@ -1252,7 +1268,7 @@ describe("WorkflowCanvasEditor interactions", () => {
     const view = renderEditor(undefined, undefined, { onGeometryObservation });
     fireEvent.click(view.container.querySelector('[data-node-id="idea"]')!);
     const before = onGeometryObservation.mock.calls.length;
-    const model = screen.getByRole("textbox", { name: "idea model" });
+    const model = screen.getByRole("textbox", { name: "idea 模型" });
     fireEvent.change(model, { target: { value: "another-model" } });
     expect(view.latest().agents.idea.model).toBe(DEFAULT_AGENTS.idea.model);
     fireEvent.blur(model);
@@ -1707,7 +1723,7 @@ describe("WorkflowCanvasEditor interactions", () => {
     fireEvent.pointerDown(world, { pointerId: 61, button: 0, clientX: 980, clientY: 760 });
     fireEvent.pointerUp(world, { pointerId: 61, clientX: 980, clientY: 760 });
     expect(idea).not.toHaveClass("is-selected");
-    expect(screen.getByText("流程概览")).toBeVisible();
+    expect(screen.getByRole("region", { name: "流程摘要" })).toBeVisible();
   });
 
   it("keeps selection when whitespace is dragged to pan", () => {
@@ -1830,97 +1846,60 @@ describe("WorkflowCanvasEditor interactions", () => {
     expect(view.agentChanges).not.toHaveBeenCalled();
   });
 
-  it("commits layered layout as one undo boundary", async () => {
+  it("commits smart tidy as one undo boundary", async () => {
     const initial = structuredClone(DEFAULT_AGENT_ORCHESTRATION);
     initial.canvas = normalizeCanvasLayout(undefined, initial);
+    initial.canvas.nodes.execution = { ...initial.canvas.nodes.idea! };
     const before = structuredClone(initial.canvas);
-    class ImmediateElk {
-      async layout() {
-        return {
-          children: Object.entries(before.nodes).map(([id, point], index) => ({
-            id,
-            x: point.x + 40 + index * 3,
-            y: point.y + 20
-          }))
-        };
-      }
-    }
-    window.ELK = ImmediateElk;
-    window.__openfarsElkPromise = undefined;
-    try {
-      const view = renderEditor(initial);
-      const world = screen.getByLabelText("Agent 工作流画布");
-      const beforeTransform = world.querySelector<HTMLElement>(".workflow-canvas-world")!.style.transform;
-      fireEvent.click(screen.getByRole("button", { name: "依次执行分层重排、智能整理和适应画布" }));
-      await waitFor(
-        () => expect(view.orchestrationChanges).toHaveBeenCalledTimes(1),
-        { timeout: 5_000 }
-      );
-      expect(world).toHaveAttribute("data-canvas-layout-phase", "idle");
+    const view = renderEditor(initial);
+    const world = screen.getByLabelText("Agent 工作流画布");
+    const beforeTransform = world.querySelector<HTMLElement>(".workflow-canvas-world")!.style.transform;
+    fireEvent.click(screen.getByRole("button", { name: "智能整理布局" }));
+    await waitFor(
+      () => expect(view.orchestrationChanges).toHaveBeenCalledTimes(1),
+      { timeout: 5_000 }
+    );
+    expect(world).toHaveAttribute("data-canvas-layout-phase", "idle");
 
-      fireEvent.click(screen.getByRole("button", { name: "撤销" }));
-      expect(view.latest().orchestration.canvas).toEqual(before);
-      expect(world.querySelector<HTMLElement>(".workflow-canvas-world")!.style.transform).toBe(beforeTransform);
-      expect(screen.getByRole("button", { name: "撤销" })).toBeDisabled();
-    } finally {
-      delete window.ELK;
-      window.__openfarsElkPromise = undefined;
-    }
+    fireEvent.click(screen.getByRole("button", { name: "撤销" }));
+    expect(view.latest().orchestration.canvas).toEqual(before);
+    expect(world.querySelector<HTMLElement>(".workflow-canvas-world")!.style.transform).toBe(beforeTransform);
+    expect(screen.getByRole("button", { name: "撤销" })).toBeDisabled();
   });
 
   it("emits one atomic layout plan and one synchronized apply phase", async () => {
     const initial = structuredClone(DEFAULT_AGENT_ORCHESTRATION);
     initial.canvas = normalizeCanvasLayout(undefined, initial);
+    initial.canvas.nodes.execution = { ...initial.canvas.nodes.idea! };
     const snapshots: CanvasLayoutOperationSnapshot[] = [];
-    class ImmediateElk {
-      async layout(graph: Record<string, unknown>) {
-        const children = Array.isArray(graph.children)
-          ? graph.children as Array<{ id: string }>
-          : [];
-        return {
-          children: children.map((child, index) => ({
-            id: child.id,
-            x: 80 + index * 260,
-            y: 120 + (index % 2) * 140
-          }))
-        };
-      }
-    }
-    window.ELK = ImmediateElk;
-    window.__openfarsElkPromise = undefined;
-    try {
-      const view = renderEditor(initial, cloneAgentsConfig(DEFAULT_AGENTS), {
-        onLayoutSnapshot: (snapshot) => snapshots.push(snapshot)
-      });
-      const world = screen.getByLabelText("Agent 工作流画布");
-      fireEvent.click(screen.getByRole("button", { name: "依次执行分层重排、智能整理和适应画布" }));
-      await waitFor(() => expect(world).toHaveAttribute("data-canvas-layout-phase", "idle"), { timeout: 5_000 });
+    const view = renderEditor(initial, cloneAgentsConfig(DEFAULT_AGENTS), {
+      onLayoutSnapshot: (snapshot) => snapshots.push(snapshot)
+    });
+    const world = screen.getByLabelText("Agent 工作流画布");
+    fireEvent.click(screen.getByRole("button", { name: "智能整理布局" }));
+    await waitFor(() => expect(world).toHaveAttribute("data-canvas-layout-phase", "idle"), { timeout: 5_000 });
 
-      expect(snapshots.map((snapshot) => snapshot.phase)).toEqual([
-        "planning",
-        "planned",
-        "applying",
-        "final"
-      ]);
-      const planned = snapshots.find((snapshot) => snapshot.phase === "planned");
-      const finalViewport = snapshots.find((snapshot) => snapshot.phase === "final");
-      expect(Object.keys(planned?.layout?.nodes ?? {})).toEqual(expect.arrayContaining(["input", "main", "idea", "execution", "writing", "review", "finish"]));
-      expect(Object.keys(planned?.layout?.edges ?? {})).toEqual(expect.arrayContaining([canvasEdgeId("idea", "main", 0)]));
-      expect(planned?.layoutMode).toBe("main-dispatch");
-      expect(planned?.movedNodeCount).toBeGreaterThan(0);
-      expect(finalViewport?.finalViewport?.zoom).toBeGreaterThanOrEqual(.08);
-      expect(view.orchestrationChanges).toHaveBeenCalledTimes(1);
-      expect(view.container.querySelector('[data-layout-transition]')).toBeNull();
-      const finalPaths = [...view.container.querySelectorAll<SVGPathElement>("[data-edge-id] .workflow-edge")];
-      expect(finalPaths.length).toBeGreaterThan(0);
-      for (const path of finalPaths) {
-        const data = path.getAttribute("d") ?? "";
-        expect(data).not.toContain(" L ");
-        expect(data.match(/ C /g)?.length ?? 0, data).toBeLessThanOrEqual(2);
-      }
-    } finally {
-      delete window.ELK;
-      window.__openfarsElkPromise = undefined;
+    expect(snapshots.map((snapshot) => snapshot.phase)).toEqual([
+      "planning",
+      "planned",
+      "applying",
+      "final"
+    ]);
+    const planned = snapshots.find((snapshot) => snapshot.phase === "planned");
+    const finalViewport = snapshots.find((snapshot) => snapshot.phase === "final");
+    expect(Object.keys(planned?.layout?.nodes ?? {})).toEqual(expect.arrayContaining(["input", "main", "idea", "execution", "writing", "review", "finish"]));
+    expect(Object.keys(planned?.layout?.edges ?? {})).toEqual(expect.arrayContaining([canvasEdgeId("idea", "main", 0)]));
+    expect(planned?.operation).toBe("tidy");
+    expect(planned?.movedNodeCount).toBeGreaterThan(0);
+    expect(finalViewport?.finalViewport?.zoom).toBeGreaterThanOrEqual(.08);
+    expect(view.orchestrationChanges).toHaveBeenCalledTimes(1);
+    expect(view.container.querySelector('[data-layout-transition]')).toBeNull();
+    const finalPaths = [...view.container.querySelectorAll<SVGPathElement>("[data-edge-id] .workflow-edge")];
+    expect(finalPaths.length).toBeGreaterThan(0);
+    for (const path of finalPaths) {
+      const data = path.getAttribute("d") ?? "";
+      expect(data).not.toContain(" L ");
+      expect(data.match(/ C /g)?.length ?? 0, data).toBeLessThanOrEqual(2);
     }
   });
 
@@ -1950,7 +1929,7 @@ describe("WorkflowCanvasEditor interactions", () => {
     try {
       const view = renderEditor(initial);
       const world = screen.getByLabelText("Agent 工作流画布");
-      fireEvent.click(screen.getByRole("button", { name: "依次执行分层重排、智能整理和适应画布" }));
+      fireEvent.click(screen.getByRole("button", { name: "智能整理布局" }));
       await waitFor(() => expect(world).toHaveAttribute("data-canvas-layout-phase", "idle"), { timeout: 5_000 });
 
       expect(view.orchestrationChanges).toHaveBeenCalledTimes(1);
@@ -1961,29 +1940,20 @@ describe("WorkflowCanvasEditor interactions", () => {
     }
   });
 
-  it("does not apply a stale layered result after the workflow changes", async () => {
+  it("does not apply a stale smart-tidy result after the workflow changes", async () => {
     const initial = directedLayoutFixture();
-    let resolveLayout!: (value: { children: Array<{ id: string; x: number; y: number }> }) => void;
-    class DeferredElk {
-      layout() {
-        return new Promise<{ children: Array<{ id: string; x: number; y: number }> }>((resolve) => {
-          resolveLayout = resolve;
-        });
-      }
-    }
-    window.ELK = DeferredElk;
-    window.__openfarsElkPromise = undefined;
+    const layout = deferCanvasLayout();
     try {
       const view = renderEditor(initial);
       const world = screen.getByLabelText("Agent 工作流画布");
-      fireEvent.click(screen.getByRole("button", { name: "依次执行分层重排、智能整理和适应画布" }));
-      await waitFor(() => expect(resolveLayout).toBeTypeOf("function"));
+      fireEvent.click(screen.getByRole("button", { name: "智能整理布局" }));
+      await waitFor(() => expect(layout.plan).toHaveBeenCalledOnce());
 
       const replacement = structuredClone(view.latest().orchestration);
       replacement.canvas!.nodes.idea = { x: 912, y: 456 };
       act(() => view.replaceOrchestration(replacement));
       await act(async () => {
-        resolveLayout({ children: [{ id: "idea", x: 1, y: 2 }] });
+        layout.release();
         await Promise.resolve();
       });
 
@@ -1991,27 +1961,20 @@ describe("WorkflowCanvasEditor interactions", () => {
       expect(view.latest().orchestration.canvas?.nodes.idea).toEqual({ x: 912, y: 456 });
       expect(view.orchestrationChanges).not.toHaveBeenCalled();
     } finally {
-      delete window.ELK;
-      window.__openfarsElkPromise = undefined;
+      layout.plan.mockRestore();
     }
   });
 
   it("locks editing and zoom during layout, and discards a cancelled pending result", async () => {
     const initial = directedLayoutFixture();
     initial.canvas!.viewport = { x: 80, y: 40, zoom: .6 };
-    let resolveLayout!: (value: { children: Array<{ id: string; x: number; y: number }> }) => void;
-    class DeferredElk {
-      layout() {
-        return new Promise<{ children: Array<{ id: string; x: number; y: number }> }>((resolve) => { resolveLayout = resolve; });
-      }
-    }
-    window.ELK = DeferredElk;
+    const layout = deferCanvasLayout();
     try {
       const view = renderEditor(initial);
       const world = screen.getByLabelText("Agent 工作流画布");
       const beforeTransform = world.querySelector<HTMLElement>(".workflow-canvas-world")!.style.transform;
-      fireEvent.click(screen.getByRole("button", { name: "依次执行分层重排、智能整理和适应画布" }));
-      await waitFor(() => expect(resolveLayout).toBeTypeOf("function"));
+      fireEvent.click(screen.getByRole("button", { name: "智能整理布局" }));
+      await waitFor(() => expect(layout.plan).toHaveBeenCalledOnce());
       expect(world).toHaveAttribute("aria-busy", "true");
       expect(screen.getByRole("button", { name: "放大画布" })).toBeDisabled();
       expect(port(view.container, "idea", "right")).toBeDisabled();
@@ -2021,14 +1984,13 @@ describe("WorkflowCanvasEditor interactions", () => {
       expect(world).toHaveAttribute("aria-busy", "false");
       expect(world.querySelector<HTMLElement>(".workflow-canvas-world")!.style.transform).toBe(beforeTransform);
       await act(async () => {
-        resolveLayout({ children: [{ id: "idea", x: 1, y: 2 }] });
+        layout.release();
         await Promise.resolve();
       });
       expect(view.orchestrationChanges).not.toHaveBeenCalled();
       expect(view.latest().orchestration).toEqual(initial);
     } finally {
-      delete window.ELK;
-      window.__openfarsElkPromise = undefined;
+      layout.plan.mockRestore();
     }
   });
 });

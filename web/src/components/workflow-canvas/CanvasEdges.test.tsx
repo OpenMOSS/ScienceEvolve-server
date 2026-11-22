@@ -24,6 +24,27 @@ function loopExit(id: string): CanvasEdgeGeometry {
 }
 
 describe("CanvasEdges Loop presentation", () => {
+  it("keeps the main flow visible and displays secondary links on demand", () => {
+    const nodes = [
+      { id: "main", name: "Main", kind: "agent" as const, x: 0, y: 200 },
+      { id: "a", name: "A", kind: "agent" as const, x: 300, y: 0 },
+      { id: "b", name: "B", kind: "agent" as const, x: 300, y: 220 }
+    ];
+    const edges: CanvasEdgeGeometry[] = [
+      edge("a-b"),
+      { ...edge("b-a"), kind: "weak" },
+      { ...edge("main-a"), kind: "main-dispatch", fixed: true },
+      { ...edge("main-b"), kind: "main-dispatch", fixed: true }
+    ];
+    const view = render(<CanvasEdges nodes={nodes} edges={edges} showAllEdges={false} focusedNodeId="main" />);
+    const visible = () => [...view.container.querySelectorAll<SVGGElement>('[data-edge-id]:not([display="none"])')].map(item => item.dataset.edgeId);
+    expect(visible()).toEqual(["main-a", "main-b", "a-b"]);
+    view.rerender(<CanvasEdges nodes={nodes} edges={edges} showAllEdges={false} focusedNodeId="a" />);
+    expect(visible()).toEqual(["main-a", "main-b", "a-b", "b-a"]);
+    view.rerender(<CanvasEdges nodes={nodes} edges={edges} showAllEdges />);
+    expect(visible()).toEqual(["main-a", "main-b", "a-b", "b-a"]);
+  });
+
   it.each([
     ["证据复核员->定点补证员:0", "定点补证员->证据复核员:0"],
     ["a:b", "a_b"],

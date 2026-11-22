@@ -5,6 +5,8 @@ import { DEFAULT_AGENT_ORCHESTRATION, DEFAULT_AGENTS, normalizeProject } from ".
 import type { AgentEvent } from "../../types";
 import { WorkflowCanvasReplay } from "./WorkflowCanvasReplay";
 import { WorkflowCanvasRuntime } from "./WorkflowCanvasRuntime";
+import { normalizeCanvasLayout } from "./core/canvas-layout";
+import { adaptWorkflowToCanvas } from "./core/canvas-adapter";
 
 vi.mock("../../api", () => ({ getWorkflowReplayConfigurationHistory: vi.fn(), getWorkflowReplayEventPage: vi.fn(),
   getCatalog: vi.fn(async () => ({ mainSystemPrompt: "", defaultHarnessId: "codex", harnesses: [] })),
@@ -31,21 +33,61 @@ beforeEach(() => {
 afterEach(() => { vi.clearAllMocks(); });
 
 describe("Workflow history playback controls", () => {
+  it("uses the formal layout across revisions while retaining historical nodes and routes", async () => {
+    const orchestration = structuredClone(DEFAULT_AGENT_ORCHESTRATION);
+    orchestration.canvas = normalizeCanvasLayout(undefined, orchestration);
+    orchestration.canvas.nodes.idea = { x: 4200, y: 260 };
+    orchestration.agents.push({ name: "retired" });
+    orchestration.routes.retired = [{ target: "idea", kind: "weak" }];
+    const later = structuredClone(orchestration);
+    later.canvas!.nodes.idea = { x: -3600, y: 260 };
+    vi.mocked(getWorkflowReplayConfigurationHistory).mockResolvedValue({ revisions: [
+      { revision: 1, ts: events[0]!.ts, orchestration },
+      { revision: 2, ts: events[2]!.ts, orchestration: later }
+    ], configurations: [] });
+    vi.mocked(getWorkflowReplayEventPage).mockResolvedValue({
+      events: [...events.slice(0, 2), { ...events[2]!, workflowRevision: 2 }], hasMore: false, throughSeq: 5
+    });
+    const width = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(1280);
+    const height = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
+    try {
+      const current = project();
+      current.orchestration.canvas = normalizeCanvasLayout(undefined, current.orchestration);
+      current.orchestration.canvas.nodes.idea = { x: 610, y: 135 };
+      render(<WorkflowCanvasReplay project={current} onClose={vi.fn()} />);
+      await screen.findByLabelText("历史 Workflow 大画布");
+      const canvas = () => screen.getByLabelText("历史 Workflow 大画布");
+      const idea = () => canvas().querySelector<HTMLElement>('[data-node-id="idea"]');
+      expect(idea()).toHaveStyle({ left: "610px", top: "135px" });
+      expect(canvas().querySelector('[data-node-id="retired"]')).toBeInTheDocument();
+      expect(canvas().closest("[data-runtime-edge-count]")).toHaveAttribute("data-runtime-edge-count",
+        String(adaptWorkflowToCanvas(orchestration).edges.length));
+      await waitFor(() => expect(canvas().querySelector('[data-edge-source="retired"][data-edge-target="idea"]')).toBeInTheDocument());
+      const zoom = () => parseInt(screen.getByLabelText(/^当前缩放/).textContent ?? "", 10);
+      await waitFor(() => expect(zoom()).toBeGreaterThan(50));
+      const initialZoom = zoom();
+      const slider = screen.getByRole("slider", { name: "历史回顾进度" });
+      fireEvent.change(slider, { target: { value: slider.getAttribute("max") } });
+      expect(screen.getByText(/ · Workflow v2$/)).toBeVisible();
+      expect(idea()).toHaveStyle({ left: "610px", top: "135px" });
+      expect(zoom()).toBe(initialZoom);
+      expect(orchestration.canvas.nodes.idea.x).toBe(4200);
+    } finally {
+      width.mockRestore();
+      height.mockRestore();
+    }
+  });
+
   it("loads older pages at one boundary and seeks without using the final project state", async () => {
     const value = project();
     const view = render(<WorkflowCanvasReplay project={value} onClose={vi.fn()} />);
-    const frame = await screen.findByTitle("历史 Workflow 大画布") as HTMLIFrameElement;
+    const frame = await screen.findByLabelText("历史 Workflow 大画布");
     expect(getWorkflowReplayEventPage).toHaveBeenCalledWith(value.id, { before: 3, through: 5 }, expect.any(AbortSignal));
     fireEvent.click(screen.getByRole("button", { name: "暂停历史回顾" }));
-    const send = vi.spyOn(frame.contentWindow!, "postMessage");
     fireEvent.change(screen.getByRole("slider", { name: "历史回顾进度" }), { target: { value: "1" } });
-    fireEvent.load(frame);
-    const snapshot = send.mock.calls.at(-1)![0].snapshot;
-    expect(snapshot.nodeStates.idea).toBe("running");
-    expect(snapshot.nodeStates.finish).toBe("waiting");
-    expect(snapshot.cycle).toBe(0);
-    expect(snapshot.playback).toMatchObject({ playing: false, reset: true });
-    expect(snapshot.logs.map((entry: { seq: number }) => entry.seq)).toEqual([1]);
+    expect(frame.querySelector('[data-node-id="idea"] [data-runtime-state]')).toHaveAttribute("data-runtime-state", "running");
+    expect(frame.querySelector('[data-node-id="finish"] [data-runtime-state]')).toHaveAttribute("data-runtime-state", "waiting");
+    expect(screen.getByText("Idea started")).toBeInTheDocument();
     view.rerender(<WorkflowCanvasReplay project={{ ...value, cycle: 100 }} onClose={vi.fn()} />);
     expect(getWorkflowReplayConfigurationHistory).toHaveBeenCalledTimes(1);
     expect(getWorkflowReplayEventPage).toHaveBeenCalledTimes(2);
@@ -53,15 +95,15 @@ describe("Workflow history playback controls", () => {
     expect(screen.getByRole("button", { name: "暂停历史回顾" })).toBeInTheDocument();
   });
 
-  it("opens history from the runtime card and returns to the existing live iframe", async () => {
+  it("opens history from the runtime card and returns to the existing live canvas", async () => {
     render(<WorkflowCanvasRuntime project={project()} events={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "历史回顾" }));
-    await screen.findByTitle("历史 Workflow 大画布");
+    await screen.findByLabelText("历史 Workflow 大画布");
     expect(screen.getByRole("dialog", { name: "历史执行回顾" })).toBeInTheDocument();
-    const live = screen.getByTitle("运行 Workflow 大画布");
+    const live = screen.getByLabelText("运行 Workflow 大画布");
     fireEvent.click(screen.getByRole("button", { name: "返回实时 Workflow" }));
-    expect(screen.queryByTitle("历史 Workflow 大画布")).toBeNull();
-    expect(screen.getByTitle("运行 Workflow 大画布")).toBe(live);
+    expect(screen.queryByLabelText("历史 Workflow 大画布")).toBeNull();
+    expect(screen.getByLabelText("运行 Workflow 大画布")).toBe(live);
   });
 
   it("reports history errors and rejects a page that cannot advance", async () => {

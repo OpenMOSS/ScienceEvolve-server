@@ -29,6 +29,7 @@ export interface CanvasNodesProps {
   rejectedConnectionPulse?: number;
   usedPorts?: ReadonlySet<string>;
   compact?: boolean;
+  tabbableNodeId?: string;
   /** Hide group member rows without changing node keyboard affordances. */
   suppressGroupMembers?: boolean;
   readOnly?: boolean;
@@ -67,6 +68,7 @@ export function CanvasNodes({
   rejectedConnectionPulse = 0,
   usedPorts,
   compact = false,
+  tabbableNodeId,
   suppressGroupMembers = false,
   readOnly = false,
   allowLayoutDragging = false,
@@ -182,7 +184,7 @@ export function CanvasNodes({
             aria-label={`${view.title} ${nodeBadge(node)}`}
             aria-selected={selectedNodeId === node.id}
             aria-invalid={invalidTargetId === node.id || connectionRejected || undefined}
-            tabIndex={!compact && onSelectNode ? 0 : -1}
+            tabIndex={!compact && onSelectNode && (tabbableNodeId === undefined || tabbableNodeId === node.id) ? 0 : -1}
             onClick={() => onSelectNode?.(node)}
             onKeyDown={(event: ReactKeyboardEvent<HTMLElement>) => {
               if (event.target !== event.currentTarget) return;

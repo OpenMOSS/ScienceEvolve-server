@@ -44,6 +44,36 @@ function scopedProject() {
 }
 
 describe("live workflow canvas", () => {
+  it("opens wide live workflows at the current node and preserves a manually fitted view", async () => {
+    const { JSDOM } = createRequire(import.meta.url)("jsdom");
+    const read = (file: string) => readFileSync(resolve(process.cwd(), "public/workflow-canvas-demo", file), "utf8");
+    const dom = new JSDOM(read("index.html"), { url: "http://localhost/workflow-canvas-demo/index.html?runtime=1&project=live-topic", runScripts: "outside-only", pretendToBeVisual: true });
+    const win = dom.window;
+    try {
+      const canvas = win.document.getElementById("canvas");
+      Object.defineProperties(canvas, { clientWidth: { value: 1100 }, clientHeight: { value: 600 } });
+      for (const file of ["runtime-bootstrap.js", "app.js", "runtime.js"]) win.eval(read(file));
+      const snapshot = buildLiveCanvasSnapshot(propsFor());
+      snapshot.workflow.nodes.forEach((node, index) => { node.x = 300 * index; });
+      snapshot.workflow.nodes.find(node => node.id === snapshot.currentNodeId)!.x = 4600;
+      const push = async () => {
+        win.dispatchEvent(new win.MessageEvent("message", { origin: win.location.origin, source: win.parent,
+          data: { type: "scienceevolve.workflow.runtime.snapshot", snapshot } }));
+        await new Promise(resolve => win.requestAnimationFrame(resolve));
+      };
+      const zoom = () => Number.parseInt(win.document.getElementById("zoom-reset-button").textContent);
+      await push();
+      expect(zoom()).toBe(100);
+      win.document.getElementById("fit-viewport-button").click();
+      const overview = zoom();
+      expect(overview).toBeLessThan(40);
+      await push();
+      expect(zoom()).toBe(overview);
+      win.document.getElementById("runtime-focus-button").click();
+      expect(zoom()).toBe(100);
+    } finally { win.close(); }
+  });
+
   it.each(["research", "inner"])("renders the %s parallel inputs with their own labels, arrows and colors through runtime updates", async scopeId => {
     const { JSDOM } = createRequire(import.meta.url)("jsdom");
     const read = (file: string) => readFileSync(resolve(process.cwd(), "public/workflow-canvas-demo", file), "utf8");

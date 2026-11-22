@@ -15,6 +15,46 @@ const edge = (id: string, source: string, target: string, fixed = false, systemR
 });
 
 describe("canvas router", () => {
+  it("shares a Main dispatch trunk and row lanes while keeping each target arrow", () => {
+    const main: CanvasNode = { ...nodes[1]!, x: 0, y: 220 };
+    const workers: CanvasNode[] = Array.from({ length: 6 }, (_, index) => ({
+      id: `w${index}`, name: `w${index}`, kind: "agent", x: 280 + (index % 3) * 270, y: Math.floor(index / 3) * 220
+    }));
+    const routes = routeCanvasEdges(workers.map(worker => ({
+      ...edge(`main->${worker.id}`, "main", worker.id, true, true),
+      sourcePortPinned: false, targetPortPinned: false
+    })), [main, ...workers]);
+    expect(routes).toHaveLength(workers.length);
+    expect(routes.every(route => route.points[1]?.x === 237 && route.targetPort === "top")).toBe(true);
+    expect(routes.slice(0, 3).every(route => route.points[2]?.y === -28)).toBe(true);
+    expect(routes.slice(3).every(route => route.points[2]?.y === 192)).toBe(true);
+    expect(routes.map(route => route.points.at(-1))).toEqual(workers.map(worker => canvasPortPoint(worker, "top")));
+  });
+
+  it("routes row transitions inside the aisle and feedback outside the cards", () => {
+    const cards: CanvasNode[] = Array.from({ length: 9 }, (_, index) => ({
+      id: String(index), name: String(index), kind: "agent",
+      x: (index % 3) * 270, y: Math.floor(index / 3) * 220
+    }));
+    const flow = { ...edge("next", "2", "3"), sourcePortPinned: false, targetPortPinned: false };
+    const back = { ...flow, id: "back", kind: "weak" as const, source: "5", target: "0" };
+    const backAgain = { ...back, id: "back-again", source: "8" };
+    const pinned = edge("pinned", "2", "4");
+    const routes = new Map(routeCanvasEdges([flow, back, backAgain, pinned], cards).map(route => [route.id, route]));
+    expect(routes.get("next")?.points.filter(point => point.y === 134)).toHaveLength(2);
+    const outerXs = [back, backAgain].map(item => Math.max(...routes.get(item.id)!.points.map(point => point.x)));
+    expect(outerXs[0]).toBeGreaterThan(734);
+    expect(outerXs[1]).toBeGreaterThan(outerXs[0]!);
+    expect(routes.get("pinned")).toMatchObject({ sourcePort: "right", targetPort: "left" });
+    for (const item of [flow, back, backAgain]) {
+      for (const card of cards.filter(card => card.id !== item.source && card.id !== item.target)) {
+        expect(polylineIntersectsRect(routes.get(item.id)!.samples, {
+          left: card.x, top: card.y, right: card.x + 194, bottom: card.y + 92
+        })).toBe(false);
+      }
+    }
+  });
+
   it("keeps initial routing of a thirteen-agent draft within an interactive work budget", () => {
     const workers: CanvasNode[] = Array.from({ length: 12 }, (_, index) => ({
       id: `worker_${String(index + 1).padStart(2, "0")}`, name: `worker_${index + 1}`, kind: "agent", template: "general",

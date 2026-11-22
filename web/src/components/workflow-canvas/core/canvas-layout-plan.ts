@@ -12,14 +12,14 @@ import {
   optimizeCanvasPorts,
   type CanvasLayoutReport
 } from "./canvas-layout-report";
-import type { CanvasBounds, CanvasSize, CanvasViewport } from "./canvas-model";
+import { CANVAS_FINISH_NODE_ID, CANVAS_INPUT_NODE_ID, canvasNodeSize, type CanvasBounds, type CanvasSize, type CanvasViewport } from "./canvas-model";
 import {
   canvasRouteTopologyKey,
   captureRouteLock,
   routeCanvasEdges,
   type DragRouteLock
 } from "./canvas-router";
-import { canvasContentBounds } from "./canvas-viewport";
+import { canvasContentBounds, fitCanvasViewport } from "./canvas-viewport";
 
 export type CanvasLayoutPlanKind = "layered" | "tidy";
 
@@ -84,8 +84,10 @@ export async function buildCanvasLayoutPlan({
   // sized workflows, but do not run its exploratory candidate search on a
   // dense import: it evaluates many routed graphs synchronously on the main
   // thread. Large layered graphs use the bounded port pass below instead.
-  const runTidyRefinement = kind === "tidy"
-    || (Object.keys(staged.nodes).length <= 12 && graph.renderEdges.length <= 24);
+  const folded = kind === "tidy" ? foldVerticalWorkflow(base, graph, nodeSizes, viewportSize) : undefined;
+  if (folded) staged = folded;
+  const runTidyRefinement = !folded && (kind === "tidy"
+    || (Object.keys(staged.nodes).length <= 12 && graph.renderEdges.length <= 24));
   const tidy = runTidyRefinement
     ? buildSmartTidyPlan(
       orchestration,
@@ -97,7 +99,7 @@ export async function buildCanvasLayoutPlan({
   const finalLayout = structuredClone(
     tidy
       ? tidy.layout
-      : optimizeCanvasPorts(orchestration, staged, nodeSizes, { relaxPinnedPorts: true }).layout
+      : optimizeCanvasPorts(orchestration, staged, nodeSizes, { relaxPinnedPorts: kind === "layered" }).layout
   );
   if (kind === "layered") finalLayout.layoutMode = "layered";
   const model = adaptWorkflowToCanvas(orchestration, finalLayout);
@@ -110,15 +112,16 @@ export async function buildCanvasLayoutPlan({
   // interactive layered commit and reserve the exhaustive router for small
   // graphs (and for the next full render/re-entry). This keeps the animation
   // responsive while preserving smooth SVG curves in the committed frame.
-  const fastLayoutRouting = kind === "layered" && shouldUseFastLayoutRouting(model.edges, measuredNodes);
+  const fastLayoutRouting = (kind === "layered" || Boolean(folded)) && shouldUseFastLayoutRouting(model.edges, measuredNodes);
   const geometry = routeCanvasEdges(model.edges, measuredNodes, fastLayoutRouting
     ? { fastEvaluation: true, smoothFallback: true }
     : {});
   const routeLocks = captureRouteLock(geometry, measuredNodes);
   const routeTopologyKey = canvasRouteTopologyKey(model.edges);
-  const bounds = canvasContentBounds(measuredNodes, geometry.flatMap((edge) => edge.samples));
+  const bounds = canvasContentBounds(measuredNodes, geometry
+    .filter(edge => edge.kind !== "main-dispatch").flatMap(edge => edge.samples));
   const finalViewport = kind === "tidy"
-    ? { ...base.viewport }
+    ? folded ? fitCanvasViewport(viewportSize, bounds) : { ...base.viewport }
     : minimallyRevealCanvas(base.viewport, viewportSize, bounds);
   finalLayout.viewport = finalViewport;
   const initialReport = tidy
@@ -149,6 +152,57 @@ export async function buildCanvasLayoutPlan({
     routeLocks,
     routeTopologyKey
   };
+}
+
+function foldVerticalWorkflow(
+  base: WorkflowCanvasLayout,
+  graph: ReturnType<typeof buildCanvasLayoutGraph>,
+  nodeSizes: Readonly<Record<string, CanvasSize>>,
+  viewport: CanvasSize
+): WorkflowCanvasLayout | undefined {
+  const workers = graph.nodeIds.filter(id => id !== CANVAS_INPUT_NODE_ID && id !== CANVAS_FINISH_NODE_ID && id !== "main");
+  if (workers.length < 8 || viewport.width < viewport.height) return undefined;
+  const size = workers.map(id => canvasNodeSize(nodeSizes[id] ?? {}));
+  const remaining = new Set(workers);
+  const ordered: string[] = [CANVAS_INPUT_NODE_ID];
+  const decisionBreaks = new Set<number>();
+  while (remaining.size) {
+    const source = ordered.at(-1);
+    const successors = graph.layoutEdges.filter(edge => edge.source === source && remaining.has(edge.target));
+    const direct = successors.filter(edge => edge.kind === "strong");
+    const targets = new Set((direct.length ? direct : successors).map(edge => edge.target));
+    // Leave branching workflows to the general layout planner.
+    if (targets.size !== 1) return undefined;
+    const target = [...targets][0]!;
+    if (!direct.length && successors.some(edge => edge.kind === "weak")) decisionBreaks.add(ordered.length);
+    ordered.push(target);
+    remaining.delete(target);
+  }
+  if (!graph.layoutEdges.some(edge => edge.source === ordered.at(-1) && edge.target === CANVAS_FINISH_NODE_ID)) return undefined;
+  ordered.push(CANVAS_FINISH_NODE_ID);
+
+  size.push(...[CANVAS_INPUT_NODE_ID, CANVAS_FINISH_NODE_ID, "main"]
+    .filter(id => base.nodes[id]).map(id => canvasNodeSize(nodeSizes[id] ?? {})));
+  const column = Math.max(...size.map(node => node.width)) + 72;
+  const row = Math.max(...size.map(node => node.height)) + 128;
+  const columns = Math.min(7, Math.max(4, Math.round(Math.sqrt(ordered.length * viewport.width / viewport.height * row / column)) + 1));
+  const layout = structuredClone(base);
+  let start = 0;
+  for (let rowIndex = 0; start < ordered.length; rowIndex++) {
+    const nominalEnd = Math.min(start + columns, ordered.length);
+    const decisionEnd = nominalEnd < ordered.length ? [...decisionBreaks]
+      .filter(end => end >= Math.max(start + 3, nominalEnd - 2) &&
+        end <= nominalEnd + 1 && ordered.length - end >= 3)
+      .sort((left, right) => Math.abs(left - nominalEnd) - Math.abs(right - nominalEnd))[0] : undefined;
+    const end = decisionEnd ?? nominalEnd;
+    ordered.slice(start, end).forEach((id, slot) => {
+      layout.nodes[id] = { x: 80 + slot * column, y: 100 + rowIndex * row };
+    });
+    start = end;
+  }
+  if (base.nodes.main) layout.nodes.main = { x: 80 - column, y: 100 + row };
+  layout.layoutMode = "free";
+  return layout;
 }
 
 function shouldUseFastLayoutRouting(

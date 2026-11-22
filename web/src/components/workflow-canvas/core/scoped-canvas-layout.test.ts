@@ -3,6 +3,7 @@ import type { ScopedWorkflow } from "../../../types";
 import { buildCanvasLayoutGraph, canvasEdgeId, normalizeCanvasLayout } from "./canvas-layout";
 import { buildCanvasLayoutPlan } from "./canvas-layout-plan";
 import { scopedCanvasPlanningOrchestration } from "./scoped-canvas-layout";
+import { cloneAgentOrchestration } from "../../../lib";
 
 function workflow(): ScopedWorkflow {
   return {
@@ -24,6 +25,38 @@ function workflow(): ScopedWorkflow {
 }
 
 describe("scoped canvas shared layout planning", () => {
+  it("reflows a long vertical route into readable rows and preserves pinned ports", async () => {
+    const workers = Array.from({ length: 14 }, (_, index) => `worker-${index}`);
+    const orchestration = cloneAgentOrchestration();
+    orchestration.agents = [{ name: "main", template: "main" }, ...workers.map(name => ({ name, template: "general" as const }))];
+    orchestration.input.target = workers[0]!;
+    orchestration.termination.agent = workers.at(-1)!;
+    orchestration.routes = Object.fromEntries(workers.map((id, index) => [id, [
+      { target: workers[index + 1] ?? "finish", kind: index === 3 || index === 8 ? "weak" as const : "strong" as const }
+    ]]));
+    const layout = normalizeCanvasLayout(undefined, orchestration);
+    workers.forEach((id, index) => {
+      const row = Math.floor(index / 4);
+      const column = row % 2 ? 3 - index % 4 : index % 4;
+      layout.nodes[id] = { x: 80 + column * 280, y: 80 + row * 175 };
+    });
+    layout.viewport.zoom = .29;
+    const edge = canvasEdgeId(workers[0]!, workers[1]!);
+    layout.edges[edge] = { ...layout.edges[edge]!, sourcePort: "bottom", sourcePortPinned: true };
+    const plan = await buildCanvasLayoutPlan({ kind: "tidy", orchestration, layout, viewportSize: { width: 1440, height: 720 } });
+    expect(new Set(workers.map(id => plan.layout.nodes[id]!.x)).size).toBeGreaterThanOrEqual(4);
+    const ordered = ["input", ...workers, "finish"].map(id => plan.layout.nodes[id]!);
+    expect(ordered.slice(1).every((point, index) => point.y > ordered[index]!.y ||
+      point.y === ordered[index]!.y && point.x > ordered[index]!.x)).toBe(true);
+    expect(plan.layout.nodes[workers[4]!]!.y).toBeGreaterThan(plan.layout.nodes[workers[3]!]!.y);
+    expect(plan.layout.nodes[workers[9]!]!.y).toBeGreaterThan(plan.layout.nodes[workers[8]!]!.y);
+    expect(plan.finalViewport.zoom).toBeGreaterThan(.6);
+    expect(plan.finalReport.stats.nodeOverlaps).toBe(0);
+    expect(plan.layout.edges[edge]).toMatchObject({ sourcePort: "bottom", sourcePortPinned: true });
+    expect(buildCanvasLayoutGraph(orchestration, plan.layout).layoutEdges.map(item => item.id))
+      .toEqual(buildCanvasLayoutGraph(orchestration, layout).layoutEdges.map(item => item.id));
+  });
+
   it("keeps all parallel Input edges and stable scoped route identities", () => {
     const scoped = workflow();
     const projected = scopedCanvasPlanningOrchestration(scoped);

@@ -80,7 +80,7 @@ describe("CanvasInspector", () => {
     );
 
     expect(screen.getByRole("complementary", { name: "Workflow 全局摘要" })).toBeVisible();
-    expect(screen.getByText("流程概览")).toBeVisible();
+    expect(screen.getByRole("region", { name: "流程摘要" })).toBeVisible();
     expect(screen.getByText("Main 调度中心")).toBeVisible();
     expect(screen.getByText("用户输入尚未连接")).toBeVisible();
     expect(screen.getByText("结束节点尚未连接")).toBeVisible();
@@ -294,15 +294,14 @@ describe("CanvasInspector", () => {
     );
 
     expect(screen.getByText(
-      "当前 Harness / 网关 / model 组合验证失败：上游返回 HTTP 429；仍可启动，但运行可能失败。"
+      "当前模型的网关路由验证未通过。 上游返回 HTTP 429"
     )).toHaveAttribute("role", "alert");
-    expect(within(screen.getByLabelText("idea model")).getByRole("option", {
-      name: `${DEFAULT_AGENTS.idea.model} · 验证失败`
+    expect(within(screen.getByLabelText("idea 模型")).getByRole("option", {
+      name: `${DEFAULT_AGENTS.idea.model} · 验证未通过`
     })).not.toBeDisabled();
     expect(within(screen.getByLabelText("idea全局网关")).getByRole("option", {
-      name: "失败网关 · 连接验证失败"
+      name: "失败网关 · 当前 Harness 验证未通过"
     })).not.toBeDisabled();
-    expect(screen.getByText(/以下 model 验证失败，仍可选择并启动：.*上游返回 HTTP 429/)).toBeVisible();
   });
 
   it("does not infer a direct route for a historical Harness without Catalog protocol metadata", () => {
@@ -391,9 +390,9 @@ describe("CanvasInspector", () => {
     const harnessSelect = screen.getByLabelText("idea Harness");
     expect(within(harnessSelect).queryByRole("option", { name: "Fixture Explainer" })).not.toBeInTheDocument();
     expect(within(screen.getByLabelText("idea运行权限")).getAllByRole("option")).toHaveLength(1);
-    expect(screen.getByRole("checkbox", { name: "持续 session" })).toBeDisabled();
+    expect(screen.getByRole("switch", { name: "持续 session" })).toBeDisabled();
     expect(screen.getByText("当前 Harness 不支持持续 session。")).toBeVisible();
-    expect(screen.getByRole("checkbox", { name: "idea Web Search" })).toBeDisabled();
+    expect(screen.getByRole("switch", { name: "idea Web Search" })).toBeDisabled();
     fireEvent.click(screen.getByText("添加 MCP", { exact: true }));
     expect(screen.getByRole("button", { name: "添加新 MCP" })).toBeDisabled();
     expect(screen.getByText("当前 Harness 不支持 MCP")).toBeVisible();
@@ -414,7 +413,7 @@ describe("CanvasInspector", () => {
       />
     );
 
-    const session = screen.getByRole("checkbox", { name: "持续 session" });
+    const session = screen.getByRole("switch", { name: "持续 session" });
     expect(session).not.toBeChecked();
     fireEvent.click(session);
     expect(onSessionPersistenceChange).toHaveBeenCalledWith(true);
@@ -427,7 +426,7 @@ describe("CanvasInspector", () => {
         orchestration={orchestration}
       />
     );
-    expect(screen.queryByRole("checkbox", { name: "持续 session" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "持续 session" })).not.toBeInTheDocument();
     expect(screen.getByText("Main Agent 始终使用持续 session，不能关闭。")).toBeVisible();
   });
 

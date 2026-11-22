@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import { getHarnessPrompt } from "../../api";
 import { runtimeProjectFixture } from "../../test/runtime-project";
@@ -16,6 +16,9 @@ it("shows all three read-only prompt sources in runtime node details and resolve
   project.agents.main.instructions = "USER_RUNTIME_PROMPT";
   render(<RuntimeAgentNodeDetail node={{ id: "main", name: "main", kind: "agent", x: 0, y: 0 }} project={project}
     title="Main" state="running" executionCount={1} />);
+  expect(screen.getByRole("tab", { name: "运行" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.queryByRole("textbox", { name: "用户 Prompt" })).toBeNull();
+  fireEvent.click(screen.getByRole("tab", { name: "提示词" }));
   await waitFor(() => expect(screen.getByLabelText("System Prompt")).toHaveValue("FIXED_MAIN_SYSTEM"));
   await waitFor(() => expect(screen.getByLabelText("Harness Prompt")).toHaveValue("NATIVE_RUNTIME_PROMPT"));
   expect(getHarnessPrompt).toHaveBeenCalledWith(expect.objectContaining({ harness: "codex", model: project.agents.main.model }), expect.any(AbortSignal), false);
