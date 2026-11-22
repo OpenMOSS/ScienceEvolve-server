@@ -1404,14 +1404,16 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
     return filePath;
   }
 
-  async readHandoff(projectId: string, invocationId: string): Promise<string> {
+  async readHandoff(projectId: string, invocationId: string, expectedAgent?: AgentName): Promise<string> {
     this.assertInvocationId(invocationId);
     const root = await fs.realpath(this.projectDir(projectId));
     const directory = await fs.realpath(path.join(root, "messages"));
     this.assertDescendant(root, directory, "handoff directory");
-    const files = (await fs.readdir(directory)).filter((name) =>
-      new RegExp(`^\\d+_[A-Za-z0-9_-]+_${invocationId}_handoff\\.md$`).test(name));
-    if (files.length !== 1) throw new Error("Saved handoff not found or ambiguous");
+    const files = (await fs.readdir(directory)).filter((name) => {
+      const match = new RegExp(`^\\d+_([A-Za-z0-9_-]+)_${invocationId}_handoff\\.md$`).exec(name);
+      return match && (expectedAgent === undefined || match[1] === expectedAgent);
+    });
+    if (files.length !== 1) throw new Error(`Saved handoff not found or ambiguous: ${projectId}/${expectedAgent ?? "*"}/${invocationId}`);
     const file = await fs.realpath(path.join(directory, files[0]));
     this.assertDescendant(directory, file, "handoff");
     return fs.readFile(file, "utf8");
@@ -1527,6 +1529,14 @@ ${rolePrompts ? `## Role prompts\n\n${rolePrompts}\n` : ""}
     if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.size > 4 * 1024 * 1024 ||
         await fs.realpath(filePath) !== filePath) throw new Error("Workflow proposal must be a bounded private regular file");
     return fs.readFile(filePath);
+  }
+
+  /** An unfinished native result is evidence for its one correction, not a committed handoff. */
+  async writeTerminalRepairHandoff(projectId: string, invocationId: string, handoff: string): Promise<string> {
+    if (!handoff.trim()) throw new Error("Terminal repair requires a nonempty original handoff");
+    const file = path.join(await this.invocationRuntimePath(projectId, invocationId), "terminal-repair-handoff.md");
+    await fs.writeFile(file, handoff, { encoding: "utf8", mode: 0o400, flag: "wx" });
+    return file;
   }
 
   async writeHandoff(

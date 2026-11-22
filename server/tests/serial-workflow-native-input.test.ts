@@ -11,6 +11,7 @@ import type { SessionRef } from "../src/harness-runtime/contracts.js";
 import type { SerialWorkflowNotificationContext } from "../src/serial-workflow-notifications.js";
 import { workflowAdjustmentContextSources, type WorkflowAdjustmentNotificationFact } from "../src/workflow-adjustment-notifications.js";
 import { dshSessionArtifactPath } from "../src/harness-runtime/adapters/dsh-adapter.js";
+import { serialTaskRecoveryMessage } from "../src/serial-task-recovery.js";
 
 const roots: string[] = [], databases: CollaborationStateDatabase[] = [];
 afterEach(async () => {
@@ -175,6 +176,43 @@ describe("Ordinary workflow notification input through the actual built-in proce
     expect(f.receiptEvents()).toHaveLength(8);
     expect(f.database.prepareSerialWorkflowAdjustmentInput(f.context, "next-legitimate-input", actual)).toBeUndefined();
     expect(f.database.projectState(f.context.projectId).executions).toEqual([]);
+  }, 15_000);
+
+  it.each<Harness>(["codex", "pi"])("%s receives exact retained-Worker recovery facts through native stdin and its original Session", async harness => {
+    const f = await fixture(harness);
+    f.request.project.agents.worker = { ...f.request.project.agents.main, sessionPersistence: true };
+    f.request.agent = "worker"; f.request.kind = "worker"; f.request.taskSessionId = "original-worker-task";
+    f.request.inboxPath = join(f.request.projectPath, "messages", `0001_${f.request.invocationId}_to_worker.md`);
+    await writeFile(f.request.inboxPath, "Inspect the existing report; do not repeat its write.");
+    f.request.onPrepareWorkflowAdjustmentInput = undefined;
+    f.request.onWorkflowAdjustmentInputReceived = undefined;
+    await f.runtime.run(f.request, async () => undefined, new AbortController().signal);
+    const original = f.actualSessions.at(-1)!;
+    f.request.project.agentSessions = { worker: original };
+    f.request.project.agentSessionIds = { worker: harness === "pi" ? `pi:${original.nativeId}` : original.nativeId };
+    const failedInvocation = f.request.invocationId;
+    f.request.project.activeAgentExecution = { id: "original-worker-task", agent: "worker", source: "configured-route",
+      createdAt: "2026-11-17T00:00:00Z", firstInvocationId: failedInvocation, latestInvocationId: failedInvocation };
+    f.request.project.agentFailureHistory = { worker: [{ invocationId: failedInvocation, failedAt: "2026-11-17T00:01:00Z",
+      error: "empty final handoff", errorType: "HarnessRuntimeError", errorCode: "HARNESS_CONTRACT_VIOLATION", errorSource: "adapter",
+      tracePath: "traces/original-worker.md", message: "Original assignment", candidateAgents: [] }] };
+    const message = serialTaskRecoveryMessage(f.request.project, "worker", failedInvocation)!;
+    const invocationId = "inv_retained_worker_resume";
+    const runtimePath = join(f.request.projectPath, "runtime", invocationId);
+    const inboxPath = join(f.request.projectPath, "messages", `0002_${invocationId}_to_worker.md`);
+    await mkdir(runtimePath, { recursive: true });
+    await writeFile(inboxPath, `来源：ScienceEvolve\n内容：${message}\n\n来源：main\n内容：Inspect the existing report; do not repeat its write.`);
+    f.request = { ...f.request, invocationId, runtimePath, inboxPath };
+    await f.runtime.run(f.request, async () => undefined, new AbortController().signal);
+    const captured = JSON.parse(await readFile(f.native.capture, "utf8"));
+    expect(captured.prompt).toContain(message);
+    expect(f.nativeInputs.at(-1)).toBe(captured.prompt);
+    expect(captured.prompt).toContain(failedInvocation);
+    expect(captured.prompt).toContain("original-worker-task");
+    expect(captured.prompt).toContain("empty final handoff");
+    expect(f.actualSessions.at(-1)?.nativeId).toBe(original.nativeId);
+    if (harness === "codex") expect(captured.args).toContain("resume");
+    else expect(captured.args[captured.args.indexOf("--session") + 1]).toBe(original.nativeId);
   }, 15_000);
 
   it("a successful native turn without the received input keeps notification facts pending", async () => {

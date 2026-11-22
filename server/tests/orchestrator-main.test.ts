@@ -3749,7 +3749,7 @@ describe("public Main orchestration state machine", () => {
     await orchestrator.shutdown();
   }, 10_000);
 
-  it("retains the original task for automatic recovery when the evidence-aware repair also omits a terminal action", async () => {
+  it("retains the original task for explicit continuation when its bounded repair also omits a terminal action", async () => {
     const originalHandoff = "Main completed the business work but forgot to commit its decision.";
     const { orchestrator, runner } = await harness(async (request, index) => {
       await publishDurableSession(request, "thread_missing_terminal_twice");
@@ -3767,7 +3767,7 @@ describe("public Main orchestration state machine", () => {
       orchestration: mainOnlyOrchestration(),
       agents: { main: { skills: [], autoSkills: [] } }
     });
-    await waitForRuntimePhase(orchestrator, project.id, "missing-terminal-action");
+    await orchestrator.waitForIdle(project.id);
 
     expect(runner.calls).toHaveLength(2);
     expect(runner.calls[1]).toMatchObject({
@@ -3782,16 +3782,19 @@ describe("public Main orchestration state machine", () => {
       }
     });
     expect(await orchestrator.getProject(project.id)).toMatchObject({
-      status: "retrying",
-      phase: "missing-terminal-action",
+      status: "interrupted",
+      phase: "main-decision-required",
       queuedAgent: "main",
       mainInvocationSeq: 1,
       runCounts: { main: 0 },
       executionCounts: { main: 1 },
       agentSessionIds: { main: "thread_missing_terminal_twice" },
-      latestHandoff: { excerpt: originalHandoff },
-      activeAgentExecution: { agent: "main" }
+      activeAgentExecution: { agent: "main", terminalControlRecovery: { attempts: 1 } }
     });
+    const storage = (orchestrator as unknown as { storage: ProjectStorage }).storage;
+    expect(await storage.readHandoff(project.id, runner.calls[0].invocationId, "main")).toContain(originalHandoff);
+    expect(await fs.readFile(runner.calls[1].terminalControlRepair!.handoffPath!, "utf8")).toBe(originalHandoff);
+    expect((await orchestrator.getProject(project.id)).latestHandoff).toBeUndefined();
     await orchestrator.shutdown();
   }, 10_000);
 

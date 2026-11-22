@@ -1081,6 +1081,8 @@ export interface ActiveAgentExecution {
   startedAt?: string;
   firstInvocationId?: string;
   latestInvocationId?: string;
+  /** One automatic correction allowance for this original Main decision task. */
+  terminalControlRecovery?: { attempts: number; invocationId: string; reason: string };
 }
 
 /**
@@ -1861,7 +1863,7 @@ export interface AgentRunRequest {
   /** Scoped workflow invariant: a still-existing Agent must never acquire a replacement native session. */
   sessionContinuity?: "strict";
   /** Resume the same Session for a missing terminal control action. */
-  terminalControlRepair?: { originalHandoff: string };
+  terminalControlRepair?: { originalHandoff: string; handoffPath?: string };
   terminalPushObservation?: TerminalPushObservationScope;
   terminalPushCoordination?: TerminalPushCoordinationScope;
   worktreeClosing?: WorktreeClosingScope;

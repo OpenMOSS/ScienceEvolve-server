@@ -88,7 +88,7 @@ export function compileWorkflowPrompt(
   const recovery = [
     options.recoveryNote,
     request.terminalControlRepair
-      ? `Supply the missing formal completion/control action after validating this original handoff:\n${request.terminalControlRepair.originalHandoff}`
+      ? `Supply the missing formal completion/control action for this original task after checking the actual evidence. Do not repeat completed work. A finish_task receipt does not replace a routing decision. The previous handoff is retained${request.terminalControlRepair.handoffPath ? ` at ${request.terminalControlRepair.handoffPath}` : " in the terminal-control-repair context record"}; read it if needed rather than reproducing it as another summary.`
       : undefined,
     !mechanismTurn ? request.siiResumePrompt : undefined
   ].filter(Boolean).join("\n\n");

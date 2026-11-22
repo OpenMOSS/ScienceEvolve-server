@@ -291,9 +291,36 @@ backoff. Five consecutive failed whole invocations for one child clear its
 retry counter and wake Main with the last five error records, trace paths,
 original task and route candidates. Main can retry, reassign or ask the user.
 
-Main automatically retries one failed whole invocation. If the retry fails,
-the project enters `main-recovery-required`. The UI exposes only “恢复 Main”; a
-manual recovery resumes the original thread and leaves configuration unchanged.
+Serial task continuation delivers the retained task's previous failure, trace
+path and unverified workspace-checkpoint references in its actual Inbox. It
+retains the original execution and native Session, including Workers whose
+`sessionPersistence=false` only disables reuse by a different task. Agents must
+verify existing effects before repeating work; the system does not certify the
+referenced outputs or manufacture a handoff. `agent.trace` records distinguish
+`recoveryInput=staged` from `received`; receipt requires the exact recovery text
+in a native user-message event for the bound invocation and Session. Missing
+native acknowledgement stays unconfirmed even if the native turn succeeds.
+
+A pending Main decision is bound to its upstream Agent and invocation. If
+`latestHandoff` belongs to another invocation, input preparation loads the exact
+saved source without rewriting history. Missing, ambiguous or empty sources
+stop before native launch with `INVOCATION_INPUT_STAGING_FAILED`. Recorded
+failure/interruption diagnostics and the bound user response are explicit
+non-handoff sources, not silent fallbacks. Unfinished Main output and
+`finish_task`-only turns do not overwrite the upstream handoff.
+
+One automatic terminal correction is shared by a serial Main execution's
+missing-control repair and `finish_task`-only continuation. The allowance is
+persisted before repair/publication and survives pause, restart, rollback and
+manual resume; retained events establish prior use for checkpoints without the
+counter. Exhaustion retains the original task and Session at
+`interrupted / main-decision-required`, with no automatic restart. Explicit
+resume permits another ordinary turn, not a new correction allowance.
+`finish_task` receipts still commit truthfully but do not resolve routing or
+complete the project. The repair prompt references saved output rather than
+reinserting a large previous summary. Actual decisions remain Agent-owned and
+subject to the existing capabilities; this bound does not change transport
+retry policy or scientific acceptance.
 
 ## Configuration locking
 

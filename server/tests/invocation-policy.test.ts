@@ -158,7 +158,7 @@ describe("invocation policy", () => {
       availableSkillPaths: ["/fixture/available/SKILL.md"],
       kind,
       agent: "main",
-      terminalControlRepair: { originalHandoff: "The analysis is complete" },
+      terminalControlRepair: { originalHandoff: "The analysis is complete".repeat(2_000), handoffPath: "/fixture/runtime/terminal-repair-handoff.md" },
       project: { agents: { main: config } },
       control: {
         stagingPath: "/fixture/runtime/control-actions.json",
@@ -187,7 +187,9 @@ describe("invocation policy", () => {
       webSearch: true
     });
     expect(prompt).toContain("Supply the missing formal completion/control action");
-    expect(prompt).toContain("The analysis is complete");
+    expect(prompt).not.toContain("The analysis is complete");
+    expect(prompt).toContain("/fixture/runtime/terminal-repair-handoff.md");
+    expect(prompt).toContain("finish_task receipt does not replace a routing decision");
     expect(prompt).toContain("large normal invocation context");
     expect(prompt).toContain(config.instructions);
     expect(prompt).not.toContain("context index");

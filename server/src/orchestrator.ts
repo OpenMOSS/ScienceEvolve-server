@@ -87,6 +87,8 @@ import {
 } from "./internal/shared/token-usage-ledger.js";
 import { cancellationLabel, type CancellationRequest } from "./cancellation.js";
 import { scanWorkspace, type WorkspaceFileStamp } from "./workspace-checkpoint.js";
+import { serialTaskRecoveryMessage } from "./serial-task-recovery.js";
+import { serialMainSourceIsDiagnostic } from "./workflow-input.js";
 import {
   DEFAULT_HARNESS_ID,
   type AgentProtocol
@@ -608,7 +610,7 @@ export class Orchestrator {
         state.status === "completed" ||
         state.status === "cancelled" ||
         state.status === "paused" ||
-        state.status === "interrupted" && state.phase === "harness-recovery-required"
+        state.status === "interrupted" && ["harness-recovery-required", "main-decision-required"].includes(state.phase)
       ) {
         continue;
       }
@@ -3518,6 +3520,95 @@ export class Orchestrator {
     });
   }
 
+  private async serialTaskInputState(state: ProjectState, agent: AgentName): Promise<ProjectState> {
+    let pending = agent === SYSTEM_CONTROLLER_AGENT ? state.pendingMainDecision : undefined;
+    if (!pending) return state;
+    let markdown: string;
+    try {
+      if (state.latestHandoff?.invocationId === pending.sourceInvocationId && state.latestHandoff.agent === pending.sourceAgent) {
+        if (!(state.latestHandoff.body ?? state.latestHandoff.markdown).trim()) throw new Error("Pending source handoff is empty");
+        return state;
+      }
+      // Exception decisions may have only an explicit failure/interruption diagnostic.
+      if (serialMainSourceIsDiagnostic(state)) return state;
+      if (pending.sourceAgent !== SYSTEM_CONTROLLER_AGENT &&
+        ["deterministic-route", "termination"].includes(pending.reason ?? "")) {
+        const original = pending;
+        const sources: Array<{ agent: AgentName; invocationId: string }> = [];
+        let committed = false;
+        // An earlier Main-to-Main route can retain the upstream Agent with the
+        // routing Main's invocation. Only committed routing evidence may resolve it.
+        await this.storage.replayEvents(state.id, 0, event => {
+          const data = event.data;
+          if (data?.invocationId !== original.sourceInvocationId || event.agent !== SYSTEM_CONTROLLER_AGENT) return;
+          if (event.type === "invocation.completed") committed = true;
+          if (event.type === "main.assignment.committed" &&
+            [SYSTEM_CONTROLLER_AGENT, "finish"].includes(String(data.nextAgent)) &&
+            data.decisionSourceAgent === original.sourceAgent && typeof data.decisionSourceInvocationId === "string") {
+            sources.push({ agent: original.sourceAgent, invocationId: data.decisionSourceInvocationId });
+          }
+        });
+        if (committed && sources.length === 1 && sources[0].invocationId !== original.sourceInvocationId) {
+          pending = { ...original, sourceInvocationId: sources[0].invocationId };
+        }
+      }
+      markdown = await this.storage.readHandoff(state.id, pending.sourceInvocationId, pending.sourceAgent);
+      if (!markdown.trim()) throw new Error("Saved source handoff is empty");
+    } catch (cause) {
+      throw new HarnessRuntimeError("INVOCATION_INPUT_STAGING_FAILED",
+        `Cannot recover pending Main source ${pending.sourceAgent}/${pending.sourceInvocationId}: ${redactTrace(String(cause))}`,
+        { agent, sourceAgent: pending.sourceAgent, sourceInvocationId: pending.sourceInvocationId },
+        { source: "inputs", retryable: false, cause });
+    }
+    // The invocation reads the exact retained source; do not rewrite historical latest output.
+    return { ...state, pendingMainDecision: pending, latestHandoff: { agent: pending.sourceAgent, invocationId: pending.sourceInvocationId,
+      markdown, body: markdown, excerpt: handoffExcerpt(markdown), updatedAt: pending.requestedAt } };
+  }
+
+  private async restoreMainTerminalCorrection(state: ProjectState, previousInvocationId?: string): Promise<void> {
+    const task = state.activeAgentExecution;
+    if (!previousInvocationId || task?.agent !== SYSTEM_CONTROLLER_AGENT || task.terminalControlRecovery) return;
+    const invocations = new Set<string>();
+    const decisions = new Set<string>();
+    let correction: NonNullable<ActiveAgentExecution["terminalControlRecovery"]> | undefined;
+    await this.storage.replayEvents(state.id, 0, event => {
+      const invocationId = event.data?.invocationId;
+      if (typeof invocationId !== "string") return;
+      if (invocationId === state.activeInvocationId) return false;
+      if (event.type === "invocation.started" && event.data?.executionId === task.id) invocations.add(invocationId);
+      if (!invocations.has(invocationId)) return;
+      if (event.type === "control.action.committed" && ["route_to_agent", "request_user", "apply_workflow", "complete_project"].includes(String(event.data?.tool))) decisions.add(invocationId);
+      if (event.data?.terminalControlRepair === true ||
+        event.type === "invocation.completed" && event.data?.executionId === task.id && !decisions.has(invocationId)) {
+        correction = { attempts: 1, invocationId, reason: "The original Main task already used its automatic terminal correction; retained events are the evidence" };
+        return false;
+      }
+    });
+    if (correction) { task.terminalControlRecovery = correction; await this.storage.saveState(state); }
+  }
+
+  private takeMainTerminalCorrection(state: ProjectState, invocationId: string): boolean {
+    const task = state.activeAgentExecution;
+    if (!task || task.agent !== SYSTEM_CONTROLLER_AGENT) throw new Error("Terminal correction requires the original Main task");
+    const attempts = task.terminalControlRecovery?.attempts ?? 0;
+    if (!Number.isSafeInteger(attempts) || attempts < 0 || attempts > 1) throw new Error("Invalid original-task terminal correction count");
+    task.terminalControlRecovery = { attempts: 1, invocationId,
+      reason: "Main returned without an authorized routing decision for the original task" };
+    return attempts === 0;
+  }
+
+  private interruptMainDecision(state: ProjectState, reason: string): void {
+    state.lastError = redactTrace(reason).slice(0, 4_000);
+    state.currentAgent = undefined;
+    state.activeInvocationId = undefined;
+    state.queuedAgent = SYSTEM_CONTROLLER_AGENT;
+    state.status = "interrupted";
+    state.phase = "main-decision-required";
+    state.interruptedAt = nowIso();
+    finishWorkflowRecovery(state);
+    this.clearQueueEntry(state);
+  }
+
   private async invokeAgent(
     runtime: RuntimeProject,
     agent: AgentName,
@@ -3537,6 +3628,8 @@ export class Orchestrator {
     state.queuedAgent = undefined;
     this.clearQueueEntry(state);
     state.activeInvocationId = invocationId;
+    const previousInvocationId = state.activeAgentExecution?.agent === agent
+      ? state.activeAgentExecution.latestInvocationId : undefined;
     const agentExecution = await this.beginAgentExecution(
       runtime,
       agent,
@@ -3689,8 +3782,21 @@ export class Orchestrator {
         message: `${agent} invocation started`,
         data: { invocationId, kind, ...agentExecution }
       });
+      await this.restoreMainTerminalCorrection(state, previousInvocationId);
+      const resolvedInput = await this.serialTaskInputState(state, agent);
+      const inputState = (): ProjectState => ({ ...state, latestHandoff: resolvedInput.latestHandoff,
+        pendingMainDecision: resolvedInput.pendingMainDecision });
+      if (resolvedInput.pendingMainDecision?.sourceInvocationId !== state.pendingMainDecision?.sourceInvocationId) {
+        await onTrace("status", "Pending Main input source resolved from its committed routing receipt; stored task history remains unchanged", {
+          invocationId, executionId: agentExecution.executionId,
+          recordedSourceInvocationId: state.pendingMainDecision?.sourceInvocationId,
+          resolvedSourceInvocationId: resolvedInput.pendingMainDecision?.sourceInvocationId,
+          sourceAgent: resolvedInput.pendingMainDecision?.sourceAgent
+        });
+      }
+      const recoveryMessage = serialTaskRecoveryMessage(state, agent, previousInvocationId);
       const dispatch = buildAgentDispatchSummary(
-        state,
+        inputState(),
         agent,
         projectUserInputs
       );
@@ -3814,11 +3920,11 @@ export class Orchestrator {
       );
       const context = contextPackage.text;
       if (kind === "main") {
-        state.mainInvocationContext = buildMainInvocationContext(state) as unknown as Record<string, unknown>;
+        state.mainInvocationContext = buildMainInvocationContext(inputState()) as unknown as Record<string, unknown>;
         await this.storage.saveState(state);
       }
-      const inbox = buildInboxMarkdown(
-        state,
+      const inbox = (recoveryMessage ? `来源：ScienceEvolve\n内容：${recoveryMessage}\n\n` : "") + buildInboxMarkdown(
+        inputState(),
         agent,
         invocationId,
         context,
@@ -3834,6 +3940,15 @@ export class Orchestrator {
         invocationId,
         inbox
       );
+      const recoveryInput = recoveryMessage ? {
+        executionId: agentExecution.executionId,
+        previousInvocationId,
+        inputSha256: createHash("sha256").update(recoveryMessage).digest("hex")
+      } : undefined;
+      if (recoveryInput) await onTrace("status", "Original-task recovery facts staged in the authoritative Inbox; native receipt is not yet confirmed", {
+        ...recoveryInput, recoveryInput: "staged", inboxPath
+      });
+      let recoveryReceipt: Promise<void> | undefined;
       const runtimePath = await this.storage.invocationRuntimePath(
         state.id,
         invocationId
@@ -4049,7 +4164,7 @@ export class Orchestrator {
         }
       });
       const invocationProject = projectSnapshotForAgent(
-        state,
+        inputState(),
         agent,
         projectUserInputs.map((input) => input.id)
       );
@@ -4081,6 +4196,19 @@ export class Orchestrator {
           ? { toolCatalog: buildAgentToolCatalog(allSkills, state.skillDefinitions, state.mcpDefinitions) }
           : {}),
         taskSessionId,
+        onNativeUserInput: async (event, session) => {
+          if (!recoveryMessage || !recoveryInput || event.kind !== "user.message" || event.invocationId !== invocationId ||
+            typeof event.message !== "string" || !event.message.includes(recoveryMessage) ||
+            !session || session.nativeId.startsWith("pending:")) return;
+          const retained = state.taskSessionRefs?.[taskSessionId];
+          if (!retained || retained.nativeId !== session.nativeId || retained.harnessId !== session.harnessId ||
+            retained.generation !== session.generation) return;
+          recoveryReceipt ??= Promise.resolve(onTrace("status", "Original-task recovery facts confirmed in native user input", {
+            ...recoveryInput, recoveryInput: "received", harnessId: session.harnessId,
+            nativeSessionId: session.nativeId, sessionGeneration: session.generation
+          }));
+          await recoveryReceipt;
+        },
         onExperimentWait: async (waiting) => {
           if (waiting) {
             state.phase = `${agent}:awaiting-experiment-result`;
@@ -4255,7 +4383,8 @@ export class Orchestrator {
           const repairResult = await runTurn({
             ...baseRunRequest,
             resumeThreadId: result.threadId ?? state.taskSessionIds?.[agentExecution.executionId] ?? state.agentSessionIds?.[agent] ?? resumeThreadId,
-            terminalControlRepair: { originalHandoff: returnedHandoff }
+            terminalControlRepair: { originalHandoff: returnedHandoff,
+              handoffPath: await this.storage.writeTerminalRepairHandoff(state.id, invocationId, returnedHandoff) }
           });
           await traceQueue;
           ensureInvocationCanContinue();
@@ -4271,6 +4400,10 @@ export class Orchestrator {
       }
       if (kind === "main" && !terminalControlAction(receivedControlActions)) {
         terminalRepairActive = true;
+        if (!this.takeMainTerminalCorrection(state, invocationId)) {
+          throw new MissingMainTerminalActionError("Original Main task exhausted its automatic terminal correction allowance; an explicit decision or concrete user guidance is required");
+        }
+        await this.storage.saveState(state);
         const repairSessionId = result.threadId ??
           state.taskSessionIds?.[agentExecution.executionId] ??
           state.agentSessionIds?.[agent] ??
@@ -4286,13 +4419,15 @@ export class Orchestrator {
           diagnostic: true,
           terminalControlRepair: true,
           invocationId,
+          executionId: agentExecution.executionId,
+          taskCorrectionAttempt: state.activeAgentExecution!.terminalControlRecovery!.attempts,
           sessionId: repairSessionId
         });
         await traceQueue;
         let repairResult: AgentRunResult;
         try {
           const repairProject = projectSnapshotForAgent(
-            state,
+            inputState(),
             agent,
             projectUserInputs.map((input) => input.id)
           );
@@ -4302,7 +4437,8 @@ export class Orchestrator {
             project: repairProject,
             resumeThreadId: repairSessionId,
             terminalControlRepair: {
-              originalHandoff: returnedHandoff
+              originalHandoff: returnedHandoff,
+              handoffPath: await this.storage.writeTerminalRepairHandoff(state.id, invocationId, returnedHandoff)
             }
           });
         } catch (repairError) {
@@ -4321,7 +4457,7 @@ export class Orchestrator {
         );
         if (!terminalControlAction(receivedControlActions)) {
           throw new MissingMainTerminalActionError(
-            "Main terminal-action repair returned without route_to_agent, request_user, apply_workflow, or complete_project"
+            "Main terminal-action repair returned without a formal completion/control action; the original task and its pending routing responsibility remain unfinished"
           );
         }
         result = {
@@ -4340,6 +4476,7 @@ export class Orchestrator {
       // A signalled process keeps the slot until its runner promise settles.
       releaseLease();
       await traceQueue;
+      let continueMainWithoutDecision: boolean | undefined;
       await this.serializeProjectWrite(runtime, async () => {
         if (runtime.mainInputRefresh) {
           throw new AgentInterruptedError(
@@ -4350,6 +4487,12 @@ export class Orchestrator {
           throw new AgentInterruptedError(
             "Agent invocation was interrupted before its result could be committed"
           );
+        }
+        if (kind === "main" && !state.activeWorkflowGate &&
+          terminalControlAction(receivedControlActions)?.action.tool === "finish_task") {
+          continueMainWithoutDecision = this.takeMainTerminalCorrection(state, invocationId);
+          // A failed publication must not grant another automatic correction.
+          await this.storage.saveState(state);
         }
         return this.storage.beginInvocationCommit(
           state,
@@ -4366,7 +4509,8 @@ export class Orchestrator {
         result.handoff,
         receivedControlActions,
         control.capabilityHash,
-        controlStateVersion
+        controlStateVersion,
+        continueMainWithoutDecision
       );
       const completedPerformance = performanceTracker.finish("completed");
       recordTerminalPerformance(state, completedPerformance, true);
@@ -4803,14 +4947,7 @@ export class Orchestrator {
         invocationId,
         handoff
       );
-      state.latestHandoff = {
-        agent,
-        invocationId,
-        markdown: handoffText,
-        body: handoff ?? "The Agent completed without a textual handoff.",
-        excerpt: handoffExcerpt(handoff),
-        updatedAt: nowIso()
-      };
+      // Save Main's own output without replacing the upstream task source.
       const handoffPath = await this.storage.writeHandoff(
         state,
         agent,
@@ -4829,23 +4966,22 @@ export class Orchestrator {
       });
     }
 
-    state.lastError = safeError;
-    state.retryAt = undefined;
-    state.currentAgent = undefined;
-    state.activeInvocationId = undefined;
-    state.queuedAgent = agent;
-    state.status = "retrying";
-    state.phase = "missing-terminal-action";
-    this.clearQueueEntry(state);
+    const task = state.activeAgentExecution;
+    if (!task || task.agent !== agent) throw new Error("Main terminal recovery lost its original task");
+    task.terminalControlRecovery = { attempts: task.terminalControlRecovery?.attempts ?? 0,
+      invocationId, reason: safeError.slice(0, 4_000) };
+    this.interruptMainDecision(state, safeError);
     await this.emit(runtime, {
       type: "project.status",
       level: "warning",
       agent,
-      message: "Main did not commit a terminal decision after one same-Session repair; the original task is scheduled for automatic recovery",
+      message: "Main has no committed routing decision after its bounded correction; the original task and Session are retained for explicit continuation",
       data: {
         invocationId,
+        executionId: task.id,
         recoverable: true,
-        repairAttempted: true,
+        automaticRetry: false,
+        taskCorrectionAttempts: task.terminalControlRecovery.attempts,
         sessionId: state.agentSessionIds?.[agent]
       }
     });
@@ -5410,7 +5546,8 @@ export class Orchestrator {
     handoff?: string,
     controlActions: ControlActionEnvelope[] = [],
     capabilityHash?: string,
-    expectedStateVersion?: number
+    expectedStateVersion?: number,
+    continueMainWithoutDecision?: boolean
   ): Promise<void> {
     const { state } = runtime;
     const definition = agentDefinitionFor(orchestrationFor(state), agent);
@@ -5567,14 +5704,7 @@ export class Orchestrator {
           invocationId,
           handoff ?? "Main completed this native Harness turn without recording an orchestration decision."
         );
-        state.latestHandoff = {
-          agent,
-          invocationId,
-          markdown: mainHandoff,
-        body: handoff ?? "Main completed without recording an orchestration decision.",
-          excerpt: handoffExcerpt(handoff ?? mainHandoff),
-          updatedAt: nowIso()
-        };
+        // A native-turn receipt is not a replacement for the pending source handoff.
         const mainHandoffPath = await this.storage.writeHandoff(
           state,
           agent,
@@ -5612,19 +5742,26 @@ export class Orchestrator {
         });
         if (isCancelling(state)) return;
 
-        // Preserve the exact pending capability snapshot. Candidate derivation
-        // belongs to the Main control-mode implementation, not this lifecycle
-        // continuation.
+        // finish_task commits truthfully, but cannot renew a task's correction allowance.
+        if (continueMainWithoutDecision === undefined) throw new Error("Main continuation lacks its persisted original-task correction decision");
         state.currentAgent = undefined;
         state.activeInvocationId = undefined;
         state.queuedAgent = SYSTEM_CONTROLLER_AGENT;
         if (isPauseRequested(state)) {
           this.clearQueueEntry(state);
-        } else {
+          state.phase = `${SYSTEM_CONTROLLER_AGENT}:queued`;
+        } else if (continueMainWithoutDecision) {
           state.status = "queued";
+          state.phase = `${SYSTEM_CONTROLLER_AGENT}:queued`;
           this.enterQueue(state);
+        } else {
+          this.interruptMainDecision(state, "Main committed finish_task but did not resolve the original routing responsibility; automatic task correction is exhausted");
+          await this.emit(runtime, { type: "project.status", level: "warning", agent,
+            message: "Main native-turn completion is committed; original routing task remains unresolved and awaits explicit continuation",
+            data: { invocationId, executionId: state.activeAgentExecution!.id, decisionRecorded: false,
+              automaticRetry: false, taskCorrectionAttempts: state.activeAgentExecution!.terminalControlRecovery!.attempts } });
+          return;
         }
-        state.phase = `${SYSTEM_CONTROLLER_AGENT}:queued`;
         await this.emit(runtime, {
           type: "main.assignment.queued",
           level: "warning",
@@ -5763,7 +5900,7 @@ export class Orchestrator {
         await this.queueMainDecision(
           runtime,
           pendingDecision?.sourceAgent ?? SYSTEM_CONTROLLER_AGENT,
-          invocationId,
+          pendingDecision?.sourceInvocationId ?? invocationId,
           "termination",
           ["finish"],
           true,
@@ -5778,7 +5915,7 @@ export class Orchestrator {
         await this.queueMainDecision(
           runtime,
           pendingDecision?.sourceAgent ?? SYSTEM_CONTROLLER_AGENT,
-          invocationId,
+          pendingDecision?.sourceInvocationId ?? invocationId,
           "deterministic-route",
           [],
           true,
