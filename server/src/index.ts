@@ -45,10 +45,26 @@ async function main(): Promise<void> {
   loadLocalEnv();
   const config = loadConfig();
   const inspireBin = await resolveExecutable(config.inspireBin);
+  const boundProjectId = process.env.SCIENCEEVOLVE_BOUND_SDK_PROJECT;
+  const resolveProjectWorkspace = async (id: string): Promise<string | undefined> => {
+    if (!boundProjectId || id !== boundProjectId) return undefined;
+    if (!/^prj_[a-f0-9]{32}$/.test(id)) throw new Error("Invalid bound SDK project");
+    const registry = JSON.parse(await fs.readFile(path.join(config.dataDir, "workspace-bindings.json"), "utf8"));
+    const marker = JSON.parse(await fs.readFile(path.join(config.dataDir, "projects", id, ".sdk-workspace.json"), "utf8"));
+    const binding = registry.projects?.[id];
+    if (registry.schemaVersion !== 1 || !binding || binding.path !== marker.path || binding.dev !== marker.dev ||
+      binding.ino !== marker.ino || !path.isAbsolute(binding.path)) throw new Error("Inconsistent SDK workspace binding");
+    const info = await fs.lstat(binding.path, { bigint: true });
+    if (!info.isDirectory() || info.isSymbolicLink() || await fs.realpath(binding.path) !== binding.path ||
+      info.dev.toString() !== binding.dev || info.ino.toString() !== binding.ino) throw new Error("SDK workspace identity changed");
+    return binding.path;
+  };
+  if (boundProjectId) await resolveProjectWorkspace(boundProjectId);
 
   const eventHub = new EventHub();
   const storage = new ProjectStorage(config.dataDir, eventHub, {
-    projectDirectoryAliases: config.projectDirectoryAliases
+    projectDirectoryAliases: config.projectDirectoryAliases,
+    workspaceResolver: resolveProjectWorkspace
   });
   const gatewayStore = new GatewayStore(config.dataDir);
   const githubAccounts = new GitHubAccountStore(config.dataDir, {
@@ -70,6 +86,7 @@ async function main(): Promise<void> {
     knowledgeRoot: path.join(config.skillRoots[0]!, "general", "inspire"),
     refreshMs: Math.max(1000, Number(process.env.SCIENCEEVOLVE_SII_REFRESH_MS) || 30_000) });
   const runner = new HarnessRuntimeFacade({
+    resolveProjectWorkspace,
     siiExperiments,
     inspireBin,
     inspireConfigPath: config.inspireConfigPath,
