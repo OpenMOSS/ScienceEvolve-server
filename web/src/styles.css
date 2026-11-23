@@ -92,6 +92,17 @@ summary {
   -webkit-tap-highlight-color: transparent;
 }
 
+:where(a[href]) {
+  color: var(--text-interactive-base, var(--green-dark));
+  text-decoration: none;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+:where(a[href]:hover, a[href]:focus-visible) {
+  text-decoration-line: underline;
+}
+
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
@@ -4387,6 +4398,65 @@ label.experiment-mcp-control[data-disabled="true"] {
   border-color: #ead8ab;
   background: #fff9eb;
 }
+
+.workspace-checkpoint-notice {
+  flex: none;
+  display: grid;
+  gap: 7px;
+  padding: 12px clamp(12px, 2vw, 24px);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.workspace-checkpoint-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--ink);
+}
+
+.workspace-checkpoint-heading > svg { flex: none; color: var(--accent); }
+.workspace-checkpoint-heading h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.workspace-checkpoint-notice > p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+.workspace-checkpoint-status {
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: #785715;
+  background: #faefd7;
+  font-size: 11px;
+}
+
+.workspace-checkpoint-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workspace-checkpoint-list a {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-height: 34px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.workspace-checkpoint-list a:hover { background: var(--surface-base-hover); }
+.workspace-checkpoint-list a:is(:hover, :focus-visible) .workspace-checkpoint-link { text-decoration: underline; }
+.workspace-checkpoint-list a > svg { flex: none; color: var(--muted); }
+.workspace-checkpoint-agent { min-width: 0; overflow-wrap: anywhere; color: var(--ink); font-weight: 600; }
+.workspace-checkpoint-count { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.workspace-checkpoint-link { display: inline-flex; align-items: center; gap: 2px; margin-inline-start: auto; white-space: nowrap; }
 
 .project-interaction-grid {
   display: grid;

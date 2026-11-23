@@ -4264,15 +4264,27 @@ export function WorkspacePage({
         </div>
       )}
       {["cancelled", "paused", "interrupted", "failed"].includes(project.status) && project.workspaceCheckpoints?.some((entry) => entry.fileCount > 0) && (
-        <div className="workspace-stale-warning" role="status">
-          <strong>可恢复工作区文件（未验收）</strong>
-          <span>清单记录文件路径与校验值，文件仍位于共享工作区；这些文件不代表正式交付。</span>
-          {project.workspaceCheckpoints.filter((entry) => entry.fileCount > 0).slice(-3).reverse().map((entry) => (
-            <a key={entry.id} href={`/api/projects/${encodeURIComponent(project.id)}/checkpoints/${entry.id}`} target="_blank" rel="noreferrer">
-              {entry.agent} · {entry.fileCount} 个文件{entry.incomplete ? "（清单不完整）" : ""} · 查看清单
-            </a>
-          ))}
-        </div>
+        <section className="workspace-checkpoint-notice" aria-labelledby="workspace-checkpoint-title">
+          <div className="workspace-checkpoint-heading">
+            <FolderOpen size={17} aria-hidden="true" />
+            <h2 id="workspace-checkpoint-title">可恢复工作区文件</h2>
+            <span className="workspace-checkpoint-status">未验收</span>
+          </div>
+          <p>文件保存在共享工作区，尚未正式交付。清单包含文件路径和校验值。</p>
+          <ul className="workspace-checkpoint-list">
+            {project.workspaceCheckpoints.filter((entry) => entry.fileCount > 0).slice(-3).reverse().map((entry) => (
+              <li key={entry.id}>
+                <a href={`/api/projects/${encodeURIComponent(project.id)}/checkpoints/${encodeURIComponent(entry.id)}`} target="_blank" rel="noreferrer">
+                  <FileText size={14} aria-hidden="true" />
+                  <span className="workspace-checkpoint-agent">{entry.agent}</span>
+                  <span className="workspace-checkpoint-count">{entry.fileCount} 个文件</span>
+                  {entry.incomplete && <span className="workspace-checkpoint-status">清单不完整</span>}
+                  <span className="workspace-checkpoint-link">查看清单 <ChevronRight size={14} aria-hidden="true" /></span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
       <div className="workspace-layout">
         <AgentRoster

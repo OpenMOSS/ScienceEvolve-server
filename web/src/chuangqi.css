@@ -12,6 +12,7 @@
   --text-strong: var(--ink);
   --text-base: var(--ink);
   --text-weak: var(--muted);
+  --text-interactive-base: var(--green-dark);
   --background-base: var(--surface);
   --background-stronger: var(--surface-soft);
   --text-danger-base: var(--danger);

@@ -895,10 +895,11 @@ describe("Workspace task progress", () => {
       workspaceCheckpoints: [{ id: checkpointId, agent: "execution", createdAt: "2026-09-22T00:00:00Z", fileCount: 6, incomplete: false, status: "unverified_partial_output" }]
     });
     render(<WorkspacePage projectId={project.id} onBack={vi.fn()} />);
-    expect(await screen.findByText("可恢复工作区文件（未验收）")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /6 个文件/ })).toHaveAttribute("href", `/api/projects/${project.id}/checkpoints/${checkpointId}`);
+    const notice = await screen.findByRole("region", { name: "可恢复工作区文件" });
+    expect(notice).toHaveTextContent("未验收");
+    expect(within(notice).getByRole("link", { name: /execution.*6 个文件.*查看清单/ })).toHaveAttribute("href", `/api/projects/${project.id}/checkpoints/${checkpointId}`);
     expect(screen.getByText(/取消已收尾/)).toHaveTextContent("运行超时");
-    expect(screen.getByText(/这些文件不代表正式交付/)).toBeInTheDocument();
+    expect(notice).toHaveTextContent("尚未正式交付");
   });
 
   it("keeps a retired Agent selectable and filters its original trace without restoring it to the workflow", async () => {
