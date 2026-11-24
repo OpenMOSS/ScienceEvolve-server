@@ -371,7 +371,7 @@ export interface CollaborationRuntimeLifecycle {
   /** Build an API/UI view directly from the current SQLite projection. */
   projectReadModel?(state: ProjectState): ProjectState | Promise<ProjectState>;
   serialProjectSummaryCheckpoint?(state: ProjectState): ReturnType<CollaborationStateDatabase["serialProjectSummaryCheckpoint"]>;
-  committedProjectState?(state: ProjectState): ProjectState | undefined | Promise<ProjectState | undefined>;
+  committedProjectState?(state: ProjectState, includeSerial?: boolean): ProjectState | undefined | Promise<ProjectState | undefined>;
   getWorkflowAdjustments?(state: ProjectState): WorkflowAdjustmentContext | Promise<WorkflowAdjustmentContext>;
   queryWorkflowAdjustments?(state: ProjectState, ifNoneMatch?: string): WorkflowAdjustmentQueryResult | Promise<WorkflowAdjustmentQueryResult>;
   getWorkflowAdjustmentPage?(state: ProjectState, input: WorkflowAdjustmentPageInput, ifNoneMatch?: string): WorkflowAdjustmentPageResult | Promise<WorkflowAdjustmentPageResult>;
@@ -1255,14 +1255,14 @@ export class CollaborationRuntimeCoordinator implements CollaborationRuntimeLife
     }
   }
 
-  /** Git checkpoints and workflow facts commit in SQLite. A reader can use
-   * that committed state while a later trace prepares its filesystem view. */
-  async committedProjectState(state: ProjectState): Promise<ProjectState | undefined> {
-    if (!usesCollaborationScheduler(state) || !this.#database || state.phase === "storage-recovery-required") return;
+  /** Read a durable checkpoint while a later trace prepares its filesystem view. */
+  async committedProjectState(state: ProjectState, includeSerial = false): Promise<ProjectState | undefined> {
+    if ((!includeSerial && !usesCollaborationScheduler(state)) || !this.#database ||
+      state.phase === "storage-recovery-required") return;
     const domain = await this.#database.projectStateDomain(state.id);
-    if (!domain || domain.scheduler === "serial") return;
+    if (!domain || (!includeSerial && domain.scheduler === "serial")) return;
     const document = await this.#database.projectStateDocument(state.id, "project.checkpoint");
-    if (!document) throw new Error("Registered Git project has no committed checkpoint");
+    if (!document) throw new Error("Registered project has no committed checkpoint");
     return document.value as ProjectState;
   }
 

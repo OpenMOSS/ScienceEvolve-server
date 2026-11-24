@@ -1718,26 +1718,26 @@ export class Orchestrator {
     return this.runtimes.has(projectId) || (await this.storage.tryLoadState(projectId)) !== undefined;
   }
 
-  async getProject(projectId: string, summaryOnly = false): Promise<ProjectView | undefined> {
-    return this.readProject(projectId, state => this.projectView(state, summaryOnly));
+  async getProject(projectId: string, summaryOnly = false, signal?: AbortSignal, includeSerialCheckpoint = false): Promise<ProjectView | undefined> {
+    return this.readProject(projectId, state => this.projectView(state, summaryOnly), signal, includeSerialCheckpoint);
   }
 
   async getProjectSummary(projectId: string, signal?: AbortSignal): Promise<ProjectListItem | undefined> {
-    return this.readProject(projectId, state => this.projectSummary(state), signal);
+    return this.readProject(projectId, state => this.projectSummary(state), signal, true);
   }
 
-  private async readProject<T>(projectId: string, read: (state: ProjectState) => Promise<T>, signal?: AbortSignal): Promise<T | undefined> {
+  private async readProject<T>(projectId: string, read: (state: ProjectState) => Promise<T>, signal?: AbortSignal, includeSerialCheckpoint = false): Promise<T | undefined> {
     const runtime = this.runtimes.get(projectId);
-    if (runtime) return this.readRegisteredProject(runtime, read, signal);
+    if (runtime) return this.readRegisteredProject(runtime, read, signal, includeSerialCheckpoint);
     const state = await this.storage.tryLoadState(projectId);
     signal?.throwIfAborted();
     return state ? read(state) : undefined;
   }
 
-  private async readRegisteredProject<T>(runtime: RuntimeProject, read: (state: ProjectState) => Promise<T>, signal?: AbortSignal): Promise<T> {
+  private async readRegisteredProject<T>(runtime: RuntimeProject, read: (state: ProjectState) => Promise<T>, signal?: AbortSignal, includeSerialCheckpoint = false): Promise<T> {
     signal?.throwIfAborted();
     if (runtime.state.phase === "storage-recovery-required") return read(runtime.state);
-    const committed = await this.collaborationRuntime?.committedProjectState?.(runtime.state);
+    const committed = await this.collaborationRuntime?.committedProjectState?.(runtime.state, includeSerialCheckpoint);
     signal?.throwIfAborted();
     if (committed) return read(committed);
     return this.storage.withStableProjectSnapshot(runtime.state.id, () => read(runtime.state), signal);

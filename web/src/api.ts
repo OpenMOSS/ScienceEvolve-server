@@ -604,7 +604,9 @@ export async function getProjectSummary(projectId: string, signal?: AbortSignal)
 
 export async function getProject(projectId: string): Promise<Project> {
   return loadResource(`project:${projectId}`, async () => normalizeProject(unwrapProject(
-    await request(`/api/projects/${encodeURIComponent(projectId)}?view=state`))));
+    await request(`/api/projects/${encodeURIComponent(projectId)}?view=state`, {
+      cache: "no-store", signal: AbortSignal.timeout(20_000)
+    }))));
 }
 
 export async function getProjectGitGraph(

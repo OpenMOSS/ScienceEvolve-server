@@ -689,6 +689,13 @@ describe("public Main orchestration state machine", () => {
     try {
       await vi.waitFor(() => expect(runner.calls).toHaveLength(1));
       runningRevision = await compare("running");
+      const unlock = storage.reserveProjectMutation(project.id);
+      try {
+        const signal = AbortSignal.timeout(1_000);
+        const detail = await orchestrator.getProject(project.id, false, signal, true);
+        expect(detail).toMatchObject({ status: "running" });
+        expect(await orchestrator.getProjectSummary(project.id, signal)).toMatchObject({ status: "running" });
+      } finally { unlock(); }
     } finally { release(); }
     await orchestrator.waitForIdle(project.id);
     expect(await compare("completed")).toBeGreaterThan(runningRevision);

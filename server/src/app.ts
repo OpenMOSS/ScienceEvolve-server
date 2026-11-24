@@ -1166,13 +1166,17 @@ export function createApp(dependencies: AppDependencies) {
   app.get("/api/projects/:projectId", async (request, response, next) => {
     try {
       const projectId = request.params.projectId;
-      const summarySignal = request.query.view === "summary" ? responseAbortSignal(response) : undefined;
-      const read = () => summarySignal ? orchestrator.getProjectSummary(projectId, summarySignal) : orchestrator.getProject(projectId);
+      const summary = request.query.view === "summary";
+      const stateOnly = request.query.view === "state";
+      const snapshotSignal = summary || stateOnly ? responseAbortSignal(response) : undefined;
+      const read = () => summary ? orchestrator.getProjectSummary(projectId, snapshotSignal)
+        : stateOnly ? orchestrator.getProject(projectId, false, snapshotSignal, true)
+          : orchestrator.getProject(projectId);
       const getProjectAllowingRecovery = async () => {
         try {
           return await read();
         } catch (error) {
-          if (summarySignal?.aborted) throw error;
+          if (snapshotSignal?.aborted) throw error;
           // A restore failure can resolve its storage barrier one microtask
           // before the orchestrator publishes storage-recovery-required.
           await new Promise<void>((resolve) => setImmediate(resolve));

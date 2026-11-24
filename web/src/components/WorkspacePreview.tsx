@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import type { Project } from "../types";
-import { Brand, OverallProgressBar, PageLoader, StatusBadge } from "./Common";
+import { Brand, Button, OverallProgressBar, PageLoader, StatusBadge } from "./Common";
 
-export function WorkspacePreview({ project, onBack, children }: {
-  project?: Project; onBack: () => void; children?: ReactNode;
+export function WorkspacePreview({ project, onBack, children, onRetry, error }: {
+  project?: Project; onBack: () => void; children?: ReactNode; onRetry?: () => void; error?: string;
 }) {
   if (!project) return <div className="workspace-loading"><Brand compact /><PageLoader label="正在进入科研工作台…" /></div>;
   return (
@@ -18,6 +18,10 @@ export function WorkspacePreview({ project, onBack, children }: {
         </div>
       </header>
       <div className="workspace-progress-strip" aria-label="项目进度"><OverallProgressBar progress={project.overallProgress} /></div>
+      {onRetry && <div className="workspace-progress-strip" role="status">
+        <span>{error ? `工作台详情读取失败：${error}` : "正在加载工作台详情和侧栏…"}</span>
+        {error && <Button type="button" variant="secondary" onClick={onRetry}>重试加载</Button>}
+      </div>}
       {children ?? <PageLoader label="正在读取最近轨迹…" />}
     </main>
   );

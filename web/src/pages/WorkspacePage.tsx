@@ -3178,9 +3178,12 @@ export function WorkspacePage({
   const liveRuntime = eventStream.live.projectId === projectId ? eventStream.live.runtime : undefined;
   const detailBehindCard = sourceProject?.id === projectId && mergeProjectSnapshot(card, sourceProject) !== sourceProject;
   const project = useMemo(() => {
-    if (sourceProject?.id !== projectId || detailBehindCard) return undefined;
-    return withProjectAuthorizationWaiting(liveRuntime ? applyLiveRuntimeSnapshot(sourceProject, liveRuntime) : sourceProject);
-  }, [detailBehindCard, projectId, sourceProject, liveRuntime]);
+    if (sourceProject?.id !== projectId) return undefined;
+    const detail = liveRuntime ? applyLiveRuntimeSnapshot(sourceProject, liveRuntime) : sourceProject;
+    return withProjectAuthorizationWaiting(detailBehindCard && card?.overallProgress
+      ? { ...detail, overallProgress: card.overallProgress }
+      : detail);
+  }, [card, detailBehindCard, projectId, sourceProject, liveRuntime]);
   const timelineEvents = eventStream.timelineEvents ?? events;
   const livePerformance = eventStream.live.projectId === projectId ? eventStream.live.performance : undefined;
   const performanceEvents = useMemo(() => eventStream.live.projectId === projectId ? timelineEvents : [],
@@ -3217,7 +3220,8 @@ export function WorkspacePage({
       setProject((current) => mergeProjectSnapshot(current, result));
       setProjectError("");
     } catch (reason) {
-      if (request === projectRequestRef.current) setProjectError(reason instanceof Error ? reason.message : "项目加载失败");
+      if (request === projectRequestRef.current) setProjectError(reason instanceof Error && reason.name === "TimeoutError"
+        ? "项目详情请求超时" : reason instanceof Error ? reason.message : "项目加载失败");
     } finally {
       if (request === projectRequestRef.current) setProjectLoading(false);
     }
@@ -3734,8 +3738,9 @@ export function WorkspacePage({
       historyError={eventStream.historyError ?? ""} onLoadOlder={eventStream.loadOlder} />
   ) : null;
 
-  if (!project && (projectLoading || (card && !projectError))) {
-    return <WorkspacePreview project={card} onBack={onBack}>{traceView}</WorkspacePreview>;
+  if (!project && (projectLoading || card)) {
+    return <WorkspacePreview project={card} onBack={onBack} error={projectError}
+      onRetry={() => { setProjectError(""); void loadProject(); }}>{traceView}</WorkspacePreview>;
   }
   if (!project) {
     return (
